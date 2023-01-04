@@ -1,0 +1,24 @@
+﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
+#include ..\Lib\UIA.ahk
+
+Run "explore C:\"
+CDriveName := DriveGetLabel("C:") " (C:)"
+WinWaitActive(CDriveName,,1)
+explorerEl := UIA.ElementFromHandle("A")
+if !explorerEl {
+	MsgBox "Drive C: element not found! Exiting app..."
+	ExitApp
+}
+CDriveEl := explorerEl.FindFirst({Type:"TreeItem", Name:CDriveName})
+
+Sleep 500
+MsgBox "ExpandCollapsePattern properties: "
+	. "`nCurrentExpandCollapseState: " (state := CDriveEl.ExpandCollapseState) " (" UIA.ExpandCollapseState[state] ")"
+
+MsgBox "Press OK to expand drive C: element"
+CDriveEl.Expand()
+Sleep 500
+MsgBox "Press OK to collapse drive C: element"
+CDriveEl.Collapse()
+
+ExitApp
