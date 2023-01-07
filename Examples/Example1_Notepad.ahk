@@ -1,6 +1,10 @@
 ﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
+/*
+    Simple example to demonstrate some basic methods of the UIA class.
+*/
+
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 ; Get the element for the Notepad window

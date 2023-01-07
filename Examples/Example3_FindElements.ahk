@@ -1,12 +1,6 @@
 ﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
-;Run "notepad.exe"
-WinActivate "ahk_exe notepad.exe"
-WinWaitActive "ahk_exe notepad.exe"
-; Get the element for the Notepad window
-npEl := UIA.ElementFromHandle("ahk_exe notepad.exe") 
-
 /*  To find elements we have a few methods available: FindElement, FindElements, WaitElement, FindByPath, and TreeWalkers.
     This file will demonstrate use of FindElement, FindElements, WaitElement, and using conditions.
     To see examples on FindByPath and TreeWalkers, see Example4.
@@ -15,12 +9,10 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
     For example, we could only look for elements of certain Type, with certain Name, AutomationId etc.
 */
 
-; And we can start the search from a previously found element:
-; FindElement can traverse the tree in reverse, starting the search from the end:
-OutputDebug (fEl := npEl.FindElement({Name:"Format"})).Dump() "`n"
-OutputDebug "The first MenuItem element from the end, starting the search from MenuItem Format: " (new := npEl.FindFirstWithOptions([{Name:"Edit"}, {Name:"Format"}], fEl)).Dump() "`n"
-OutputDebug UIA.CompareElements(fEl, new)
-ExitApp
+Run "notepad.exe"
+WinWaitActive "ahk_exe notepad.exe"
+; Get the element for the Notepad window
+npEl := UIA.ElementFromHandle("ahk_exe notepad.exe") 
 
 ; A single property condition consists of an object where the key is the property name, and value is the property value:
 MsgBox "The first MenuItem element: " npEl.FindElement({Type:"MenuItem"}).Highlight().Dump()
