@@ -9,7 +9,7 @@ if !explorerEl {
 	ExitApp
 }
 Sleep 500
-listEl := explorerEl.FindFirst({Type:"List"})
+listEl := explorerEl.FindElement({Type:"List"})
 
 MsgBox "TablePattern properties: "
 	. "`nCurrentRowOrColumnMajor: " listEl.RowOrColumnMajor

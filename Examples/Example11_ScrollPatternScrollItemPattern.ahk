@@ -9,7 +9,7 @@ if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
 	ExitApp
 }
-treeEl := explorerEl.FindFirst({Type:"Tree"})
+treeEl := explorerEl.FindElement({Type:"Tree"})
 
 MsgBox "For this example, make sure that the folder tree on the left side in File Explorer has some scrollable elements (make the window small enough)."
 Sleep 500
@@ -28,7 +28,7 @@ treeEl.Scroll(, UIA.ScrollAmount.LargeDecrement) ; LargeDecrement is equivalent 
 
 Sleep 500
 MsgBox "Press OK to scroll drive C: into view."
-CDriveEl := explorerEl.FindFirst({Type:"TreeItem", Name:CDriveName})
+CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName})
 if !CDriveEl {
 	MsgBox "C: drive element not found! Exiting app..."
 	ExitApp

@@ -7,7 +7,7 @@ program := "Document1 - Word"
 WinActivate program
 WinWaitActive program
 wordEl := UIA.ElementFromHandle(program)
-bodyEl := wordEl.FindFirst({AutomationId:"Body"}) ; First get the body element of Word
+bodyEl := wordEl.FindElement({AutomationId:"Body"}) ; First get the body element of Word
 document := bodyEl.DocumentRange ; Get the TextRange for the whole document
 
 MsgBox "Current text inside Word body element:`n" document.GetText() ; Display the text from the TextRange

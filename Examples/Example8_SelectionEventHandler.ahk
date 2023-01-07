@@ -24,7 +24,7 @@ Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 	
 NotepadEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
-DocumentControl := NotepadEl.FindFirst([{Type:"Document"}, {Type:"Edit"}]) ; If UIA Interface version is 1, then the ControlType is Edit instead of Document!
+DocumentControl := NotepadEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) ; If UIA Interface version is 1, then the ControlType is Edit instead of Document!
 DocumentControl.Value := lorem ; Set the value to our sample text
 
 handler := UIA.CreateEventHandler(TextSelectionChangedEventHandler) ; Create a new event handler that points to the function TextSelectionChangedEventHandler, which must accept two arguments: element and eventId.

@@ -1,27 +1,28 @@
 ﻿/*
 	Introduction & credits
-	This library implements Microsoft's UI Automation framework. More information is here: https://docs.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32
-	Authors: Descolada, thqby, neptercn (v1), jethrow (AHK v1 UIA library)
+	This library implements Microsoft's UI Automation framework. 
+    Microsoft's official documentation:: https://docs.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32
+	Author: Descolada
+    Credits: thqby, neptercn (v1), jethrow (AHK v1 UIA library)
 
 	A lot of modifications have been added to the original UIA framework, such as custom methods for elements (eg element.Click())
-*/
-
-/* 
-	Usage
-	UIA needs to be initialized with UIA_Interface() function, which returns a UIA_Interface object:
-	UIA := UIA_Interface()
-	After calling this function, all UIA_Interface class properties and methods can be accessed through it. 
-	In addition some extra variables are initialized: 
-		IUIAutomationVersion contains the version number of IUIAutomation interface
-		TrueCondition contains a TrueCondition
-	Note that a new UIA object can't be created with the "new" keyword. 
+ 
+	Usage:
+	All main UIA methods and properties can be accessed through the UIA variable.
+        Eg UIA.GetRootElement()
+	Additionally some extra variables are initialized: 
+		UIA.IUIAutomationVersion contains the version number of IUIAutomation interface
+		UIA.TrueCondition contains a TrueCondition
+        UIA.TreeWalkerTrue contains a TreeWalker with the TrueCondition
+	UIA is initialized only once, on the first use of UIA. 
+        The initalized IUIAutomation version depends on the system, but the most recent version is automatically used.
+        If the version needs to be limited, then set the IUIAutomationMaxVersion global variable before the first use of UIA.
+        On initialization, SPI_SETSCREENREADER is also called to notify the system of UIA use. This is needed for some programs (such as VSCode).
 	
-	UIAutomation constants and enumerations are available from the UIA_Enum class (see a more thorough description at the class header).
+	UIAutomation constants and enumerations are also available in the UIA variable. Eg. UIA.Property.Name contains the UIA_NamePropertyId value.
 	Microsoft documentation for constants and enumerations:
 		UI Automation Constants: https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-entry-constants
 		UI Automation Enumerations: https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-entry-enumerations
-	
-	For more information, see the AHK Forums post on UIAutomation: https://www.autohotkey.com/boards/viewtopic.php?f=6&t=104999
 */
 
 
@@ -29,11 +30,6 @@
 	Questions:
 	- if method returns a SafeArray, should we return a Wrapped SafeArray, Raw SafeArray, or AHK Array. Currently we return wrapped AHK arrays for SafeArrays. Although SafeArrays are more convenient to loop over, this causes more confusion in users who are not familiar with SafeArrays (questions such as why are they 0-indexed not 1-indexed, why doesnt for k, v in SafeArray work properly etc). 
 	- on UIA Interface conversion methods, how should the data be returned? wrapped/extracted or raw? should raw data be a ByRef param?
-	- do variants need cleared? what about SysAllocString BSTRs? As per Microsoft documentation (https://docs.microsoft.com/en-us/cpp/atl-mfc-shared/allocating-and-releasing-memory-for-a-bstr?view=msvc-170), when we pass a BSTR into IUIAutomation, then IUIAutomation should take care of freeing it. But when we receive a UIA_Variant and use UIA_VariantData, then we should clear the BSTR.
-	- ObjRelease: if IUIA returns an interface then it automatically increases the ref count for the object it inherits from, and when released decreases it. So do all returned objects (UIA_Element, UIA_Pattern, UIA_TextRange) need to be released? Currently we release these objects as well, but jethrow's version didn't. 
-	- do RECT structs need destroyed?
-	- if returning wrapped data & raw is ByRef, will the wrapped data being released destroy the raw data?
-	- returning variant data other than vt=3|8|9|13|0x2000
 	- Cached Members?
 	- UIA Element existance - dependent on window being visible (non minimized), and also sometimes Elements are lazily generated (eg Microsoft Teams, when a meeting is started then the toolbar buttons (eg Mute, react) aren't visible to UIA, but hovering over them with the cursor or calling ElementFromPoint causes Teams to generate and make them visible to UIA.
 	- better way of supporting differing versions of IUIAutomation (version 2, 3, 4)
@@ -43,779 +39,906 @@
 global IUIAutomationMaxVersion := 8
 
 class UIA {
-    static __New() {
-        static __IID := {
-            IUIAutomation:"{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}",
-            IUIAutomation2:"{34723aff-0c9d-49d0-9896-7ab52df8cd8a}",
-            IUIAutomation3:"{73d768da-9b51-4b89-936e-c209290973e7}",
-            IUIAutomation4:"{1189c02a-05f8-4319-8e21-e817e3db2860}",
-            IUIAutomation5:"{25f700c8-d816-4057-a9dc-3cbdee77e256}",
-            IUIAutomation6:"{aae072da-29e3-413d-87a7-192dbf81ed10}",
-            IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}"
-        }
-        global IUIAutomationMaxVersion
-		DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
-		if !screenreader
-			DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
-        this.IUIAutomationVersion := IUIAutomationMaxVersion, this.ptr := 0
-		while (--this.IUIAutomationVersion > 1) {
-			if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
-				continue
-			try {
-                this.ptr := ComObjValue(this.__ := ComObject("{e22ad333-b25f-460c-83d0-0581107395c9}", __IID.IUIAutomation%this.IUIAutomationVersion%))
-                break
-            }
-		}
-		; If all else fails, try the first IUIAutomation version
-        if !this.ptr
-            this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
-        UIA.TrueCondition := UIA.CreateTrueCondition()
-        UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
+/**
+ * First use of UIA variable initiates UIA, UIA.IUIAutomationVersion, UIA.TrueCondition and 
+ * UIA.TreeWalkerTrue. Also enables screen reader with SPI_SETSCREENREADER.
+ * Initialized IUIAutomation version can be altered with changing the global IUIAutomationMaxVersion
+ * variable, which by default is set to the latest available UIA version.
+ */
+static __New() {
+    static __IID := {
+        IUIAutomation:"{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}",
+        IUIAutomation2:"{34723aff-0c9d-49d0-9896-7ab52df8cd8a}",
+        IUIAutomation3:"{73d768da-9b51-4b89-936e-c209290973e7}",
+        IUIAutomation4:"{1189c02a-05f8-4319-8e21-e817e3db2860}",
+        IUIAutomation5:"{25f700c8-d816-4057-a9dc-3cbdee77e256}",
+        IUIAutomation6:"{aae072da-29e3-413d-87a7-192dbf81ed10}",
+        IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}"
     }
-    static TrueCondition := ""
-    static TreeWalkerTrue := ""
-
-    ; IUIAutomation constants and enumerations.
-    ; Access properties with UIA.property.subproperty (UIA.ControlType.Button)
-    ; To get the property name from value, use the array style: UIA.property[value] (UIA.ControlType[50000])
-
-    static __PropertyFromValue(obj, value) {
-        for k, v in obj.OwnProps()
-            if value = v
-                return k
-        throw UnsetItemError("Property item `"" value "`" not found!", -1)
-    }
-    static __PropertyValueGetter := {get: (obj, value) => UIA.__PropertyFromValue(obj, value)}
-    static ControlType := {Button:50000,Calendar:50001,CheckBox:50002,ComboBox:50003,Edit:50004,Hyperlink:50005,Image:50006,ListItem:50007,List:50008,Menu:50009,MenuBar:50010,MenuItem:50011,ProgressBar:50012,RadioButton:50013,ScrollBar:50014,Slider:50015,Spinner:50016,StatusBar:50017,Tab:50018,TabItem:50019,Text:50020,ToolBar:50021,ToolTip:50022,Tree:50023,TreeItem:50024,Custom:50025,Group:50026,Thumb:50027,DataGrid:50028,DataItem:50029,Document:50030,SplitButton:50031,Window:50032,Pane:50033,Header:50034,HeaderItem:50035,Table:50036,TitleBar:50037,Separator:50038,SemanticZoom:50039,AppBar:50040, 50000:"Button",50001:"Calendar",50002:"CheckBox",50003:"ComboBox",50004:"Edit",50005:"Hyperlink",50006:"Image",50007:"ListItem",50008:"List",50009:"Menu",50010:"MenuBar",50011:"MenuItem",50012:"ProgressBar",50013:"RadioButton",50014:"ScrollBar",50015:"Slider",50016:"Spinner",50017:"StatusBar",50018:"Tab",50019:"TabItem",50020:"Text",50021:"ToolBar",50022:"ToolTip",50023:"Tree",50024:"TreeItem",50025:"Custom",50026:"Group",50027:"Thumb",50028:"DataGrid",50029:"DataItem",50030:"Document",50031:"SplitButton",50032:"Window",50033:"Pane",50034:"Header",50035:"HeaderItem",50036:"Table",50037:"TitleBar",50038:"Separator",50039:"SemanticZoom",50040:"AppBar"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Pattern := { Invoke: 10000, Selection: 10001, Value: 10002, RangeValue: 10003, Scroll: 10004, ExpandCollapse: 10005, Grid: 10006, GridItem: 10007, MultipleView: 10008, Window: 10009, SelectionItem: 10010, Dock: 10011, Table: 10012, TableItem: 10013, Text: 10014, Toggle: 10015, Transform: 10016, ScrollItem: 10017, LegacyIAccessible: 10018, ItemContainer: 10019, VirtualizedItem: 10020, SynchronizedInput: 10021, ObjectModel: 10022, Annotation: 10023, Text2:10024, Styles: 10025, Spreadsheet: 10026, SpreadsheetItem: 10027, Transform2: 10028, TextChild: 10029, Drag: 10030, DropTarget: 10031, TextEdit: 10032, CustomNavigation: 10033, Selection2: 10034
-    , 10000: "Invoke", 10001: "Selection", 10002: "Value", 10003: "RangeValue", 10004: "Scroll", 10005: "ExpandCollapse", 10006: "Grid", 10007: "GridItem", 10008: "MultipleView", 10009: "Window", 10010: "SelectionItem", 10011: "Dock", 10012: "Table", 10013: "TableItem", 10014: "Text", 10015: "Toggle", 10016: "Transform", 10017: "ScrollItem", 10018: "LegacyIAccessible", 10019: "ItemContainer", 10020: "VirtualizedItem", 10021: "SynchronizedInput", 10022: "ObjectModel", 10023: "Annotation", 10024: "Text2", 10025: "Styles", 10026: "Spreadsheet", 10027: "SpreadsheetItem", 10028:"Transform2", 10029: "TextChild", 10030: "Drag", 10031: "DropTarget", 10032: "TextEdit", 10033: "CustomNavigation", 10034: "Selection2"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Event := {ToolTipOpened:20000,ToolTipClosed:20001,StructureChanged:20002,MenuOpened:20003,AutomationPropertyChanged:20004,AutomationFocusChanged:20005,AsyncContentLoaded:20006,MenuClosed:20007,LayoutInvalidated:20008,Invoke_Invoked:20009,SelectionItem_ElementAddedToSelection:20010,SelectionItem_ElementRemovedFromSelection:20011,SelectionItem_ElementSelected:20012,Selection_Invalidated:20013,Text_TextSelectionChanged:20014,Text_TextChanged:20015,Window_WindowOpened:20016,Window_WindowClosed:20017,MenuModeStart:20018,MenuModeEnd:20019,InputReachedTarget:20020,InputReachedOtherElement:20021,InputDiscarded:20022,SystemAlert:20023,LiveRegionChanged:20024,HostedFragmentRootsInvalidated:20025,Drag_DragStart:20026,Drag_DragCancel:20027,Drag_DragComplete:20028,DropTarget_DragEnter:20029,DropTarget_DragLeave:20030,DropTarget_Dropped:20031,TextEdit_TextChanged:20032,TextEdit_ConversionTargetChanged:20033,Changes:20034,Notification:20035,ActiveTextPositionChanged:20036,20000:"ToolTipOpened",20001:"ToolTipClosed",20002:"StructureChanged",20003:"MenuOpened",20004:"AutomationPropertyChanged",20005:"AutomationFocusChanged",20006:"AsyncContentLoaded",20007:"MenuClosed",20008:"LayoutInvalidated",20009:"Invoke_Invoked",20010:"SelectionItem_ElementAddedToSelection",20011:"SelectionItem_ElementRemovedFromSelection",20012:"SelectionItem_ElementSelected",20013:"Selection_Invalidated",20014:"Text_TextSelectionChanged",20015:"Text_TextChanged",20016:"Window_WindowOpened",20017:"Window_WindowClosed",20018:"MenuModeStart",20019:"MenuModeEnd",20020:"InputReachedTarget",20021:"InputReachedOtherElement",20022:"InputDiscarded",20023:"SystemAlert",20024:"LiveRegionChanged",20025:"HostedFragmentRootsInvalidated",20026:"Drag_DragStart",20027:"Drag_DragCancel",20028:"Drag_DragComplete",20029:"DropTarget_DragEnter",20030:"DropTarget_DragLeave",20031:"DropTarget_Dropped",20032:"TextEdit_TextChanged",20033:"TextEdit_ConversionTargetChanged",20034:"Changes",20035:"Notification",20036:"ActiveTextPositionChanged"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Property := {RuntimeId:30000,BoundingRectangle:30001,ProcessId:30002,ControlType:30003,Type:30003,LocalizedControlType:30004,Name:30005,AcceleratorKey:30006,AccessKey:30007,HasKeyboardFocus:30008,IsKeyboardFocusable:30009,IsEnabled:30010,AutomationId:30011,ClassName:30012,HelpText:30013,ClickablePoint:30014,Culture:30015,IsControlElement:30016,IsContentElement:30017,LabeledBy:30018,IsPassword:30019,NativeWindowHandle:30020,ItemType:30021,IsOffscreen:30022,Orientation:30023,FrameworkId:30024,IsRequiredForForm:30025,ItemStatus:30026,IsDockPatternAvailable:30027,IsExpandCollapsePatternAvailable:30028,IsGridItemPatternAvailable:30029,IsGridPatternAvailable:30030,IsInvokePatternAvailable:30031,IsMultipleViewPatternAvailable:30032,IsRangeValuePatternAvailable:30033,IsScrollPatternAvailable:30034,IsScrollItemPatternAvailable:30035,IsSelectionItemPatternAvailable:30036,IsSelectionPatternAvailable:30037,IsTablePatternAvailable:30038,IsTableItemPatternAvailable:30039,IsTextPatternAvailable:30040,IsTogglePatternAvailable:30041,IsTransformPatternAvailable:30042,IsValuePatternAvailable:30043,IsWindowPatternAvailable:30044,ValueValue:30045,Value:30045,ValueIsReadOnly:30046,RangeValueValue:30047,RangeValueIsReadOnly:30048,RangeValueMinimum:30049,RangeValueMaximum:30050,RangeValueLargeChange:30051,RangeValueSmallChange:30052,ScrollHorizontalScrollPercent:30053,ScrollHorizontalViewSize:30054,ScrollVerticalScrollPercent:30055,ScrollVerticalViewSize:30056,ScrollHorizontallyScrollable:30057,ScrollVerticallyScrollable:30058,SelectionSelection:30059,SelectionCanSelectMultiple:30060,SelectionIsSelectionRequired:30061,GridRowCount:30062,GridColumnCount:30063,GridItemRow:30064,GridItemColumn:30065,GridItemRowSpan:30066,GridItemColumnSpan:30067,GridItemContainingGrid:30068,DockDockPosition:30069,ExpandCollapseExpandCollapseState:30070,MultipleViewCurrentView:30071,MultipleViewSupportedViews:30072,WindowCanMaximize:30073,WindowCanMinimize:30074,WindowWindowVisualState:30075,WindowWindowInteractionState:30076,WindowIsModal:30077,WindowIsTopmost:30078,SelectionItemIsSelected:30079,SelectionItemSelectionContainer:30080,TableRowHeaders:30081,TableColumnHeaders:30082,TableRowOrColumnMajor:30083,TableItemRowHeaderItems:30084,TableItemColumnHeaderItems:30085,ToggleToggleState:30086,TransformCanMove:30087,TransformCanResize:30088,TransformCanRotate:30089,IsLegacyIAccessiblePatternAvailable:30090,LegacyIAccessibleChildId:30091,LegacyIAccessibleName:30092,LegacyIAccessibleValue:30093,LegacyIAccessibleDescription:30094,LegacyIAccessibleRole:30095,LegacyIAccessibleState:30096,LegacyIAccessibleHelp:30097,LegacyIAccessibleKeyboardShortcut:30098,LegacyIAccessibleSelection:30099,LegacyIAccessibleDefaultAction:30100,AriaRole:30101,AriaProperties:30102,IsDataValidForForm:30103,ControllerFor:30104,DescribedBy:30105,FlowsTo:30106,ProviderDescription:30107,IsItemContainerPatternAvailable:30108,IsVirtualizedItemPatternAvailable:30109,IsSynchronizedInputPatternAvailable:30110,OptimizeForVisualContent:30111,IsObjectModelPatternAvailable:30112,AnnotationAnnotationTypeId:30113,AnnotationAnnotationTypeName:30114,AnnotationAuthor:30115,AnnotationDateTime:30116,AnnotationTarget:30117,IsAnnotationPatternAvailable:30118,IsTextPattern2Available:30119,StylesStyleId:30120,StylesStyleName:30121,StylesFillColor:30122,StylesFillPatternStyle:30123,StylesShape:30124,StylesFillPatternColor:30125,StylesExtendedProperties:30126,IsStylesPatternAvailable:30127,IsSpreadsheetPatternAvailable:30128,SpreadsheetItemFormula:30129,SpreadsheetItemAnnotationObjects:30130,SpreadsheetItemAnnotationTypes:30131,IsSpreadsheetItemPatternAvailable:30132,Transform2CanZoom:30133,IsTransformPattern2Available:30134,LiveSetting:30135,IsTextChildPatternAvailable:30136,IsDragPatternAvailable:30137,DragIsGrabbed:30138,DragDropEffect:30139,DragDropEffects:30140,IsDropTargetPatternAvailable:30141,DropTargetDropTargetEffect:30142,DropTargetDropTargetEffects:30143,DragGrabbedItems:30144,Transform2ZoomLevel:30145,Transform2ZoomMinimum:30146,Transform2ZoomMaximum:30147,FlowsFrom:30148,IsTextEditPatternAvailable:30149,IsPeripheral:30150,IsCustomNavigationPatternAvailable:30151,PositionInSet:30152,SizeOfSet:30153,Level:30154,AnnotationTypes:30155,AnnotationObjects:30156,LandmarkType:30157,LocalizedLandmarkType:30158,FullDescription:30159,FillColor:30160,OutlineColor:30161,FillType:30162,VisualEffects:30163,OutlineThickness:30164,CenterPoint:30165,Rotation:30166,Size:30167,IsSelectionPattern2Available:30168,Selection2FirstSelectedItem:30169,Selection2LastSelectedItem:30170,Selection2CurrentSelectedItem:30171,Selection2ItemCount:30173,IsDialog:30174}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static PropertyVariantType := {30000:0x2003,30001:0x2005,30002:3,30003:3,30004:8,30005:8,30006:8,30007:8,30008:0xB,30009:0xB,30010:0xB,30011:8,30012:8,30013:8,30014:0x2005,30015:3,30016:0xB,30017:0xB,30018:0xD,30019:0xB,30020:3,30021:8,30022:0xB,30023:3,30024:8,30025:0xB,30026:8,30027:0xB,30028:0xB,30029:0xB,30030:0xB,30031:0xB,30032:0xB,30033:0xB,30034:0xB,30035:0xB,30036:0xB,30037:0xB,30038:0xB,30039:0xB,30040:0xB,30041:0xB,30042:0xB,30043:0xB,30044:0xB,30045:8,30046:0xB,30047:5,30048:0xB,30049:5,30050:5,30051:5,30052:5,30053:5,30054:5,30055:5,30056:5,30057:0xB,30058:0xB,30059:0x200D,30060:0xB,30061:0xB,30062:3,30063:3,30064:3,30065:3,30066:3,30067:3,30068:0xD,30069:3,30070:3,30071:3,30072:0x2003,30073:0xB,30074:0xB,30075:3,30076:3,30077:0xB,30078:0xB,30079:0xB,30080:0xD,30081:0x200D,30082:0x200D,30083:0x2003,30084:0x200D,30085:0x200D,30086:3,30087:0xB,30088:0xB,30089:0xB,30090:0xB,30091:3,30092:8,30093:8,30094:8,30095:3,30096:3,30097:8,30098:8,30099:0x200D,30100:8}, type2:={30101:8,30102:8,30103:0xB,30104:0xD,30105:0xD,30106:0xD,30107:8,30108:0xB,30109:0xB,30110:0xB,30111:0xB,30112:0xB,30113:3,30114:8,30115:8,30116:8,30117:0xD,30118:0xB,30119:0xB,30120:3,30121:8,30122:3,30123:8,30124:8,30125:3,30126:8,30127:0xB,30128:0xB,30129:8,30130:0x200D,30131:0x2003,30132:0xB,30133:0xB,30134:0xB,30135:3,30136:0xB,30137:0xB,30138:0xB,30139:8,30140:0x2008,30141:0xB,30142:8,30143:0x2008,30144:0x200D,30145:5,30146:5,30147:5,30148:0x200D,30149:0xB,30150:0xB,30151:0xB,30152:3,30153:3,30154:3,30155:0x2003,30156:0x2003,30157:3,30158:8,30159:8,30160:3,30161:0x2003,30162:3,30163:3,30164:0x2005,30165:0x2005,30166:5,30167:0x2005,30168:0xB}
-
-    static TextAttribute := {AnimationStyle:40000,BackgroundColor:40001,BulletStyle:40002,CapStyle:40003,Culture:40004,FontName:40005,FontSize:40006,FontWeight:40007,ForegroundColor:40008,HorizontalTextAlignment:40009,IndentationFirstLine:40010,IndentationLeading:40011,IndentationTrailing:40012,IsHidden:40013,IsItalic:40014,IsReadOnly:40015,IsSubscript:40016,IsSuperscript:40017,MarginBottom:40018,MarginLeading:40019,MarginTop:40020,MarginTrailing:40021,OutlineStyles:40022,OverlineColor:40023,OverlineStyle:40024,StrikethroughColor:40025,StrikethroughStyle:40026,Tabs:40027,TextFlowDirections:40028,UnderlineColor:40029,UnderlineStyle:40030,AnnotationTypes:40031,AnnotationObjects:40032,StyleName:40033,StyleId:40034,Link:40035,IsActive:40036,SelectionActiveEnd:40037,CaretPosition:40038,CaretBidiMode:40039,LineSpacing:40040,BeforeParagraphSpacing:40041,AfterParagraphSpacing:40042,SayAsInterpretAs:40043,40000:"AnimationStyle",40001:"BackgroundColor",40002:"BulletStyle",40003:"CapStyle",40004:"Culture",40005:"FontName",40006:"FontSize",40007:"FontWeight",40008:"ForegroundColor",40009:"HorizontalTextAlignment",40010:"IndentationFirstLine",40011:"IndentationLeading",40012:"IndentationTrailing",40013:"IsHidden",40014:"IsItalic",40015:"IsReadOnly",40016:"IsSubscript",40017:"IsSuperscript",40018:"MarginBottom",40019:"MarginLeading",40020:"MarginTop",40021:"MarginTrailing",40022:"OutlineStyles",40023:"OverlineColor",40024:"OverlineStyle",40025:"StrikethroughColor",40026:"StrikethroughStyle",40027:"Tabs",40028:"TextFlowDirections",40029:"UnderlineColor",40030:"UnderlineStyle",40031:"AnnotationTypes",40032:"AnnotationObjects",40033:"StyleName",40034:"StyleId",40035:"Link",40036:"IsActive",40037:"SelectionActiveEnd",40038:"CaretPosition",40039:"CaretBidiMode",40040:"LineSpacing",40041:"BeforeParagraphSpacing",40042:"AfterParagraphSpacing",40043:"SayAsInterpretAs"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static AttributeVariantType := {40000:3,40001:3,40002:3,40003:3,40004:3,40005:8,40006:5,40007:3,40008:3,40009:3,40010:5,40011:5,40012:5,40013:0xB,40014:0xB,40015:0xB,40016:0xB,40017:0xB,40018:5,40019:5,40020:5,40021:5,40022:3,40023:3,40024:3,40025:3,40026:3,40027:0x2005,40028:3,40029:3,40030:3,40031:0x2003,40032:0x200D,40033:8,40034:3,40035:0xD,40036:0xB,40037:3,40038:3,40039:3,40040:8,40041:5,40042:5,40043:8}
-
-    static AnnotationType := {Unknown:60000,SpellingError:60001,GrammarError:60002,Comment:60003,FormulaError:60004,TrackChanges:60005,Header:60006,Footer:60007,Highlighted:60008,Endnote:60009,Footnote:60010,InsertionChange:60011,DeletionChange:60012,MoveChange:60013,FormatChange:60014,UnsyncedChange:60015,EditingLockedChange:60016,ExternalChange:60017,ConflictingChange:60018,Author:60019,AdvancedProofingIssue:60020,DataValidationError:60021,CircularReferenceError:60022,Mathematics:60023, 60000:"Unknown",60001:"SpellingError",60002:"GrammarError",60003:"Comment",60004:"FormulaError",60005:"TrackChanges",60006:"Header",60007:"Footer",60008:"Highlighted",60009:"Endnote",60010:"Footnote",60011:"InsertionChange",60012:"DeletionChange",60013:"MoveChange",60014:"FormatChange",60015:"UnsyncedChange",60016:"EditingLockedChange",60017:"ExternalChange",60018:"ConflictingChange",60019:"Author",60020:"AdvancedProofingIssue",60021:"DataValidationError",60022:"CircularReferenceError",60023:"Mathematics"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Style := {Custom:70000,Heading1:70001,Heading2:70002,Heading3:70003,Heading4:70004,Heading5:70005,Heading6:70006,Heading7:70007,Heading8:70008,Heading9:70009,Title:70010,Subtitle:70011,Normal:70012,Emphasis:70013,Quote:70014,BulletedList:70015,NumberedList:70016,70000:"Custom",70001:"Heading1",70002:"Heading2",70003:"Heading3",70004:"Heading4",70005:"Heading5",70006:"Heading6",70007:"Heading7",70008:"Heading8",70009:"Heading9",70010:"Title",70011:"Subtitle",70012:"Normal",70013:"Emphasis",70014:"Quote",70015:"BulletedList",70016:"NumberedList"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static LandmarkType := {Custom:80000,Form:80001,Main:80002,Navigation:80003,Search:80004,80000:"Custom",80001:"Form",80002:"Main",80003:"Navigation",80004:"Search"}.DefineProp("__Item", this.__PropertyValueGetter)
-    
-    static HeadingLevel := {None:80050, 1:80051, 2:80052, 3:80053, 4:80054, 5:80055, 6:80056, 7:80057, 8:80058, 9:80059, 80050:"None", 80051:"1", 80052:"2", 80053:"3", 80054:"4", 80055:"5", 80056:"6", 80057:"7", 80058:"8", 80059:"9"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Change := {Summary:90000, 90000:"Summary"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static Metadata := {SayAsInterpretAs:100000, 100000:"SayAsInterpretAs"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static AsyncContentLoadedState := {Beginning:0, Progress:1, Completed:2, 0:"Beginning", 1:"Progress", 2:"Completed"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static AutomationIdentifierType := {Property:0,Pattern:1,Event:2,ControlType:3,TextAttribute:4,LandmarkType:5,Annotation:6,Changes:7,Style:7,0:"Property", 1:"Pattern", 2:"Event", 3:"ControlType", 4:"TextAttribute", 5:"LandmarkType", 6:"Annotation", 7:"Changes", 8:"Style"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static ConditionType := {True:0,False:1,Property:2,And:3,Or:4,Not:5,0:"True", 1:"False", 2:"Property", 3:"And", 4:"Or", 5:"Not"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static EventArgsType := {Simple:0,PropertyChanged:1,StructureChanged:2,AsyncContentLoaded:3,WindowClosed:4,TextEditTextChanged:5,Changes:6,Notification:7,ActiveTextPositionChanged:8,StructuredMarkup:9, 0:"Simple", 1:"PropertyChanged", 2:"StructureChanged", 3:"AsyncContentLoaded", 4:"WindowClosed", 5:"TextEditTextChanged", 6:"Changes", 7:"Notification", 8:"ActiveTextPositionChanged", 9:"StructuredMarkup"}
-
-    static AutomationElementMode := {None:0, Full:1, 0:"None", 1:"Full"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static CoalesceEventsOptions := {Disabled:0, Enabled:1, 0:"Disabled", 1:"Enabled"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static ConnectionRecoveryBehaviorOptions := {Disabled:0, Enabled:1, 0:"Disabled", 1:"Enabled"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static PropertyConditionFlags := {None:0, IgnoreCase:1, MatchSubstring:2, 0:"None", 1:"IgnoreCase", 2:"MatchSubstring"}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static TreeScope := {None: 0, Element: 1, Children: 2, Descendants: 4, Subtree: 7, Parent: 8, Ancestors: 16, 0x0:"None", 0x1:"Element", 0x2:"Children", 0x4:"Descendants", 0x8:"Parent", 0x10:"Ancestors", 0x7:"Subtree"
-    }.DefineProp("__Item", this.__PropertyValueGetter)
-
-    static TreeTraversalOptions := {Default:0, PostOrder:1, LastToFirstOrder:2}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum ActiveEnd Contains possible values for the SelectionActiveEnd text attribute, which indicates the location of the caret relative to a text range that represents the currently selected text.
-    static ActiveEnd := {None:0,Start:1,End:2}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum AnimationStyle Contains values for the AnimationStyle text attribute.
-    static AnimationStyle := {None:0,LasVegasLights:1,BlinkingBackground:2,SparkleText:3,MarchingBlackAnts:4,MarchingRedAnts:5,Shimmer:6,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum BulletStyle Contains values for the BulletStyle text attribute.
-    static BulletStyle := {None:0,HollowRoundBullet:1,FilledRoundBullet:2,HollowSquareBullet:3,FilledSquareBullet:4,DashBullet:5,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum CapStyle Contains values that specify the value of the CapStyle text attribute.
-    static CapStyle := {None:0,SmallCap:1,AllCap:2,AllPetiteCaps:3,PetiteCaps:4,Unicase:5,Titling:6,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum CaretBidiMode Contains possible values for the CaretBidiMode text attribute, which indicates whether the caret is in text that flows from left to right, or from right to left.
-    static CaretBidiMode := {LTR:0,RTL:1}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum CaretPosition Contains possible values for the CaretPosition text attribute, which indicates the location of the caret relative to a line of text in a text range.
-    static CaretPosition := {Unknown:0,EndOfLine:1,BeginningOfLine:2}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum DockPosition Contains values that specify the location of a docking window represented by the Dock control pattern.
-    static DockPosition := {Top:0,Left:1,Bottom:2,Right:3,Fill:4,None:5}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum ExpandCollapseState Contains values that specify the state of a UI element that can be expanded and collapsed.	
-    static ExpandCollapseState := {Collapsed:0,Expanded:1,PartiallyExpanded:2,LeafNode:3}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum FillType Contains values for the FillType attribute.
-    static FillType := {None:0,Color:1,Gradient:2,Picture:3,Pattern:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum FlowDirection Contains values for the TextFlowDirections text attribute.
-    static FlowDirection := {Default:0,RightToLeft:1,BottomToTop:2,Vertical:4}.DefineProp("__Item", this.__PropertyValueGetter)
-	;enum LiveSetting Contains possible values for the LiveSetting property. This property is implemented by provider elements that are part of a live region.
-    static LiveSetting := {Off:0,Polite:1,Assertive:2}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum NavigateDirection Contains values used to specify the direction of navigation within the Microsoft UI Automation tree.
-    static NavigateDirection := {Parent:0,NextSibling:1,PreviousSibling:2,FirstChild:3,LastChild:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum NotificationKind Defines values that indicate the type of a notification event, and a hint to the listener about the processing of the event. 
-    static NotificationKind := {ItemAdded:0,ItemRemoved:1,ActionCompleted:2,ActionAborted:3,Other:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum NotificationProcessing Defines values that indicate how a notification should be processed.
-    static NotificationProcessing := {ImportantAll:0,ImportantMostRecent:1,All:2,MostRecent:3,CurrentThenMostRecent:4}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum OrientationType Contains values that specify the orientation of a control.
-    static OrientationType := {None:0,Horizontal:1,Vertical:2}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum OutlineStyles Contains values for the OutlineStyle text attribute.
-    static OutlineStyles := {None:0,Outline:1,Shadow:2,Engraved:4,Embossed:8}.DefineProp("__Item", this.__PropertyValueGetter)
-    ;enum ProviderOptions
-    static ProviderOptions := {ClientSideProvider:1,ServerSideProvider:2,NonClientAreaProvider:4,OverrideProvider:8,ProviderOwnsSetFocus:10,UseComThreading:20,RefuseNonClientSupport:40,HasNativeIAccessible:80,UseClientCoordinates:100}.DefineProp("__Item", this.__PropertyValueGetter)
-	; enum RowOrColumnMajor Contains values that specify whether data in a table should be read primarily by row or by column.
-    static RowOrColumnMajor := {RowMajor:0,ColumnMajor:1,Indeterminate:2}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum SayAsInterpretAs Defines the values that indicate how a text-to-speech engine should interpret specific data.
-    static SayAsInterpretAs := {None:0,Spell:1,Cardinal:2,Ordinal:3,Number:4,Date:5,Time:6,Telephone:7,Currency:8,Net:9,Url:10,Address:11,Name:13,Media:14,Date_MonthDayYear:15,Date_DayMonthYear:16,Date_YearMonthDay:17,Date_YearMonth:18,Date_MonthYear:19,Date_DayMonth:20,Date_MonthDay:21,Date_Year:22,Time_HoursMinutesSeconds12:23,Time_HoursMinutes12:24,Time_HoursMinutesSeconds24:25,Time_HoursMinutes24:26}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum ScrollAmount Contains values that specify the direction and distance to scroll.	
-    static ScrollAmount := {LargeDecrement:0,SmallDecrement:1,NoAmount:2,LargeIncrement:3,SmallIncrement:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum StructureChangeType Contains values that specify the type of change in the Microsoft UI Automation tree structure.
-    static StructureChangeType := {ChildAdded:0,ChildRemoved:1,ChildrenInvalidated:2,ChildrenBulkAdded:3,ChildrenBulkRemoved:4,ChildrenReordered:5}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum SupportedTextSelection Contains values that specify the supported text selection attribute.	
-    static SupportedTextSelection := {None:0,Single:1,Multiple:2}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum SynchronizedInputType Contains values that specify the type of synchronized input.
-    static SynchronizedInputType := {KeyUp:1,KeyDown:2,LeftMouseUp:4,LeftMouseDown:8,RightMouseUp:10,RightMouseDown:20}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum TextDecorationLineStyle Contains values that specify the OverlineStyle, StrikethroughStyle, and UnderlineStyle text attributes.
-	static TextDecorationLineStyle := {None:0, Single:1, WordsOnly:2, Double:3, Dot:4, Dash:5, DashDot:6, DashDotDot:7, Wavy:8, ThickSingle:9, DoubleWavy:11, ThickWavy:12, LongDash:13, ThickDash:14, ThickDashDot:15, ThickDashDotDot:16, ThickDot:17, ThickLongDash:18, Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum TextEditChangeType Describes the text editing change being performed by controls when text-edit events are raised or handled.
-    static TextEditChangeType := {None:0,AutoCorrect:1,Composition:2,CompositionFinalized:3,AutoComplete:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum TextPatternRangeEndpoint Contains values that specify the endpoints of a text range.
-    static TextPatternRangeEndpoint := {Start:0,End:1}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum TextUnit Contains values that specify units of text for the purposes of navigation.
-    static TextUnit := {Character:0,Format:1,Word:2,Line:3,Paragraph:4,Page:5,Document:6}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum ToggleState Contains values that specify the toggle state of a Microsoft UI Automation element that implements the Toggle control pattern.
-    static ToggleState := {Off:0,On:1,Indeterminate:2}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum ZoomUnit Contains possible values for the IUIAutomationTransformPattern2::ZoomByUnit method, which zooms the viewport of a control by the specified unit.
-    static ZoomUnit := {NoAmount:0,LargeDecrement:1,SmallDecrement:2,LargeIncrement:3,SmallIncrement:4}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum WindowVisualState Contains values that specify the visual state of a window.
-    static WindowVisualState := {Normal:0,Maximized:1,Minimized:2}.DefineProp("__Item", this.__PropertyValueGetter)
-    ; enum WindowInteractionState Contains values that specify the current state of the window for purposes of user interaction.
-    static WindowInteractionState := {Running:0,Closing:1,ReadyForUserInteraction:2,BlockedByModalWindow:3,NotResponding:4}.DefineProp("__Item", this.__PropertyValueGetter)
-
-    ; BSTR wrapper, convert BSTR to AHK string and free it
-    static BSTR(ptr) {
-        static _ := DllCall("LoadLibrary", "str", "oleaut32.dll")
-        if ptr {
-            s := StrGet(ptr), DllCall("oleaut32\SysFreeString", "ptr", ptr)
-            return s
+    global IUIAutomationMaxVersion
+    DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
+    if !screenreader
+        DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
+    this.IUIAutomationVersion := IUIAutomationMaxVersion, this.ptr := 0
+    while (--this.IUIAutomationVersion > 1) {
+        if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
+            continue
+        try {
+            this.ptr := ComObjValue(this.__ := ComObject("{e22ad333-b25f-460c-83d0-0581107395c9}", __IID.IUIAutomation%this.IUIAutomationVersion%))
+            break
         }
     }
-    ; X can be pt64 as well, in which case Y should be omitted
-	static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
-		return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | X) : X), "UInt", 2)
-	}
+    ; If all else fails, try the first IUIAutomation version
+    if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr)
+        this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
+    UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
+}
+static TreeWalkerTrue := ""
 
-    class Variant {
-        __New(Value := unset, VarType := 0xC) {
-            static SIZEOF_VARIANT := 8 + (2 * A_PtrSize)
-            this.var := Buffer(SIZEOF_VARIANT, 0)
-            this.owner := True
-            if IsSet(Value) {
-                if (Type(Value) == "ComVar") {
-                    this.var := Value.var, this.ref := Value.ref, this.obj := Value, this.owner := False
+; IUIAutomation constants and enumerations.
+; Access properties with UIA.property.subproperty (UIA.ControlType.Button)
+; To get the property name from value, use the array style: UIA.property[value] (UIA.ControlType[50000] == "Button")
+
+; This is enables getting property names from values using the array style
+static __PropertyFromValue(obj, value) {
+    static cachedProps := Map()
+    if !cachedProps.Has(obj) {
+        cachedProps[obj] := Map()
+        for k, v in obj.OwnProps() 
+            cachedProps[obj][v] := k
+    }
+    if cachedProps[obj].Has(value)
+        return cachedProps[obj][value]
+    throw UnsetItemError("Property item `"" value "`" not found!", -2)
+}
+static __PropertyValueGetter := {get: (obj, value) => UIA.__PropertyFromValue(obj, value)}
+
+static MatchMode := {StartsWith:1, Substring:2, Exact:3, RegEx:"RegEx"}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static ControlType := {Button:50000,Calendar:50001,CheckBox:50002,ComboBox:50003,Edit:50004,Hyperlink:50005,Image:50006,ListItem:50007,List:50008,Menu:50009,MenuBar:50010,MenuItem:50011,ProgressBar:50012,RadioButton:50013,ScrollBar:50014,Slider:50015,Spinner:50016,StatusBar:50017,Tab:50018,TabItem:50019,Text:50020,ToolBar:50021,ToolTip:50022,Tree:50023,TreeItem:50024,Custom:50025,Group:50026,Thumb:50027,DataGrid:50028,DataItem:50029,Document:50030,SplitButton:50031,Window:50032,Pane:50033,Header:50034,HeaderItem:50035,Table:50036,TitleBar:50037,Separator:50038,SemanticZoom:50039,AppBar:50040}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Pattern := {Invoke: 10000, Selection: 10001, Value: 10002, RangeValue: 10003, Scroll: 10004, ExpandCollapse: 10005, Grid: 10006, GridItem: 10007, MultipleView: 10008, Window: 10009, SelectionItem: 10010, Dock: 10011, Table: 10012, TableItem: 10013, Text: 10014, Toggle: 10015, Transform: 10016, ScrollItem: 10017, LegacyIAccessible: 10018, ItemContainer: 10019, VirtualizedItem: 10020, SynchronizedInput: 10021, ObjectModel: 10022, Annotation: 10023, Text2:10024, Styles: 10025, Spreadsheet: 10026, SpreadsheetItem: 10027, Transform2: 10028, TextChild: 10029, Drag: 10030, DropTarget: 10031, TextEdit: 10032, CustomNavigation: 10033, Selection2: 10034}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Event := {ToolTipOpened:20000,ToolTipClosed:20001,StructureChanged:20002,MenuOpened:20003,AutomationPropertyChanged:20004,AutomationFocusChanged:20005,AsyncContentLoaded:20006,MenuClosed:20007,LayoutInvalidated:20008,Invoke_Invoked:20009,SelectionItem_ElementAddedToSelection:20010,SelectionItem_ElementRemovedFromSelection:20011,SelectionItem_ElementSelected:20012,Selection_Invalidated:20013,Text_TextSelectionChanged:20014,Text_TextChanged:20015,Window_WindowOpened:20016,Window_WindowClosed:20017,MenuModeStart:20018,MenuModeEnd:20019,InputReachedTarget:20020,InputReachedOtherElement:20021,InputDiscarded:20022,SystemAlert:20023,LiveRegionChanged:20024,HostedFragmentRootsInvalidated:20025,Drag_DragStart:20026,Drag_DragCancel:20027,Drag_DragComplete:20028,DropTarget_DragEnter:20029,DropTarget_DragLeave:20030,DropTarget_Dropped:20031,TextEdit_TextChanged:20032,TextEdit_ConversionTargetChanged:20033,Changes:20034,Notification:20035,ActiveTextPositionChanged:20036}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Property := {RuntimeId:30000,BoundingRectangle:30001,ProcessId:30002,ControlType:30003,Type:30003,LocalizedControlType:30004,Name:30005,AcceleratorKey:30006,AccessKey:30007,HasKeyboardFocus:30008,IsKeyboardFocusable:30009,IsEnabled:30010,AutomationId:30011,ClassName:30012,HelpText:30013,ClickablePoint:30014,Culture:30015,IsControlElement:30016,IsContentElement:30017,LabeledBy:30018,IsPassword:30019,NativeWindowHandle:30020,ItemType:30021,IsOffscreen:30022,Orientation:30023,FrameworkId:30024,IsRequiredForForm:30025,ItemStatus:30026,IsDockPatternAvailable:30027,IsExpandCollapsePatternAvailable:30028,IsGridItemPatternAvailable:30029,IsGridPatternAvailable:30030,IsInvokePatternAvailable:30031,IsMultipleViewPatternAvailable:30032,IsRangeValuePatternAvailable:30033,IsScrollPatternAvailable:30034,IsScrollItemPatternAvailable:30035,IsSelectionItemPatternAvailable:30036,IsSelectionPatternAvailable:30037,IsTablePatternAvailable:30038,IsTableItemPatternAvailable:30039,IsTextPatternAvailable:30040,IsTogglePatternAvailable:30041,IsTransformPatternAvailable:30042,IsValuePatternAvailable:30043,IsWindowPatternAvailable:30044,ValueValue:30045,Value:30045,ValueIsReadOnly:30046,RangeValueValue:30047,RangeValueIsReadOnly:30048,RangeValueMinimum:30049,RangeValueMaximum:30050,RangeValueLargeChange:30051,RangeValueSmallChange:30052,ScrollHorizontalScrollPercent:30053,ScrollHorizontalViewSize:30054,ScrollVerticalScrollPercent:30055,ScrollVerticalViewSize:30056,ScrollHorizontallyScrollable:30057,ScrollVerticallyScrollable:30058,SelectionSelection:30059,SelectionCanSelectMultiple:30060,SelectionIsSelectionRequired:30061,GridRowCount:30062,GridColumnCount:30063,GridItemRow:30064,GridItemColumn:30065,GridItemRowSpan:30066,GridItemColumnSpan:30067,GridItemContainingGrid:30068,DockDockPosition:30069,ExpandCollapseExpandCollapseState:30070,MultipleViewCurrentView:30071,MultipleViewSupportedViews:30072,WindowCanMaximize:30073,WindowCanMinimize:30074,WindowWindowVisualState:30075,WindowWindowInteractionState:30076,WindowIsModal:30077,WindowIsTopmost:30078,SelectionItemIsSelected:30079,SelectionItemSelectionContainer:30080,TableRowHeaders:30081,TableColumnHeaders:30082,TableRowOrColumnMajor:30083,TableItemRowHeaderItems:30084,TableItemColumnHeaderItems:30085,ToggleToggleState:30086,TransformCanMove:30087,TransformCanResize:30088,TransformCanRotate:30089,IsLegacyIAccessiblePatternAvailable:30090,LegacyIAccessibleChildId:30091,LegacyIAccessibleName:30092,LegacyIAccessibleValue:30093,LegacyIAccessibleDescription:30094,LegacyIAccessibleRole:30095,LegacyIAccessibleState:30096,LegacyIAccessibleHelp:30097,LegacyIAccessibleKeyboardShortcut:30098,LegacyIAccessibleSelection:30099,LegacyIAccessibleDefaultAction:30100,AriaRole:30101,AriaProperties:30102,IsDataValidForForm:30103,ControllerFor:30104,DescribedBy:30105,FlowsTo:30106,ProviderDescription:30107,IsItemContainerPatternAvailable:30108,IsVirtualizedItemPatternAvailable:30109,IsSynchronizedInputPatternAvailable:30110,OptimizeForVisualContent:30111,IsObjectModelPatternAvailable:30112,AnnotationAnnotationTypeId:30113,AnnotationAnnotationTypeName:30114,AnnotationAuthor:30115,AnnotationDateTime:30116,AnnotationTarget:30117,IsAnnotationPatternAvailable:30118,IsTextPattern2Available:30119,StylesStyleId:30120,StylesStyleName:30121,StylesFillColor:30122,StylesFillPatternStyle:30123,StylesShape:30124,StylesFillPatternColor:30125,StylesExtendedProperties:30126,IsStylesPatternAvailable:30127,IsSpreadsheetPatternAvailable:30128,SpreadsheetItemFormula:30129,SpreadsheetItemAnnotationObjects:30130,SpreadsheetItemAnnotationTypes:30131,IsSpreadsheetItemPatternAvailable:30132,Transform2CanZoom:30133,IsTransformPattern2Available:30134,LiveSetting:30135,IsTextChildPatternAvailable:30136,IsDragPatternAvailable:30137,DragIsGrabbed:30138,DragDropEffect:30139,DragDropEffects:30140,IsDropTargetPatternAvailable:30141,DropTargetDropTargetEffect:30142,DropTargetDropTargetEffects:30143,DragGrabbedItems:30144,Transform2ZoomLevel:30145,Transform2ZoomMinimum:30146,Transform2ZoomMaximum:30147,FlowsFrom:30148,IsTextEditPatternAvailable:30149,IsPeripheral:30150,IsCustomNavigationPatternAvailable:30151,PositionInSet:30152,SizeOfSet:30153,Level:30154,AnnotationTypes:30155,AnnotationObjects:30156,LandmarkType:30157,LocalizedLandmarkType:30158,FullDescription:30159,FillColor:30160,OutlineColor:30161,FillType:30162,VisualEffects:30163,OutlineThickness:30164,CenterPoint:30165,Rotation:30166,Size:30167,IsSelectionPattern2Available:30168,Selection2FirstSelectedItem:30169,Selection2LastSelectedItem:30170,Selection2CurrentSelectedItem:30171,Selection2ItemCount:30173,IsDialog:30174}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static PropertyVariantType := {30000:0x2003,30001:0x2005,30002:3,30003:3,30004:8,30005:8,30006:8,30007:8,30008:0xB,30009:0xB,30010:0xB,30011:8,30012:8,30013:8,30014:0x2005,30015:3,30016:0xB,30017:0xB,30018:0xD,30019:0xB,30020:3,30021:8,30022:0xB,30023:3,30024:8,30025:0xB,30026:8,30027:0xB,30028:0xB,30029:0xB,30030:0xB,30031:0xB,30032:0xB,30033:0xB,30034:0xB,30035:0xB,30036:0xB,30037:0xB,30038:0xB,30039:0xB,30040:0xB,30041:0xB,30042:0xB,30043:0xB,30044:0xB,30045:8,30046:0xB,30047:5,30048:0xB,30049:5,30050:5,30051:5,30052:5,30053:5,30054:5,30055:5,30056:5,30057:0xB,30058:0xB,30059:0x200D,30060:0xB,30061:0xB,30062:3,30063:3,30064:3,30065:3,30066:3,30067:3,30068:0xD,30069:3,30070:3,30071:3,30072:0x2003,30073:0xB,30074:0xB,30075:3,30076:3,30077:0xB,30078:0xB,30079:0xB,30080:0xD,30081:0x200D,30082:0x200D,30083:0x2003,30084:0x200D,30085:0x200D,30086:3,30087:0xB,30088:0xB,30089:0xB,30090:0xB,30091:3,30092:8,30093:8,30094:8,30095:3,30096:3,30097:8,30098:8,30099:0x200D,30100:8}, type2:={30101:8,30102:8,30103:0xB,30104:0xD,30105:0xD,30106:0xD,30107:8,30108:0xB,30109:0xB,30110:0xB,30111:0xB,30112:0xB,30113:3,30114:8,30115:8,30116:8,30117:0xD,30118:0xB,30119:0xB,30120:3,30121:8,30122:3,30123:8,30124:8,30125:3,30126:8,30127:0xB,30128:0xB,30129:8,30130:0x200D,30131:0x2003,30132:0xB,30133:0xB,30134:0xB,30135:3,30136:0xB,30137:0xB,30138:0xB,30139:8,30140:0x2008,30141:0xB,30142:8,30143:0x2008,30144:0x200D,30145:5,30146:5,30147:5,30148:0x200D,30149:0xB,30150:0xB,30151:0xB,30152:3,30153:3,30154:3,30155:0x2003,30156:0x2003,30157:3,30158:8,30159:8,30160:3,30161:0x2003,30162:3,30163:3,30164:0x2005,30165:0x2005,30166:5,30167:0x2005,30168:0xB}
+
+static TextAttribute := {AnimationStyle:40000,BackgroundColor:40001,BulletStyle:40002,CapStyle:40003,Culture:40004,FontName:40005,FontSize:40006,FontWeight:40007,ForegroundColor:40008,HorizontalTextAlignment:40009,IndentationFirstLine:40010,IndentationLeading:40011,IndentationTrailing:40012,IsHidden:40013,IsItalic:40014,IsReadOnly:40015,IsSubscript:40016,IsSuperscript:40017,MarginBottom:40018,MarginLeading:40019,MarginTop:40020,MarginTrailing:40021,OutlineStyles:40022,OverlineColor:40023,OverlineStyle:40024,StrikethroughColor:40025,StrikethroughStyle:40026,Tabs:40027,TextFlowDirections:40028,UnderlineColor:40029,UnderlineStyle:40030,AnnotationTypes:40031,AnnotationObjects:40032,StyleName:40033,StyleId:40034,Link:40035,IsActive:40036,SelectionActiveEnd:40037,CaretPosition:40038,CaretBidiMode:40039,LineSpacing:40040,BeforeParagraphSpacing:40041,AfterParagraphSpacing:40042,SayAsInterpretAs:40043}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static AttributeVariantType := {40000:3,40001:3,40002:3,40003:3,40004:3,40005:8,40006:5,40007:3,40008:3,40009:3,40010:5,40011:5,40012:5,40013:0xB,40014:0xB,40015:0xB,40016:0xB,40017:0xB,40018:5,40019:5,40020:5,40021:5,40022:3,40023:3,40024:3,40025:3,40026:3,40027:0x2005,40028:3,40029:3,40030:3,40031:0x2003,40032:0x200D,40033:8,40034:3,40035:0xD,40036:0xB,40037:3,40038:3,40039:3,40040:8,40041:5,40042:5,40043:8}
+
+static AnnotationType := {Unknown:60000,SpellingError:60001,GrammarError:60002,Comment:60003,FormulaError:60004,TrackChanges:60005,Header:60006,Footer:60007,Highlighted:60008,Endnote:60009,Footnote:60010,InsertionChange:60011,DeletionChange:60012,MoveChange:60013,FormatChange:60014,UnsyncedChange:60015,EditingLockedChange:60016,ExternalChange:60017,ConflictingChange:60018,Author:60019,AdvancedProofingIssue:60020,DataValidationError:60021,CircularReferenceError:60022,Mathematics:60023}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Style := {Custom:70000,Heading1:70001,Heading2:70002,Heading3:70003,Heading4:70004,Heading5:70005,Heading6:70006,Heading7:70007,Heading8:70008,Heading9:70009,Title:70010,Subtitle:70011,Normal:70012,Emphasis:70013,Quote:70014,BulletedList:70015,NumberedList:70016}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static LandmarkType := {Custom:80000,Form:80001,Main:80002,Navigation:80003,Search:80004}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static HeadingLevel := {None:80050, 1:80051, 2:80052, 3:80053, 4:80054, 5:80055, 6:80056, 7:80057, 8:80058, 9:80059}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Change := {Summary:90000}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Metadata := {SayAsInterpretAs:100000}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static AsyncContentLoadedState := {Beginning:0, Progress:1, Completed:2}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static AutomationIdentifierType := {Property:0,Pattern:1,Event:2,ControlType:3,TextAttribute:4,LandmarkType:5,Annotation:6,Changes:7,Style:7}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static ConditionType := {True:0,False:1,Property:2,And:3,Or:4,Not:5}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static EventArgsType := {Simple:0,PropertyChanged:1,StructureChanged:2,AsyncContentLoaded:3,WindowClosed:4,TextEditTextChanged:5,Changes:6,Notification:7,ActiveTextPositionChanged:8,StructuredMarkup:9}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static AutomationElementMode := {None:0, Full:1}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static CoalesceEventsOptions := {Disabled:0, Enabled:1}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static ConnectionRecoveryBehaviorOptions := {Disabled:0, Enabled:1}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static PropertyConditionFlags := {None:0, IgnoreCase:1, MatchSubstring:2}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static TreeScope := {None: 0, Element: 1, Children: 2, Descendants: 4, Subtree: 7, Parent: 8, Ancestors: 16}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static TreeTraversalOptions := {Default:0, PostOrder:1, LastToFirstOrder:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum ActiveEnd Contains possible values for the SelectionActiveEnd text attribute, which indicates the location of the caret relative to a text range that represents the currently selected text.
+static ActiveEnd := {None:0,Start:1,End:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum AnimationStyle Contains values for the AnimationStyle text attribute.
+static AnimationStyle := {None:0,LasVegasLights:1,BlinkingBackground:2,SparkleText:3,MarchingBlackAnts:4,MarchingRedAnts:5,Shimmer:6,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum BulletStyle Contains values for the BulletStyle text attribute.
+static BulletStyle := {None:0,HollowRoundBullet:1,FilledRoundBullet:2,HollowSquareBullet:3,FilledSquareBullet:4,DashBullet:5,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum CapStyle Contains values that specify the value of the CapStyle text attribute.
+static CapStyle := {None:0,SmallCap:1,AllCap:2,AllPetiteCaps:3,PetiteCaps:4,Unicase:5,Titling:6,Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum CaretBidiMode Contains possible values for the CaretBidiMode text attribute, which indicates whether the caret is in text that flows from left to right, or from right to left.
+static CaretBidiMode := {LTR:0,RTL:1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum CaretPosition Contains possible values for the CaretPosition text attribute, which indicates the location of the caret relative to a line of text in a text range.
+static CaretPosition := {Unknown:0,EndOfLine:1,BeginningOfLine:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum DockPosition Contains values that specify the location of a docking window represented by the Dock control pattern.
+static DockPosition := {Top:0,Left:1,Bottom:2,Right:3,Fill:4,None:5}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum ExpandCollapseState Contains values that specify the state of a UI element that can be expanded and collapsed.	
+static ExpandCollapseState := {Collapsed:0,Expanded:1,PartiallyExpanded:2,LeafNode:3}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum FillType Contains values for the FillType attribute.
+static FillType := {None:0,Color:1,Gradient:2,Picture:3,Pattern:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum FlowDirection Contains values for the TextFlowDirections text attribute.
+static FlowDirection := {Default:0,RightToLeft:1,BottomToTop:2,Vertical:4}.DefineProp("__Item", this.__PropertyValueGetter)
+;enum LiveSetting Contains possible values for the LiveSetting property. This property is implemented by provider elements that are part of a live region.
+static LiveSetting := {Off:0,Polite:1,Assertive:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum NavigateDirection Contains values used to specify the direction of navigation within the Microsoft UI Automation tree.
+static NavigateDirection := {Parent:0,NextSibling:1,PreviousSibling:2,FirstChild:3,LastChild:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum NotificationKind Defines values that indicate the type of a notification event, and a hint to the listener about the processing of the event. 
+static NotificationKind := {ItemAdded:0,ItemRemoved:1,ActionCompleted:2,ActionAborted:3,Other:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum NotificationProcessing Defines values that indicate how a notification should be processed.
+static NotificationProcessing := {ImportantAll:0,ImportantMostRecent:1,All:2,MostRecent:3,CurrentThenMostRecent:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum OrientationType Contains values that specify the orientation of a control.
+static OrientationType := {None:0,Horizontal:1,Vertical:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum OutlineStyles Contains values for the OutlineStyle text attribute.
+static OutlineStyles := {None:0,Outline:1,Shadow:2,Engraved:4,Embossed:8}.DefineProp("__Item", this.__PropertyValueGetter)
+;enum ProviderOptions
+static ProviderOptions := {ClientSideProvider:1,ServerSideProvider:2,NonClientAreaProvider:4,OverrideProvider:8,ProviderOwnsSetFocus:10,UseComThreading:20,RefuseNonClientSupport:40,HasNativeIAccessible:80,UseClientCoordinates:100}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum RowOrColumnMajor Contains values that specify whether data in a table should be read primarily by row or by column.
+static RowOrColumnMajor := {RowMajor:0,ColumnMajor:1,Indeterminate:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum SayAsInterpretAs Defines the values that indicate how a text-to-speech engine should interpret specific data.
+static SayAsInterpretAs := {None:0,Spell:1,Cardinal:2,Ordinal:3,Number:4,Date:5,Time:6,Telephone:7,Currency:8,Net:9,Url:10,Address:11,Name:13,Media:14,Date_MonthDayYear:15,Date_DayMonthYear:16,Date_YearMonthDay:17,Date_YearMonth:18,Date_MonthYear:19,Date_DayMonth:20,Date_MonthDay:21,Date_Year:22,Time_HoursMinutesSeconds12:23,Time_HoursMinutes12:24,Time_HoursMinutesSeconds24:25,Time_HoursMinutes24:26}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum ScrollAmount Contains values that specify the direction and distance to scroll.	
+static ScrollAmount := {LargeDecrement:0,SmallDecrement:1,NoAmount:2,LargeIncrement:3,SmallIncrement:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum StructureChangeType Contains values that specify the type of change in the Microsoft UI Automation tree structure.
+static StructureChangeType := {ChildAdded:0,ChildRemoved:1,ChildrenInvalidated:2,ChildrenBulkAdded:3,ChildrenBulkRemoved:4,ChildrenReordered:5}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum SupportedTextSelection Contains values that specify the supported text selection attribute.	
+static SupportedTextSelection := {None:0,Single:1,Multiple:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum SynchronizedInputType Contains values that specify the type of synchronized input.
+static SynchronizedInputType := {KeyUp:1,KeyDown:2,LeftMouseUp:4,LeftMouseDown:8,RightMouseUp:10,RightMouseDown:20}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum TextDecorationLineStyle Contains values that specify the OverlineStyle, StrikethroughStyle, and UnderlineStyle text attributes.
+static TextDecorationLineStyle := {None:0, Single:1, WordsOnly:2, Double:3, Dot:4, Dash:5, DashDot:6, DashDotDot:7, Wavy:8, ThickSingle:9, DoubleWavy:11, ThickWavy:12, LongDash:13, ThickDash:14, ThickDashDot:15, ThickDashDotDot:16, ThickDot:17, ThickLongDash:18, Other:-1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum TextEditChangeType Describes the text editing change being performed by controls when text-edit events are raised or handled.
+static TextEditChangeType := {None:0,AutoCorrect:1,Composition:2,CompositionFinalized:3,AutoComplete:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum TextPatternRangeEndpoint Contains values that specify the endpoints of a text range.
+static TextPatternRangeEndpoint := {Start:0,End:1}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum TextUnit Contains values that specify units of text for the purposes of navigation.
+static TextUnit := {Character:0,Format:1,Word:2,Line:3,Paragraph:4,Page:5,Document:6}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum ToggleState Contains values that specify the toggle state of a Microsoft UI Automation element that implements the Toggle control pattern.
+static ToggleState := {Off:0,On:1,Indeterminate:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum ZoomUnit Contains possible values for the IUIAutomationTransformPattern2::ZoomByUnit method, which zooms the viewport of a control by the specified unit.
+static ZoomUnit := {NoAmount:0,LargeDecrement:1,SmallDecrement:2,LargeIncrement:3,SmallIncrement:4}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum WindowVisualState Contains values that specify the visual state of a window.
+static WindowVisualState := {Normal:0,Maximized:1,Minimized:2}.DefineProp("__Item", this.__PropertyValueGetter)
+; enum WindowInteractionState Contains values that specify the current state of the window for purposes of user interaction.
+static WindowInteractionState := {Running:0,Closing:1,ReadyForUserInteraction:2,BlockedByModalWindow:3,NotResponding:4}.DefineProp("__Item", this.__PropertyValueGetter)
+
+; BSTR wrapper, convert BSTR to AHK string and free it
+static BSTR(ptr) {
+    static _ := DllCall("LoadLibrary", "str", "oleaut32.dll")
+    if ptr {
+        s := StrGet(ptr), DllCall("oleaut32\SysFreeString", "ptr", ptr)
+        return s
+    }
+}
+; X can be pt64 as well, in which case Y should be omitted
+static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
+    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | X) : X), "UInt", 2)
+}
+
+; Creates a variant to pass into ComCalls
+class Variant {
+    __New(Value := unset, VarType := 0xC) {
+        static SIZEOF_VARIANT := 8 + (2 * A_PtrSize)
+        this.var := Buffer(SIZEOF_VARIANT, 0)
+        this.owner := True
+        if IsSet(Value) {
+            if (Type(Value) == "ComVar") {
+                this.var := Value.var, this.ref := Value.ref, this.obj := Value, this.owner := False
+                return
+            } 
+            if (IsObject(Value)) {
+                this.ref := ComValue(0x400C, this.var.ptr)
+                if Value is Array {
+                    if Value.Length {
+                        switch Type(Value[1]) {
+                            case "Integer": VarType := 3
+                            case "String": VarType := 8
+                            case "Float": VarType := 5
+                            case "ComValue", "ComObject": VarType := ComObjType(Value[1])
+                            default: VarType := 0xC
+                        }
+                    } else
+                        VarType := 0xC
+                    ComObjFlags(obj := ComObjArray(VarType, Value.Length), -1), i := 0, this.ref[] := obj
+                    for v in Value
+                        obj[i++] := v
                     return
-                } 
-                if (IsObject(Value)) {
-                    this.ref := ComValue(0x400C, this.var.ptr)
-                    if Value is Array {
-                        if Value.Length {
-                            switch Type(Value[1]) {
-                                case "Integer": VarType := 3
-                                case "String": VarType := 8
-                                case "Float": VarType := 5
-                                case "ComValue", "ComObject": VarType := ComObjType(Value[1])
-                                default: VarType := 0xC
-                            }
-                        } else
-                            VarType := 0xC
-                        ComObjFlags(obj := ComObjArray(VarType, Value.Length), -1), i := 0, this.ref[] := obj
-                        for v in Value
-                            obj[i++] := v
-                        return
-                    }
                 }
             }
-            this.ref := ComValue(0x4000 | VarType, this.var.Ptr + (VarType = 0xC ? 0 : 8))
-            this.ref[] := Value
         }
-        __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
-        __Item {
-            get => this.Type=0xB?-this.ref[]:this.ref[]
-            set => this.ref[] := this.Type=0xB?(!value?0:-1):value
-        }
-        Ptr => this.var.Ptr
-        Size => this.var.Size
-        Type {
-            get => NumGet(this.var, "ushort")
-            set {
-                if (!this.IsVariant)
-                    throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
-                NumPut("ushort", Value, this.var)
-            }
-        }
-        IsVariant => ComObjType(this.ref) & 0xC
+        this.ref := ComValue(0x4000 | VarType, this.var.Ptr + (VarType = 0xC ? 0 : 8))
+        this.ref[] := Value
     }
+    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
+    __Item {
+        get => this.Type=0xB?-this.ref[]:this.ref[]
+        set => this.ref[] := this.Type=0xB?(!value?0:-1):value
+    }
+    Ptr => this.var.Ptr
+    Size => this.var.Size
+    Type {
+        get => NumGet(this.var, "ushort")
+        set {
+            if (!this.IsVariant)
+                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
+            NumPut("ushort", Value, this.var)
+        }
+    }
+    IsVariant => ComObjType(this.ref) & 0xC
+}
 
-    ; Construction and deconstruction VARIANT struct
-    class ComVar {
-        /**
-         * Construction VARIANT struct, `ptr` property points to the address, `__Item` property returns var's Value
-         * @param vVal Values that need to be wrapped, supports String, Integer, Double, Array, ComValue, ComObjArray
-         * ### example
-         * `var1 := ComVar('string'), MsgBox(var1[])`
-         * 
-         * `var2 := ComVar([1,2,3,4], , true)`
-         * 
-         * `var3 := ComVar(ComValue(0xb, -1))`
-         * @param vType Variant's type, VT_VARIANT(default)
-         * @param convert Convert AHK's array to ComObjArray
-         */
-        __New(vVal := unset, vType := 0xC, convert := false) {
-            static size := 8 + 2 * A_PtrSize
-            this.var := Buffer(size, 0), this.owner := true
-            this.ref := ComValue(0x4000 | vType, this.var.Ptr + (vType = 0xC ? 0 : 8))
-            if IsSet(vVal) {
-                if (Type(vVal) == "ComVar") {
-                    this.var := vVal.var, this.ref := vVal.ref, this.obj := vVal, this.owner := false
-                } else {
-                    if (IsObject(vVal)) {
-                        if (vType != 0xC)
-                            this.ref := ComValue(0x400C, this.var.ptr)
-                        if convert && (vVal is Array) {
-                            switch Type(vVal[1]) {
-                                case "Integer": vType := 3
-                                case "String": vType := 8
-                                case "Float": vType := 5
-                                case "ComValue", "ComObject": vType := ComObjType(vVal[1])
-                                default: vType := 0xC
-                            }
-                            ComObjFlags(obj := ComObjArray(vType, vVal.Length), -1), i := 0, this.ref[] := obj
-                            for v in vVal
-                                obj[i++] := v
-                        } else
-                            this.ref[] := vVal
+; Construction and deconstruction VARIANT struct
+class ComVar {
+    /**
+     * Construction VARIANT struct, `ptr` property points to the address, `__Item` property returns var's Value
+     * @param vVal Values that need to be wrapped, supports String, Integer, Double, Array, ComValue, ComObjArray
+     * ### example
+     * `var1 := ComVar('string'), MsgBox(var1[])`
+     * 
+     * `var2 := ComVar([1,2,3,4], , true)`
+     * 
+     * `var3 := ComVar(ComValue(0xb, -1))`
+     * @param vType Variant's type, VT_VARIANT(default)
+     * @param convert Convert AHK's array to ComObjArray
+     */
+    __New(vVal := unset, vType := 0xC, convert := false) {
+        static size := 8 + 2 * A_PtrSize
+        this.var := Buffer(size, 0), this.owner := true
+        this.ref := ComValue(0x4000 | vType, this.var.Ptr + (vType = 0xC ? 0 : 8))
+        if IsSet(vVal) {
+            if (Type(vVal) == "ComVar") {
+                this.var := vVal.var, this.ref := vVal.ref, this.obj := vVal, this.owner := false
+            } else {
+                if (IsObject(vVal)) {
+                    if (vType != 0xC)
+                        this.ref := ComValue(0x400C, this.var.ptr)
+                    if convert && (vVal is Array) {
+                        switch Type(vVal[1]) {
+                            case "Integer": vType := 3
+                            case "String": vType := 8
+                            case "Float": vType := 5
+                            case "ComValue", "ComObject": vType := ComObjType(vVal[1])
+                            default: vType := 0xC
+                        }
+                        ComObjFlags(obj := ComObjArray(vType, vVal.Length), -1), i := 0, this.ref[] := obj
+                        for v in vVal
+                            obj[i++] := v
                     } else
                         this.ref[] := vVal
-                }
+                } else
+                    this.ref[] := vVal
             }
         }
-        __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
-        __Item {
-            get => this.ref[]
-            set => this.ref[] := value
+    }
+    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
+    __Item {
+        get => this.ref[]
+        set => this.ref[] := value
+    }
+    Ptr => this.var.Ptr
+    Size => this.var.Size
+    Type {
+        get => NumGet(this.var, "ushort")
+        set {
+            if (!this.IsVariant)
+                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
+            NumPut("ushort", Value, this.var)
         }
-        Ptr => this.var.Ptr
-        Size => this.var.Size
-        Type {
-            get => NumGet(this.var, "ushort")
-            set {
-                if (!this.IsVariant)
-                    throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
-                NumPut("ushort", Value, this.var)
+    }
+    IsVariant => ComObjType(this.ref) & 0xC
+}
+; NativeArray is C style array, zero-based index, it has `__Item` and `__Enum` property
+class NativeArray {
+    __New(ptr, count, type := "ptr") {
+        static _ := DllCall("LoadLibrary", "str", "ole32.dll")
+        static bits := { UInt: 4, UInt64: 8, Int: 4, Int64: 8, Short: 2, UShort: 2, Char: 1, UChar: 1, Double: 8, Float: 4, Ptr: A_PtrSize, UPtr: A_PtrSize }
+        this.size := (this.count := count) * (bit := bits.%type%), this.ptr := ptr || DllCall("ole32\CoTaskMemAlloc", "uint", this.size, "ptr")
+        this.DefineProp("__Item", { get: (s, i) => NumGet(s, i * bit, type) })
+        this.DefineProp("__Enum", { call: (s, i) => (i = 1 ?
+                (i := 0, (&v) => i < count ? (v := NumGet(s, i * bit, type), ++i) : false) :
+                    (i := 0, (&k, &v) => (i < count ? (k := i, v := NumGet(s, i * bit, type), ++i) : false))
+            ) })
+    }
+    __Delete() => DllCall("ole32\CoTaskMemFree", "ptr", this)
+}
+
+static RuntimeIdToString(runtimeId) {
+    str := ""
+    for v in runtimeId
+        str .= "." Format("{:X}", v)
+    return LTrim(str, ".")
+}
+
+static RuntimeIdFromString(str) {
+    t := StrSplit(str, ".")
+    arr := ComObjArray(3, t.Length)
+    for v in t
+        arr[A_Index - 1] := Integer("0x" v)
+    return arr
+}
+
+/**
+ * Create a property condition from an AHK object
+ * @param conditionObject Object or Array that contains property conditions. 
+ *     Single property condition consists of an object where the key is the property name, and value is the property value:
+ *         `{Name:"Test"}` => Creates a condition where the Name property must match "Test" exactly
+ *     Everything inside {} is an "and" condition
+ *         `{Type:"Button", Name:"Something"}` => Name must match "Something" AND ControlType must be Button
+ *     Everything inside [] is an "or" condition
+ *         `[{Name:"Test"}, {Name:"Something"}]` Name must match "Test" OR Name must match "Something"
+ *     Object key "not" creates a not condition
+ * 
+ *     matchmode key (short form: mm) can be one of UIA.MatchMode values (except StartsWith and RegEx) and defines the MatchMode 
+ *         2=can contain anywhere in string; 3=exact match
+ *     casesensitive key (short form: cs) defines case sensitivity (default: case-sensitive/True): True=case sensitive; False=case insensitive
+ * 
+ * #### Examples:
+ * `{Name:"Test"}` => Name must match "Test" exactly, case-sensitive
+ * `{Type:"Button", or:[Name:"Something", Name:"Else"]}` => Name must match "Something" OR "Else", AND ControlType must be Button
+ * `{Name:"Test", cs:0, mm:2}` => Name must contain "Test" and is case-insensitive
+ * 
+ * @returns IUIAutomationCondition
+ */
+static CreateCondition(conditionObject) {
+    return UIA.__ConditionBuilder(conditionObject)
+}
+
+static __ConditionBuilder(obj, &sanitizeMatchmode?) {
+    obj := obj.Clone()
+    sanitizeMM := False
+    switch Type(obj) {
+        case "Object":
+            obj.DeleteProp("index"), obj.DeleteProp("i")
+            operator := obj.DeleteProp("operator") || obj.DeleteProp("op") || "and"
+            cs := obj.HasOwnProp("casesensitive") ? obj.casesensitive : obj.HasOwnProp("cs") ? obj.cs : 1
+            obj.DeleteProp("casesensitive"), obj.DeleteProp("cs")
+            mm := obj.DeleteProp("matchmode") || obj.DeleteProp("mm") || 3
+            if IsSet(sanitizeMatchmode) {
+                if (mm = "RegEx" || mm = 1)
+                    sanitizeMatchmode := True, sanitizeMM := True
+            } else {
+                if !((mm = 3) || (mm = 2))
+                    throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions. MatchMode 1 and RegEx are allowed with FindFirst, FindAll, and TreeWalking methods.")
+            }
+            flags := ((mm = 3 ? 0 : 2) | (!cs)) || obj.DeleteProp("flags") || 0
+            count := ObjOwnPropCount(obj), obj := obj.OwnProps()
+        case "Array":
+            operator := "or", flags := 0, count := obj.Length
+        default:
+            throw TypeError("Invalid parameter type", -3)
+    }
+    if count = 0
+        return UIA.TrueCondition
+    arr := ComObjArray(0xd, count), i := 0
+    for k, v in obj {
+        if IsObject(v) {
+            t := UIA.__ConditionBuilder(v, &sanitizeMatchmode?)
+            if k = "not" || operator = "not"
+                t := UIA.CreateNotCondition(t)
+            arr[i++] := t[]
+            continue
+        }
+        k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
+        if k = 30003 && !IsInteger(v)
+            try v := UIA.ControlType.%v%
+        if sanitizeMM && RegexMatch(UIA.Property[k], "i)Name|AutomationId|Value|ClassName|FrameworkId") {
+            t := mm = 1 ? UIA.CreatePropertyCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
+            arr[i++] := t[]
+        } else if (k >= 30000) {
+            t := flags ? UIA.CreatePropertyCondition(k, v, flags) : UIA.CreatePropertyCondition(k, v)
+            arr[i++] := t[]
+        }
+    }
+    if count = 1
+        return t
+    switch operator, false {
+        case "and":
+            return UIA.CreateAndConditionFromArray(arr)
+        case "or":
+            return UIA.CreateOrConditionFromArray(arr)
+        default:
+            return UIA.CreateFalseCondition()
+    }
+}
+
+/**
+ * This can be used when a Chromium apps content isn't accessible by normal methods 
+ * (ElementFromChromium, ElementFromHandle, GetRootElement etc). 
+ * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
+ * @param fromFocused if True then uses the focused element as a reference point, 
+ *     if False False then uses ElementFromPoint
+ * @returns {UIA.IUIAutomationElement}
+ */
+static GetChromiumContentElement(winTitle:="", &fromFocused:=True) {
+    WinActivate winTitle
+    WinWaitActive winTitle,,1
+    WinGetPos &X, &Y, &W, &H, winTitle
+    fromFocused := fromFocused ? UIA.GetFocusedElement() : UIA.ElementFromPoint(x+w//2, y+h//2)
+    chromiumTW := UIA.CreateTreeWalker("ControlType=Document") ; Create a TreeWalker to find the Document element (the content)
+    try focusedEl := chromiumTW.NormalizeElement(fromFocused) ; Get the first parent that is a Window element
+    return focusedEl
+}
+/**
+ * If the element from ElementFromHandle doesn't contain the content of the window, and the window in 
+ * question is a Chromium app (Window Spy shows "ahk_class Chrome_WidgetWin_1"), then this can be used
+ * to get the element for the content (using Chrome_RenderWidgetHostHWND1 control).
+ * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
+ * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
+ * and if it is then try to activate accessibility. Default: True
+ * @param timeOut How long to wait for confirmation that accessibility is enabled in the app after
+ * trying to enable accessibility. Default: 500ms
+ * @param cacheRequest Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
+static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, timeOut:=500, cacheRequest?) {
+    try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
+    if !IsSet(cHwnd) || !cHwnd
+        return
+    cEl := UIA.ElementFromHandle(cHwnd,False,cacheRequest?)
+    if activateChromiumAccessibility {
+        SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
+        if cEl {
+            _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
+            if (cEl.ControlType == 50030) {
+                waitTime := A_TickCount + timeOut
+                while (!cEl.Value && (A_TickCount < waitTime))
+                    Sleep 20
             }
         }
-        IsVariant => ComObjType(this.ref) & 0xC
     }
-    ; NativeArray is C style array, zero-based index, it has `__Item` and `__Enum` property
-    class NativeArray {
-        __New(ptr, count, type := "ptr") {
-            static _ := DllCall("LoadLibrary", "str", "ole32.dll")
-            static bits := { UInt: 4, UInt64: 8, Int: 4, Int64: 8, Short: 2, UShort: 2, Char: 1, UChar: 1, Double: 8, Float: 4, Ptr: A_PtrSize, UPtr: A_PtrSize }
-            this.size := (this.count := count) * (bit := bits.%type%), this.ptr := ptr || DllCall("ole32\CoTaskMemAlloc", "uint", this.size, "ptr")
-            this.DefineProp("__Item", { get: (s, i) => NumGet(s, i * bit, type) })
-            this.DefineProp("__Enum", { call: (s, i) => (i = 1 ?
-                    (i := 0, (&v) => i < count ? (v := NumGet(s, i * bit, type), ++i) : false) :
-                        (i := 0, (&k, &v) => (i < count ? (k := i, v := NumGet(s, i * bit, type), ++i) : false))
-                ) })
-        }
-        __Delete() => DllCall("ole32\CoTaskMemFree", "ptr", this)
+    return cEl
+}
+/**
+ * In some setups Chromium-based renderers don't react to UIA calls by enabling accessibility, 
+ * so we need to send the WM_GETOBJECT message to the renderer control to enable accessibility. 
+ * ActivateChromiumAccessibility does that (only once per window) and then returns the content element.
+ * Explanation why this works: https://www.chromium.org/developers/design-documents/accessibility/#TOC-How-Chrome-detects-the-presence-of-Assistive-Technology 
+ * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
+ * @param timeOut How long to wait for confirmation that accessibility is enabled in the app after
+ * trying to enable accessibility. Default: 500ms
+ * @param cacheRequest Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ * @credit malcev, rommmcek
+ */
+static ActivateChromiumAccessibility(winTitle:="", timeOut:=500, cacheRequest?) {
+    static activatedHwnds := Map(), WM_GETOBJECT := 0x003D
+    hwnd := IsInteger(winTitle) ? winTitle : WinExist(winTitle)
+    if activatedHwnds.Has(hwnd)
+        return 1
+    activatedHwnds[hWnd] := 1, cHwnd := 0
+    return UIA.ElementFromChromium(hwnd,,timeOut, cacheRequest?)
+}
+
+; ---------- IUIAutomation ----------
+
+; Compares two UI Automation elements to determine whether they represent the same underlying UI element.
+static CompareElements(el1, el2) => (ComCall(3, this, "ptr", el1, "ptr", el2, "int*", &areSame := 0), areSame)
+
+; Compares two integer arrays containing run-time identifiers (IDs) to determine whether their content is the same and they belong to the same UI element.
+static CompareRuntimeIds(runtimeId1, runtimeId2) => (ComCall(4, this, "ptr", runtimeId1, "ptr", runtimeId2, "int*", &areSame := 0), areSame)
+
+/**
+ * Retrieves the UI Automation element that represents the desktop.
+ * Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
+static GetRootElement(cacheRequest?) => (IsSet(cacheRequest) ? UIA.GetRootElementBuildCache(cacheRequest) : (ComCall(5, this, "ptr*", &root := 0), UIA.IUIAutomationElement(root)))
+
+/**
+ * Retrieves a UI Automation element for the specified window.
+ * @param hwnd WinTitle, window handle, or control handle
+ * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
+ * and if it is then try to activate accessibility. Default: True.
+ * @param cacheRequest Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
+static ElementFromHandle(hwnd:="", activateChromiumAccessibility:=True, cacheRequest?) {
+    if !IsInteger(hwnd)
+        hwnd := WinExist(hwnd)
+    if (activateChromiumAccessibility && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
+        return retEl
+    return IsSet(cacheRequest) ? UIA.ElementFromHandleBuildCache(cacheRequest, hwnd) : (ComCall(6, this, "ptr", hwnd, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
+}
+
+/**
+ * Retrieves the UI Automation element at the specified point on the desktop.
+ * @param x x coordinate for the screen point. 
+ * Omit both x and y to get the element from the current mouse position.
+ * @param y y coordinate for the screen point.
+ * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
+ * and if it is then try to activate accessibility. The ByRef variable is set to the found Chromium element.
+ * @param cacheRequest Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
+static ElementFromPoint(x?, y?, &activateChromiumAccessibility:=True, cacheRequest?) {
+    if !(IsSet(x) && IsSet(y))
+        DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
+    else
+        pt64 := y << 32 | x
+    if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
+        activateChromiumAccessibility := UIA.ActivateChromiumAccessibility(hwnd)
     }
-        
-    ; The base class for IUIAutomation objects that return releasable pointers
-    class IUIAutomationBase {
-        __New(ptr) {
-            if !(this.ptr := ptr)
-                throw ValueError('Invalid IUnknown interface pointer', -2, this.__Class)
-        }
-        __Delete() => this.Release()
-        __Item => (ObjAddRef(this.ptr), ComValue(0xd, this.ptr))
-        AddRef() => ObjAddRef(this.ptr)
-        Release() => this.ptr ? ObjRelease(this.ptr) : 0
+    if IsSet(cacheRequest)
+        return UIA.ElementFromPointBuildCache(cacheRequest, pt64)
+    return (ComCall(7, this, "int64", pt64, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
+}
 
-        __Get(Name, Params) {
-            if this.base.HasOwnProp(NewName := StrReplace(Name, "Current"))
-                return this.%NewName%
-            else 
-                throw Error("Property " Name " not found in " this.__Class " Class.",-1,Name)
-        }
-    
-        __Call(Name, Params) {
-            if this.base.HasOwnProp(NewName := StrReplace(Name, "Current"))
-                return this.%NewName%(Params*)
-            else 
-                throw Error("Method " Name " not found in " this.__Class " Class.",-1,Name)
-        }
+/**
+ * Retrieves the UI Automation element that has the input focus.
+ * Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
+static GetFocusedElement(cacheRequest?) => (IsSet(cacheRequest) ? UIA.GetFocusedElementBuildCache(cacheRequest) : (ComCall(8, this, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
+
+; Retrieves the UI Automation element that has the input focus, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
+; This is a raw wrapper, instead use GetRootElement and specify cacheRequest.
+static GetRootElementBuildCache(cacheRequest) => (ComCall(9, this, "ptr", cacheRequest, "ptr*", &root := 0), UIA.IUIAutomationElement(root))
+
+; Retrieves a UI Automation element for the specified window, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
+; This is a raw wrapper, instead use ElementFromHandle and specify cacheRequest.
+static ElementFromHandleBuildCache(cacheRequest, hwnd) => (ComCall(10, this, "ptr", hwnd, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
+
+; Retrieves the UI Automation element at the specified point on the desktop, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
+; This is a raw wrapper, instead use ElementFromPoint and specify cacheRequest.
+static ElementFromPointBuildCache(cacheRequest, pt) => (ComCall(11, this, "int64", pt, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
+
+; Retrieves the UI Automation element that has the input focus, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
+; This is a raw wrapper, instead use GetFocusedElement and specify cacheRequest.
+static GetFocusedElementBuildCache(cacheRequest) => (ComCall(12, this, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
+
+; Retrieves a tree walker object that can be used to traverse the Microsoft UI Automation tree.
+static CreateTreeWalker(pCondition) => (ComCall(13, this, "ptr", InStr(Type(pCondition), "Condition") ? pCondition : UIA.CreateCondition(pCondition), "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
+
+; Retrieves an IUIAutomationTreeWalker interface used to discover control elements.
+static ControlViewWalker => (ComCall(14, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
+
+; Retrieves an IUIAutomationTreeWalker interface used to discover content elements.
+static ContentViewWalker => (ComCall(15, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
+
+; Retrieves a tree walker object used to traverse an unfiltered view of the UI Automation tree.
+static RawViewWalker => (ComCall(16, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
+
+; Retrieves a predefined IUIAutomationCondition interface that selects all UI elements in an unfiltered view.
+static RawViewCondition => (ComCall(17, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
+
+; Retrieves a predefined IUIAutomationCondition interface that selects control elements.
+static ControlViewCondition => (ComCall(18, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
+
+; Retrieves a predefined IUIAutomationCondition interface that selects content elements.
+static ContentViewCondition => (ComCall(19, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
+
+; Creates a cache request.
+; After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
+static CreateCacheRequest() => (ComCall(20, this, "ptr*", &cacheRequest := 0), UIA.IUIAutomationCacheRequest(cacheRequest))
+
+; Retrieves a predefined condition that selects all elements.
+static TrueCondition => UIA.CreateTrueCondition()
+static CreateTrueCondition() => (ComCall(21, this, "ptr*", &newCondition := 0), UIA.IUIAutomationBoolCondition(newCondition))
+
+; Creates a condition that is always false.
+; This method exists only for symmetry with IUIAutomation.CreateTrueCondition(). A false condition will never enable a match with UI Automation elements, and it cannot usefully be combined with any other condition.
+static CreateFalseCondition() => (ComCall(22, this, "ptr*", &newCondition := 0), UIA.IUIAutomationBoolCondition(newCondition))
+
+; Creates a condition that selects elements that have a property with the specified value.
+static CreatePropertyCondition(propertyId, value?, flags?) {
+    if !IsSet(value) && IsObject(propertyId)
+        return UIA.CreateCondition(propertyId)
+    if !IsInteger(propertyId)
+        propertyId := UIA.Property.%propertyId%
+    if propertyId = 30003 && !IsNumber(value)
+        try value := UIA.ControlType.%value%
+    if IsSet(flags) && flags > 0
+        return UIA.CreatePropertyConditionEx(propertyId, value, flags)
+    if A_PtrSize = 4
+        v := UIA.ComVar(value, , true), ComCall(23, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "ptr*", &newCondition := 0)
+    else
+        ComCall(23, this, "int", propertyId, "ptr", UIA.ComVar(value, , true), "ptr*", &newCondition := 0)
+    return UIA.IUIAutomationPropertyCondition(newCondition)
+}
+
+; Creates a condition that selects elements that have a property with the specified value, using optional flags.
+; This is a raw wrapper, instead use CreatePropertyCondition and specify flags.
+static CreatePropertyConditionEx(propertyId, value, flags := 0) {
+    if A_PtrSize = 4
+        v := UIA.ComVar(value, , true), ComCall(24, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "int", flags, "ptr*", &newCondition := 0)
+    else
+        ComCall(24, this, "int", propertyId, "ptr", UIA.ComVar(value, , true), "int", flags, "ptr*", &newCondition := 0)
+    return UIA.IUIAutomationPropertyCondition(newCondition)
+}
+
+; The Create**Condition** method calls AddRef on each pointers. This means you can call Release on those pointers after the call to Create**Condition** returns without invalidating the pointer returned from Create**Condition**. 
+; When you call Release on the pointer returned from Create**Condition**, UI Automation calls Release on those pointers.
+
+; Creates a condition that selects elements that match both of two conditions.
+static CreateAndCondition(condition1, condition2) => (ComCall(25, this, "ptr", condition1, "ptr", condition2, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
+
+; Creates a condition that selects elements based on multiple conditions, all of which must be true.
+static CreateAndConditionFromArray(conditions) => (ComCall(26, this, "ptr", conditions, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
+
+; Creates a condition that selects elements based on multiple conditions, all of which must be true.
+static CreateAndConditionFromNativeArray(conditions, conditionCount) => (ComCall(27, this, "ptr", conditions, "int", conditionCount, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
+
+; Creates a combination of two conditions where a match exists if either of the conditions is true.
+static CreateOrCondition(condition1, condition2) => (ComCall(28, this, "ptr", condition1, "ptr", condition2, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
+
+; Creates a combination of two or more conditions where a match exists if any of the conditions is true.
+static CreateOrConditionFromArray(conditions) => (ComCall(29, this, "ptr", conditions, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
+
+; Creates a combination of two or more conditions where a match exists if any one of the conditions is true.
+static CreateOrConditionFromNativeArray(conditions, conditionCount) => (ComCall(30, this, "ptr", conditions, "ptr", conditionCount, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
+
+; Creates a condition that is the negative of a specified condition.
+static CreateNotCondition(condition) => (ComCall(31, this, "ptr", condition, "ptr*", &newCondition := 0), UIA.IUIAutomationNotCondition(newCondition))
+
+; Note,  Before implementing an event handler, you should be familiar with the threading issues described in Understanding Threading Issues. http,//msdn.microsoft.com/en-us/library/ee671692(v=vs.85).aspx
+; A UI Automation client should not use multiple threads to add or remove event handlers. Unexpected behavior can result if one event handler is being added or removed while another is being added or removed in the same client process.
+; It is possible for an event to be delivered to an event handler after the handler has been unsubscribed, if the event is received simultaneously with the request to unsubscribe the event. The best practice is to follow the Component Object Model (COM) standard and avoid destroying the event handler object until its reference count has reached zero. Destroying an event handler immediately after unsubscribing for events may result in an access violation if an event is delivered late.
+
+/**
+ * Registers a method that handles Microsoft UI Automation events.
+ * @param element UIA element
+ * @param eventId One of UIA.Event values
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddAutomationEventHandler(element, eventId, handler, scope:=0x4, cacheRequest?) => ComCall(32, this, "int", eventId, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler)
+
+/**
+ * Removes the specified UI Automation event handler.
+ * @param element UIA element
+ * @param eventId One of UIA.Event values
+ * @param handler Handler object from UIA.CreateEventHandler()
+ */
+static RemoveAutomationEventHandler(element, eventId, handler) => ComCall(33, this, "int", eventId, "ptr", element, "ptr", handler)
+
+; Registers a method that handles property-changed events.
+; The UI item specified by element might not support the properties specified by the propertyArray parameter.
+; This method serves the same purpose as UIA.AddPropertyChangedEventHandler, but takes a native array of property identifiers instead of a SAFEARRAY.
+; Not needed in this library, use UIA.AddPropertyChangedEventHandler instead.
+static AddPropertyChangedEventHandlerNativeArray(element, propertyArray, propertyCount, handler, scope:=0x4, cacheRequest?) => ComCall(34, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler, "ptr", propertyArray, "int", propertyCount)
+
+/**
+ * Registers a method that handles property-changed events.
+ * The UI item specified by element might not support the properties specified by the propertyArray parameter.
+ * @param element UIA element
+ * @param propertyArray An array of UIA.Property values
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddPropertyChangedEventHandler(element, propertyArray, handler, scope:=0x4, cacheRequest?) {
+    if !IsObject(propertyArray)
+        propertyArray := [propertyArray] 
+    SafeArray:=ComObjArray(0x3,propertyArray.Length)
+    for i, propertyId in propertyArray
+        SafeArray[i-1]:=propertyId
+    ComCall(35, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler, "ptr", SafeArray)
+}
+
+; Removes a property-changed event handler.
+static RemovePropertyChangedEventHandler(element, handler) => ComCall(36, this, "ptr", element, "ptr", handler)
+
+/**
+ * Registers a method that handles structure-changed events.
+ * @param element UIA element
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddStructureChangedEventHandler(element, handler, scope:=0x4, cacheRequest?) => ComCall(37, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler)
+
+; Removes a structure-changed event handler.
+static RemoveStructureChangedEventHandler(element, handler) => ComCall(38, this, "ptr", element, "ptr", handler)
+
+/**
+ * Registers a method that handles focus-changed events.
+ * Focus-changed events are system-wide; you cannot set a narrower scope.
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param cacheRequest Optional: cache request object
+ */
+static AddFocusChangedEventHandler(handler, cacheRequest?) => ComCall(39, this, "ptr", cacheRequest ?? 0, "ptr", handler)
+
+; Removes a focus-changed event handler.
+static RemoveFocusChangedEventHandler(handler) => ComCall(40, this, "ptr", handler)
+
+; Removes all registered Microsoft UI Automation event handlers.
+static RemoveAllEventHandlers() => ComCall(41, this)
+
+; Converts an array of integers to a SAFEARRAY.
+static IntNativeArrayToSafeArray(array, arrayCount) => (ComCall(42, this, "ptr", array, "int", arrayCount, "ptr*", &safeArray := 0), ComValue(0x2003, safeArray))
+
+; Converts a SAFEARRAY of integers to an array.
+static IntSafeArrayToNativeArray(intArray) => (ComCall(43, this, "ptr", intArray, "ptr*", &array := 0, "int*", &arrayCount := 0), UIA.NativeArray(array, arrayCount, "int"))
+
+; Creates a VARIANT that contains the coordinates of a rectangle.
+; The returned VARIANT has a data type of VT_ARRAY | VT_R8.
+static RectToVariant(rc) => (ComCall(44, this, "ptr", rc, "ptr", var := UIA.ComVar()), var)
+
+; Converts a VARIANT containing rectangle coordinates to a RECT.
+static VariantToRect(var) {
+    if A_PtrSize = 4
+        ComCall(45, this, "int64", NumGet(var, "int64"), "int64", NumGet(var, 8, "int64"), "ptr", rc := UIA.NativeArray(0, 4, "Int"))
+    else
+        ComCall(45, this, "ptr", var, "ptr", rc := UIA.NativeArray(0, 4, "Int"))
+    return rc
+}
+
+; Converts a SAFEARRAY containing rectangle coordinates to an array of type RECT.
+static SafeArrayToRectNativeArray(rects) => (ComCall(46, this, "ptr", rects, "ptr*", &rectArray := 0, "int*", &rectArrayCount := 0), UIA.NativeArray(rectArray, rectArrayCount, "int"))
+
+; Creates a instance of a proxy factory object.
+; Use the IUIAutomationProxyFactoryMapping interface to enter the proxy factory into the table of available proxies.
+static CreateProxyFactoryEntry(factory) => (ComCall(47, this, "ptr", factory, "ptr*", &factoryEntry := 0), UIA.IUIAutomationProxyFactoryEntry(factoryEntry))
+
+; Retrieves an object that represents the mapping of Window classnames and associated data to individual proxy factories. This property is read-only.
+static ProxyFactoryMapping() => (ComCall(48, this, "ptr*", &factoryMapping := 0), UIA.IUIAutomationProxyFactoryMapping(factoryMapping))
+
+; The programmatic name is intended for debugging and diagnostic purposes only. The string is not localized.
+; This property should not be used in string comparisons. To determine whether two properties are the same, compare the property identifiers directly.
+
+; Retrieves the registered programmatic name of a property.
+static GetPropertyProgrammaticName(property) => (ComCall(49, this, "int", property, "ptr*", &name := 0), UIA.BSTR(name))
+
+; Retrieves the registered programmatic name of a control pattern.
+static GetPatternProgrammaticName(pattern) => (ComCall(50, this, "int", pattern, "ptr*", &name := 0), UIA.BSTR(name))
+
+; This method is intended only for use by Microsoft UI Automation tools that need to scan for properties. It is not intended to be used by UI Automation clients.
+; There is no guarantee that the element will support any particular control pattern when asked for it later.
+
+; Retrieves the control patterns that might be supported on a UI Automation element.
+static PollForPotentialSupportedPatterns(pElement, &patternIds, &patternNames) {
+    ComCall(51, this, "ptr", pElement, "ptr*", &patternIds := 0, "ptr*", &patternNames := 0)
+    patternIds := ComValue(0x2003, patternIds), patternNames := ComValue(0x2008, patternNames)
+}
+
+; Retrieves the properties that might be supported on a UI Automation element.
+static PollForPotentialSupportedProperties(pElement, &propertyIds, &propertyNames) {
+    ComCall(52, this, "ptr", pElement, "ptr*", &propertyIds := 0, "ptr*", &propertyNames := 0)
+    propertyIds := ComValue(0x2003, propertyIds), propertyNames := ComValue(0x2008, propertyNames)
+}
+
+; Checks a provided VARIANT to see if it contains the Not Supported identifier.
+; After retrieving a property for a UI Automation element, call this method to determine whether the element supports the retrieved property. CheckNotSupported is typically called after calling a property retrieving method such as GetPropertyValue.
+static CheckNotSupported(value) {
+    if A_PtrSize = 4
+        value := UIA.ComVar(value, , true), ComCall(53, this, "int64", NumGet(value, "int64"), "int64", NumGet(value, 8, "int64"), "int*", &isNotSupported := 0)
+    else
+        ComCall(53, this, "ptr", UIA.ComVar(value, , true), "int*", &isNotSupported := 0)
+    return isNotSupported
+}
+
+; Retrieves a static token object representing a property or text attribute that is not supported. This property is read-only.
+; This object can be used for comparison with the results from UIA.IUIAutomationElement,,GetPropertyValue or IUIAutomationTextRange,,GetAttributeValue.
+static ReservedNotSupportedValue => (ComCall(54, this, "ptr*", &notSupportedValue := 0), ComValue(0xd, notSupportedValue))
+
+; Retrieves a static token object representing a text attribute that is a mixed attribute. This property is read-only.
+; The object retrieved by IUIAutomation,,ReservedMixedAttributeValue can be used for comparison with the results from IUIAutomationTextRange,,GetAttributeValue to determine if a text range contains more than one value for a particular text attribute.
+static ReservedMixedAttributeValue => (ComCall(55, this, "ptr*", &mixedAttributeValue := 0), ComValue(0xd, mixedAttributeValue))
+
+; This method enables UI Automation clients to get UIA.IUIAutomationElement interfaces for accessible objects implemented by a Microsoft Active Accessiblity server.
+; This method may fail if the server implements UI Automation provider interfaces alongside Microsoft Active Accessibility support.
+; The method returns E_INVALIDARG if the underlying implementation of the Microsoft UI Automation element is not a native Microsoft Active Accessibility server; that is, if a client attempts to retrieve the IAccessible interface for an element originally supported by a proxy object from Oleacc.dll, or by the UIA-to-MSAA Bridge.
+
+; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server.
+static ElementFromIAccessible(accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(56, this, "ptr", accessible.oAcc, "int", accessible.childId, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(56, this, "ptr", accessible, "int", childId, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
+
+; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
+static ElementFromIAccessibleBuildCache(cacheRequest, accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(57, this, "ptr", accessible.oAcc, "int", accessible.childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(57, this, "ptr", accessible, "int", childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
+
+; ---------- IUIAutomation2 ----------
+
+; Specifies whether calls to UI Automation control pattern methods automatically set focus to the target element. Default is True. 
+static AutoSetFocus {
+    get => (ComCall(58, this,  "int*", &out:=0), out)
+    set => ComCall(59, this,  "int", Value)
+}
+; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for an automation element. Default is 20000ms (20 seconds), minimum seems to be 50ms.
+static ConnectionTimeout {
+    get => (ComCall(60, this,  "int*", &out:=0), out)
+    set => ComCall(61, this,  "int", Value) ; Minimum seems to be 50 (ms?)
+}
+; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for information about an automation element. Default is 2000ms (2 seconds), minimum seems to be 50ms.
+static TransactionTimeout {
+    get => (ComCall(62, this,  "int*", &out:=0), out)
+    set => ComCall(63, this,  "int", Value)
+}
+
+; ---------- IUIAutomation3 ----------
+
+/**
+ * Registers a method that handles programmatic text-edit events.
+ * @param element UIA element
+ * @param textEditChangeType The specific change type to listen for, one of UIA.TextEditChangeType values.
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddTextEditTextChangedEventHandler(element, textEditChangeType, handler, scope:=0x4, cacheRequest:=0) => (ComCall(64, this,  "ptr", element, "int", scope, "int", textEditChangeType, "ptr", cacheRequest, "ptr", handler))
+static RemoveTextEditTextChangedEventHandler(element, handler) => ComCall(65, this,  "ptr", element, "ptr", handler)
+
+; ---------- IUIAutomation4 ----------
+
+/**
+ * Registers a method that handles change events.
+ * @param element UIA element
+ * @param changeTypes An array of UIA.Changes values that indicate the change types the event represents.
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddChangesEventHandler(element, changeTypes, handler, scope:=0x4, cacheRequest:=0) {
+    if !IsObject(changeTypes)
+        changeTypes := [changeTypes]
+    nativeArray := UIA.NativeArray(0, changeTypes.Length, "int")
+    for k, v in changeTypes
+        NumPut("int", v, nativeArray, (k-1)*4)
+    ComCall(66, this,  "ptr", element, "int", scope, "ptr", nativeArray, "int", changeTypes.Length, "ptr", cacheRequest, "ptr", handler)
+}
+static RemoveChangesEventHandler(element, handler) => (ComCall(67, this,  "ptr", element, "ptr", handler))
+
+; ---------- IUIAutomation5 ----------
+
+/**
+ * Registers a method that handles notification events.
+ * @param element UIA element
+ * @param handler Handler object from UIA.CreateEventHandler()
+ * @param scope Optional UIA.TreeScope value: Element, Children, Descendants, Subtree (=Element+Descendants). Default is Descendants.
+ * @param cacheRequest Optional: cache request object
+ */
+static AddNotificationEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(68, this,  "ptr", element, "uint", scope, "ptr", cacheRequest, "ptr", handler))
+static RemoveNotificationEventHandler(element, handler) => (ComCall(69, this,  "ptr", element, "ptr", handler))
+
+; ---------- IUIAutomation6 ----------
+
+; Indicates whether an accessible technology client adjusts provider request timeouts when the provider is non-responsive.
+ConnectionRecoveryBehavior {
+    get => (ComCall(73, this,  "int*", &out), out)
+    set => ComCall(74, this,  "int", value) 
+}
+; Gets or sets whether an accessible technology client receives all events, or a subset where duplicate events are detected and filtered.
+CoalesceEvents {
+    get => (ComCall(75, this,  "int*", &out:=0), out)
+    set => ComCall(76, this,  "int", value)
+}
+
+; Registers one or more event listeners in a single method call.
+static CreateEventHandlerGroup() => (ComCall(70, this,  "ptr*", &out:=0), UIA.IUIAutomationEventHandlerGroup(out))
+; Registers a collection of event handler methods specified with the IUIAutomation6 CreateEventHandlerGroup.
+static AddEventHandlerGroup(element, handlerGroup) => (ComCall(71, this,  "ptr", element, "ptr", handlerGroup))
+static RemoveEventHandlerGroup(element, handlerGroup) => (ComCall(72, this,  "ptr", element, "ptr", handlerGroup))
+; Registers a method that handles when the active text position changes.
+static AddActiveTextPositionChangedEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(77, this,  "ptr", element, "int", scope, "ptr", cacheRequest, "ptr", handler))
+static RemoveActiveTextPositionChangedEventHandler(element, handler) => (ComCall(78, this,  "ptr", element, "ptr", handler))
+
+; ---------- IUIAutomation7 ----------
+; Has no properties/methods
+
+
+; The base class for IUIAutomation objects that return releasable pointers
+class IUIAutomationBase {
+    __New(ptr) {
+        if !(this.ptr := ptr)
+            throw ValueError('Invalid IUnknown interface pointer', -2, this.__Class)
+    }
+    __Delete() => this.Release()
+    __Item => (ObjAddRef(this.ptr), ComValue(0xd, this.ptr))
+    AddRef() => ObjAddRef(this.ptr)
+    Release() => this.ptr ? ObjRelease(this.ptr) : 0
+
+    __Get(Name, Params) {
+        if this.base.HasOwnProp(NewName := StrReplace(Name, "Current"))
+            return this.%NewName%
+        throw Error("Property " Name " not found in " this.__Class " Class.",-2,Name)
     }
 
-    static RuntimeIdToString(runtimeId) {
-        str := ""
-        for v in runtimeId
-            str .= "." Format("{:X}", v)
-        return LTrim(str, ".")
+    __Call(Name, Params) {
+        if this.base.HasOwnProp(NewName := StrReplace(Name, "Current"))
+            return this.%NewName%(Params*)
+        throw Error("Method " Name " not found in " this.__Class " Class.",-2,Name)
     }
-
-    static RuntimeIdFromString(str) {
-        t := StrSplit(str, ".")
-        arr := ComObjArray(3, t.Length)
-        for v in t
-            arr[A_Index - 1] := Integer("0x" v)
-        return arr
-    }
-
-    /**
-     * Create Property Condition from AHK Object
-     * @param conditionObject Object or Map or Array contains multiple Property Conditions. 
-     *     Everything inside {} is an "and" condition
-     *     Everything inside [] is an "or" condition
-     *     Object key "not" creates a not condition
-     * 
-     *     matchmode key defines the MatchMode (default: 3): 1=must start with; 2=can contain anywhere in string; 3=exact match; RegEx
-     *     casesensitive key defines case sensitivity (default: case-sensitive/True): True=case sensitive; False=case insensitive
-     * 
-     * #### Examples:
-     * `{Name:"Something"}` => Name must match "Something" (case-sensitive)
-     * `{Type:"Button", Name:"Something"}` => Name must match "Something" AND ControlType must be Button
-     * `{Type:"Button", or:[Name:"Something", Name:"Else"]}` => Name must match "Something" OR "Else", AND ControlType must be Button
-     * 
-     * @returns IUIAutomationCondition
-     */
-    static CreateCondition(conditionObject) {
-        return UIA.__ConditionBuilder(conditionObject)
-    }
-
-    static __ConditionBuilder(obj, &sanitizeMatchmode?) {
-        obj := obj.Clone()
-        sanitizeMM := False
-        switch Type(obj) {
-            case "Object":
-                obj.DeleteProp("index"), obj.DeleteProp("i")
-                operator := obj.DeleteProp("operator") || "and"
-                cs := obj.DeleteProp("casesensitive") || obj.DeleteProp("cs") || 1
-                mm := obj.DeleteProp("matchmode") || obj.DeleteProp("mm") || 3
-                if IsSet(sanitizeMatchmode) {
-                    if (mm = "RegEx" || mm = 1)
-                        sanitizeMatchmode := True, sanitizeMM := True
-                } else {
-                    if !((mm == 3) || (mm == 2))
-                        throw TypeError("MatchMode can only be 3 or 2 when creating UIA conditions. MatchMode 1 and RegEx are allowed with FindFirst, FindAll, and TreeWalking methods.")
-                }
-                flags := ((mm = 3 ? 0 : 2) | (!cs)) || obj.DeleteProp("flags") || 0
-                count := ObjOwnPropCount(obj), obj := obj.OwnProps()
-            case "Array":
-                operator := "or", flags := 0, count := obj.Length
-            default:
-                throw TypeError("Invalid parameter type", -3)
-        }
-        if count = 0
-            return UIA.TrueCondition
-        arr := ComObjArray(0xd, count), i := 0
-        for k, v in obj {
-            if IsObject(v) {
-                t := UIA.__ConditionBuilder(v, &sanitizeMatchmode?)
-                if k = "not" || operator = "not"
-                    t := UIA.CreateNotCondition(t)
-                arr[i++] := t[]
-                continue
-            }
-            k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
-            if k = 30003 && !IsInteger(v)
-                try v := UIA.ControlType.%v%
-            if sanitizeMM && RegexMatch(UIA.Property[k], "i)Name|AutomationId|Value|ClassName|FrameworkId") {
-                t := mm = 1 ? UIA.CreatePropertyConditionEx(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
-                arr[i++] := t[]
-            } else if (k >= 30000) {
-                t := flags ? UIA.CreatePropertyConditionEx(k, v, flags) : UIA.CreatePropertyCondition(k, v)
-                arr[i++] := t[]
-            }
-        }
-        if count = 1
-            return t
-        switch operator, false {
-            case "and":
-                return UIA.CreateAndConditionFromArray(arr)
-            case "or":
-                return UIA.CreateOrConditionFromArray(arr)
-            default:
-                return UIA.CreateFalseCondition()
-        }
-    }
-
-	; This can be used when a Chromium apps content isn't accessible by normal methods (ElementFromHandle, GetRootElement etc). fromFocused=True uses the focused element as a reference point, fromFocused=False uses ElementFromPoint
-	static GetChromiumContentElement(winTitle:="", &fromFocused:=True) {
-		WinActivate winTitle
-		WinWaitActive winTitle,,1
-		WinGetPos &X, &Y, &W, &H, winTitle
-        fromFocused := fromFocused ? UIA.GetFocusedElement() : UIA.ElementFromPoint(x+w//2, y+h//2)
-		chromiumTW := UIA.CreateTreeWalker("ControlType=Document") ; Create a TreeWalker to find the Document element (the content)
-		try focusedEl := chromiumTW.NormalizeElement(fromFocused) ; Get the first parent that is a Window element
-		return focusedEl
-	}
-	; Tries to get the Chromium content from Chrome_RenderWidgetHostHWND1 control
-	static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, timeOut:=500, cacheRequest?) {
-		try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
-		if !IsSet(cHwnd) || !cHwnd
-			return
-		cEl := UIA.ElementFromHandle(cHwnd,False,cacheRequest?)
-		if activateChromiumAccessibility {
-			SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
-			if cEl {
-				_ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
-				if (cEl.ControlType == 50030) {
-					waitTime := A_TickCount + timeOut
-					while (!cEl.Value && (A_TickCount < waitTime))
-						Sleep 20
-				}
-			}
-		}
-		return cEl
-	}
-	; In some setups Chromium-based renderers don't react to UIA calls by enabling accessibility, so we need to send the WM_GETOBJECT message to the renderer control to enable accessibility. Thanks to users malcev and rommmcek for this tip. Explanation why this works: https://www.chromium.org/developers/design-documents/accessibility/#TOC-How-Chrome-detects-the-presence-of-Assistive-Technology 
-	static ActivateChromiumAccessibility(winTitle:="", cacheRequest?) {
-		static activatedHwnds := Map(), WM_GETOBJECT := 0x003D
-        hwnd := IsInteger(winTitle) ? winTitle : WinExist(winTitle)
-        if activatedHwnds.Has(hwnd)
-            return 1
-        activatedHwnds[hWnd] := 1, cHwnd := 0
-        return UIA.ElementFromChromium(hwnd)
-	}
-
-    ; ---------- IUIAutomation ----------
-
-    ; Compares two UI Automation elements to determine whether they represent the same underlying UI element.
-    static CompareElements(el1, el2) => (ComCall(3, this, "ptr", el1, "ptr", el2, "int*", &areSame := 0), areSame)
-
-    ; Compares two integer arrays containing run-time identifiers (IDs) to determine whether their content is the same and they belong to the same UI element.
-    static CompareRuntimeIds(runtimeId1, runtimeId2) => (ComCall(4, this, "ptr", runtimeId1, "ptr", runtimeId2, "int*", &areSame := 0), areSame)
-
-    ; Retrieves the UI Automation element that represents the desktop.
-    static GetRootElement() => (ComCall(5, this, "ptr*", &root := 0), UIA.IUIAutomationElement(root))
-
-    ; Retrieves a UI Automation element for the specified window.
-    static ElementFromHandle(hwnd:="", activateChromiumAccessibility:=True, cacheRequest?) {
-		if !IsInteger(hwnd)
-			hwnd := WinExist(hwnd)
-		if (activateChromiumAccessibility && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
-			return retEl
-        return IsSet(cacheRequest) ? UIA.ElementFromHandleBuildCache(hwnd, cacheRequest) : (ComCall(6, this, "ptr", hwnd, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-    }
-
-    ; Retrieves the UI Automation element at the specified point on the desktop.
-    static ElementFromPoint(x?, y?, &activateChromiumAccessibility:=True) {
-		if !(IsSet(x) && IsSet(y))
-			DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
-		else
-            pt64 := y << 32 | x
-		if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
-			activateChromiumAccessibility := UIA.ActivateChromiumAccessibility(hwnd)
-		}
-		return (ComCall(7, this, "int64", pt64, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-    }
-
-    ; Retrieves the UI Automation element that has the input focus.
-    static GetFocusedElement() => (ComCall(8, this, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; Retrieves the UI Automation element that has the input focus, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    static GetRootElementBuildCache(cacheRequest) => (ComCall(9, this, "ptr", cacheRequest, "ptr*", &root := 0), UIA.IUIAutomationElement(root))
-
-    ; Retrieves a UI Automation element for the specified window, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    static ElementFromHandleBuildCache(hwnd, cacheRequest) => (ComCall(10, this, "ptr", hwnd, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; Retrieves the UI Automation element at the specified point on the desktop, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    static ElementFromPointBuildCache(pt, cacheRequest) => (ComCall(11, this, "int64", pt, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; Retrieves the UI Automation element that has the input focus, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    static GetFocusedElementBuildCache(cacheRequest) => (ComCall(12, this, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; Retrieves a tree walker object that can be used to traverse the Microsoft UI Automation tree.
-    static CreateTreeWalker(pCondition) => (ComCall(13, this, "ptr", pCondition, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
-
-    ; Retrieves an IUIAutomationTreeWalker interface used to discover control elements.
-    static ControlViewWalker() => (ComCall(14, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
-
-    ; Retrieves an IUIAutomationTreeWalker interface used to discover content elements.
-    static ContentViewWalker() => (ComCall(15, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
-
-    ; Retrieves a tree walker object used to traverse an unfiltered view of the UI Automation tree.
-    static RawViewWalker() => (ComCall(16, this, "ptr*", &walker := 0), UIA.IUIAutomationTreeWalker(walker))
-
-    ; Retrieves a predefined IUIAutomationCondition interface that selects all UI elements in an unfiltered view.
-    static RawViewCondition() => (ComCall(17, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
-
-    ; Retrieves a predefined IUIAutomationCondition interface that selects control elements.
-    static ControlViewCondition() => (ComCall(18, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
-
-    ; Retrieves a predefined IUIAutomationCondition interface that selects content elements.
-    static ContentViewCondition() => (ComCall(19, this, "ptr*", &condition := 0), UIA.IUIAutomationCondition(condition))
-
-    ; Creates a cache request.
-    ; After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
-    static CreateCacheRequest() => (ComCall(20, this, "ptr*", &cacheRequest := 0), UIA.IUIAutomationCacheRequest(cacheRequest))
-
-    ; Retrieves a predefined condition that selects all elements.
-    static CreateTrueCondition() => (ComCall(21, this, "ptr*", &newCondition := 0), UIA.IUIAutomationBoolCondition(newCondition))
-
-    ; Creates a condition that is always false.
-    ; This method exists only for symmetry with IUIAutomation,,CreateTrueCondition. A false condition will never enable a match with UI Automation elements, and it cannot usefully be combined with any other condition.
-    static CreateFalseCondition() => (ComCall(22, this, "ptr*", &newCondition := 0), UIA.IUIAutomationBoolCondition(newCondition))
-
-    ; Creates a condition that selects elements that have a property with the specified value.
-    static CreatePropertyCondition(propertyId, value?, flags?) {
-        if !IsSet(value) && IsObject(propertyId)
-            return UIA.CreateCondition(propertyId)
-        if !IsInteger(propertyId)
-            propertyId := UIA.Property.%propertyId%
-        if propertyId = 30003 && !IsNumber(value)
-            try value := UIA.ControlType.%value%
-        if IsSet(flags)
-            return UIA.CreatePropertyConditionEx(propertyId, value, flags)
-        if A_PtrSize = 4
-            v := UIA.ComVar(value, , true), ComCall(23, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "ptr*", &newCondition := 0)
-        else
-            ComCall(23, this, "int", propertyId, "ptr", UIA.ComVar(value, , true), "ptr*", &newCondition := 0)
-        return UIA.IUIAutomationPropertyCondition(newCondition)
-    }
-
-    ; Creates a condition that selects elements that have a property with the specified value, using optional flags.
-    static CreatePropertyConditionEx(propertyId, value, flags := 0) {
-        if !IsInteger(propertyId)
-            propertyId := UIA.Property.%propertyId%
-        if propertyId = 30003
-            try value := UIA.ControlType.%value%
-        if A_PtrSize = 4
-            v := UIA.ComVar(value, , true), ComCall(24, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "int", flags, "ptr*", &newCondition := 0)
-        else
-            ComCall(24, this, "int", propertyId, "ptr", UIA.ComVar(value, , true), "int", flags, "ptr*", &newCondition := 0)
-        return UIA.IUIAutomationPropertyCondition(newCondition)
-    }
-
-    ; The Create**Condition** method calls AddRef on each pointers. This means you can call Release on those pointers after the call to Create**Condition** returns without invalidating the pointer returned from Create**Condition**. When you call Release on the pointer returned from Create**Condition**, UI Automation calls Release on those pointers.
-
-    ; Creates a condition that selects elements that match both of two conditions.
-    static CreateAndCondition(condition1, condition2) => (ComCall(25, this, "ptr", condition1, "ptr", condition2, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
-
-    ; Creates a condition that selects elements based on multiple conditions, all of which must be true.
-    static CreateAndConditionFromArray(conditions) => (ComCall(26, this, "ptr", conditions, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
-
-    ; Creates a condition that selects elements based on multiple conditions, all of which must be true.
-    static CreateAndConditionFromNativeArray(conditions, conditionCount) => (ComCall(27, this, "ptr", conditions, "int", conditionCount, "ptr*", &newCondition := 0), UIA.IUIAutomationAndCondition(newCondition))
-
-    ; Creates a combination of two conditions where a match exists if either of the conditions is true.
-    static CreateOrCondition(condition1, condition2) => (ComCall(28, this, "ptr", condition1, "ptr", condition2, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
-
-    ; Creates a combination of two or more conditions where a match exists if any of the conditions is true.
-    static CreateOrConditionFromArray(conditions) => (ComCall(29, this, "ptr", conditions, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
-
-    ; Creates a combination of two or more conditions where a match exists if any one of the conditions is true.
-    static CreateOrConditionFromNativeArray(conditions, conditionCount) => (ComCall(30, this, "ptr", conditions, "ptr", conditionCount, "ptr*", &newCondition := 0), UIA.IUIAutomationOrCondition(newCondition))
-
-    ; Creates a condition that is the negative of a specified condition.
-    static CreateNotCondition(condition) => (ComCall(31, this, "ptr", condition, "ptr*", &newCondition := 0), UIA.IUIAutomationNotCondition(newCondition))
-
-    ; Note,  Before implementing an event handler, you should be familiar with the threading issues described in Understanding Threading Issues. http,//msdn.microsoft.com/en-us/library/ee671692(v=vs.85).aspx
-    ; A UI Automation client should not use multiple threads to add or remove event handlers. Unexpected behavior can result if one event handler is being added or removed while another is being added or removed in the same client process.
-    ; It is possible for an event to be delivered to an event handler after the handler has been unsubscribed, if the event is received simultaneously with the request to unsubscribe the event. The best practice is to follow the Component Object Model (COM) standard and avoid destroying the event handler object until its reference count has reached zero. Destroying an event handler immediately after unsubscribing for events may result in an access violation if an event is delivered late.
-
-    ; Registers a method that handles Microsoft UI Automation events.
-    static AddAutomationEventHandler(element, eventId, handler, scope:=0x4, cacheRequest?) => ComCall(32, this, "int", eventId, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler)
-
-    ; Removes the specified UI Automation event handler.
-    static RemoveAutomationEventHandler(element, eventId, handler) => ComCall(33, this, "int", eventId, "ptr", element, "ptr", handler)
-
-    ; Registers a method that handles property-changed events.
-    ; The UI item specified by element might not support the properties specified by the propertyArray parameter.
-    ; This method serves the same purpose as IUIAutomation,,AddPropertyChangedEventHandler, but takes a normal array of property identifiers instead of a SAFEARRAY.
-    static AddPropertyChangedEventHandlerNativeArray(element, propertyArray, propertyCount, handler, scope:=0x4, cacheRequest?) => ComCall(34, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler, "ptr", propertyArray, "int", propertyCount)
-
-    ; Registers a method that handles property-changed events.
-    ; The UI item specified by element might not support the properties specified by the propertyArray parameter.
-    static AddPropertyChangedEventHandler(element, propertyArray, handler, scope:=0x4, cacheRequest?) {
-        if !IsObject(propertyArray)
-			propertyArray := [propertyArray] 
-		SafeArray:=ComObjArray(0x3,propertyArray.Length)
-		for i, propertyId in propertyArray
-			SafeArray[i-1]:=propertyId
-        ComCall(35, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler, "ptr", SafeArray)
-    }
-
-    ; Removes a property-changed event handler.
-    static RemovePropertyChangedEventHandler(element, handler) => ComCall(36, this, "ptr", element, "ptr", handler)
-
-    ; Registers a method that handles structure-changed events.
-    static AddStructureChangedEventHandler(element, handler, scope:=0x4, cacheRequest?) => ComCall(37, this, "ptr", element, "int", scope, "ptr", cacheRequest ?? 0, "ptr", handler)
-
-    ; Removes a structure-changed event handler.
-    static RemoveStructureChangedEventHandler(element, handler) => ComCall(38, this, "ptr", element, "ptr", handler)
-
-    ; Registers a method that handles focus-changed events.
-    ; Focus-changed events are system-wide; you cannot set a narrower scope.
-    static AddFocusChangedEventHandler(handler, cacheRequest?) => ComCall(39, this, "ptr", cacheRequest ?? 0, "ptr", handler)
-
-    ; Removes a focus-changed event handler.
-    static RemoveFocusChangedEventHandler(handler) => ComCall(40, this, "ptr", handler)
-
-    ; Removes all registered Microsoft UI Automation event handlers.
-    static RemoveAllEventHandlers() => ComCall(41, this)
-
-    ; Converts an array of integers to a SAFEARRAY.
-    static IntNativeArrayToSafeArray(array, arrayCount) => (ComCall(42, this, "ptr", array, "int", arrayCount, "ptr*", &safeArray := 0), ComValue(0x2003, safeArray))
-
-    ; Converts a SAFEARRAY of integers to an array.
-    static IntSafeArrayToNativeArray(intArray) => (ComCall(43, this, "ptr", intArray, "ptr*", &array := 0, "int*", &arrayCount := 0), UIA.NativeArray(array, arrayCount, "int"))
-
-    ; Creates a VARIANT that contains the coordinates of a rectangle.
-    ; The returned VARIANT has a data type of VT_ARRAY | VT_R8.
-    static RectToVariant(rc) => (ComCall(44, this, "ptr", rc, "ptr", var := UIA.ComVar()), var)
-
-    ; Converts a VARIANT containing rectangle coordinates to a RECT.
-    static VariantToRect(var) {
-        if A_PtrSize = 4
-            ComCall(45, this, "int64", NumGet(var, "int64"), "int64", NumGet(var, 8, "int64"), "ptr", rc := UIA.NativeArray(0, 4, "Int"))
-        else
-            ComCall(45, this, "ptr", var, "ptr", rc := UIA.NativeArray(0, 4, "Int"))
-        return rc
-    }
-
-    ; Converts a SAFEARRAY containing rectangle coordinates to an array of type RECT.
-    static SafeArrayToRectNativeArray(rects) => (ComCall(46, this, "ptr", rects, "ptr*", &rectArray := 0, "int*", &rectArrayCount := 0), UIA.NativeArray(rectArray, rectArrayCount, "int"))
-
-    ; Creates a instance of a proxy factory object.
-    ; Use the IUIAutomationProxyFactoryMapping interface to enter the proxy factory into the table of available proxies.
-    static CreateProxyFactoryEntry(factory) => (ComCall(47, this, "ptr", factory, "ptr*", &factoryEntry := 0), UIA.IUIAutomationProxyFactoryEntry(factoryEntry))
-
-    ; Retrieves an object that represents the mapping of Window classnames and associated data to individual proxy factories. This property is read-only.
-    static ProxyFactoryMapping() => (ComCall(48, this, "ptr*", &factoryMapping := 0), UIA.IUIAutomationProxyFactoryMapping(factoryMapping))
-
-    ; The programmatic name is intended for debugging and diagnostic purposes only. The string is not localized.
-    ; This property should not be used in string comparisons. To determine whether two properties are the same, compare the property identifiers directly.
-
-    ; Retrieves the registered programmatic name of a property.
-    static GetPropertyProgrammaticName(property) => (ComCall(49, this, "int", property, "ptr*", &name := 0), UIA.BSTR(name))
-
-    ; Retrieves the registered programmatic name of a control pattern.
-    static GetPatternProgrammaticName(pattern) => (ComCall(50, this, "int", pattern, "ptr*", &name := 0), UIA.BSTR(name))
-
-    ; This method is intended only for use by Microsoft UI Automation tools that need to scan for properties. It is not intended to be used by UI Automation clients.
-    ; There is no guarantee that the element will support any particular control pattern when asked for it later.
-
-    ; Retrieves the control patterns that might be supported on a UI Automation element.
-    static PollForPotentialSupportedPatterns(pElement, &patternIds, &patternNames) {
-        ComCall(51, this, "ptr", pElement, "ptr*", &patternIds := 0, "ptr*", &patternNames := 0)
-        patternIds := ComValue(0x2003, patternIds), patternNames := ComValue(0x2008, patternNames)
-    }
-
-    ; Retrieves the properties that might be supported on a UI Automation element.
-    static PollForPotentialSupportedProperties(pElement, &propertyIds, &propertyNames) {
-        ComCall(52, this, "ptr", pElement, "ptr*", &propertyIds := 0, "ptr*", &propertyNames := 0)
-        propertyIds := ComValue(0x2003, propertyIds), propertyNames := ComValue(0x2008, propertyNames)
-    }
-
-    ; Checks a provided VARIANT to see if it contains the Not Supported identifier.
-    ; After retrieving a property for a UI Automation element, call this method to determine whether the element supports the retrieved property. CheckNotSupported is typically called after calling a property retrieving method such as GetPropertyValue.
-    static CheckNotSupported(value) {
-        if A_PtrSize = 4
-            value := UIA.ComVar(value, , true), ComCall(53, this, "int64", NumGet(value, "int64"), "int64", NumGet(value, 8, "int64"), "int*", &isNotSupported := 0)
-        else
-            ComCall(53, this, "ptr", UIA.ComVar(value, , true), "int*", &isNotSupported := 0)
-        return isNotSupported
-    }
-
-    ; Retrieves a static token object representing a property or text attribute that is not supported. This property is read-only.
-    ; This object can be used for comparison with the results from UIA.IUIAutomationElement,,GetPropertyValue or IUIAutomationTextRange,,GetAttributeValue.
-    static ReservedNotSupportedValue() => (ComCall(54, this, "ptr*", &notSupportedValue := 0), ComValue(0xd, notSupportedValue))
-
-    ; Retrieves a static token object representing a text attribute that is a mixed attribute. This property is read-only.
-    ; The object retrieved by IUIAutomation,,ReservedMixedAttributeValue can be used for comparison with the results from IUIAutomationTextRange,,GetAttributeValue to determine if a text range contains more than one value for a particular text attribute.
-    static ReservedMixedAttributeValue() => (ComCall(55, this, "ptr*", &mixedAttributeValue := 0), ComValue(0xd, mixedAttributeValue))
-
-    ; This method enables UI Automation clients to get UIA.IUIAutomationElement interfaces for accessible objects implemented by a Microsoft Active Accessiblity server.
-    ; This method may fail if the server implements UI Automation provider interfaces alongside Microsoft Active Accessibility support.
-    ; The method returns E_INVALIDARG if the underlying implementation of the Microsoft UI Automation element is not a native Microsoft Active Accessibility server; that is, if a client attempts to retrieve the IAccessible interface for an element originally supported by a proxy object from Oleacc.dll, or by the UIA-to-MSAA Bridge.
-
-    ; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server.
-    static ElementFromIAccessible(accessible, childId) => (ComCall(56, this, "ptr", accessible, "int", childId, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    static ElementFromIAccessibleBuildCache(accessible, childId, cacheRequest) => (ComCall(57, this, "ptr", accessible, "int", childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
-
-    ; ---------- IUIAutomation2 ----------
-	
-	; Specifies whether calls to UI Automation control pattern methods automatically set focus to the target element. Default is True. 
-	static AutoSetFocus {
-		get => (ComCall(58, this,  "int*", &out:=0), out)
-		set => ComCall(59, this,  "int", Value)
-	}
-	; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for an automation element. Default is 20000ms (20 seconds), minimum seems to be 50ms.
-	static ConnectionTimeout {
-		get => (ComCall(60, this,  "int*", &out:=0), out)
-		set => ComCall(61, this,  "int", Value) ; Minimum seems to be 50 (ms?)
-	}
-	; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for information about an automation element. Default is 2000ms (2 seconds), minimum seems to be 50ms.
-	static TransactionTimeout {
-		get => (ComCall(62, this,  "int*", &out:=0), out)
-		set => ComCall(63, this,  "int", Value)
-	}
-
-    ; ---------- IUIAutomation3 ----------
-
-	static AddTextEditTextChangedEventHandler(element, textEditChangeType, handler, scope:=0x4, cacheRequest:=0) => (ComCall(64, this,  "ptr", element, "int", scope, "int", textEditChangeType, "ptr", cacheRequest, "ptr", handler))
-	static RemoveTextEditTextChangedEventHandler(element, handler) => ComCall(65, this,  "ptr", element, "ptr", handler)
-
-    ; ---------- IUIAutomation4 ----------
-
-	static AddChangesEventHandler(element, changeTypes, handler, scope:=0x4, cacheRequest:=0) {
-        if !IsObject(changeTypes)
-            changeTypes := [changeTypes]
-        nativeArray := UIA.NativeArray(0, changeTypes.Length, "int")
-        for k, v in changeTypes
-            NumPut("int", v, nativeArray, (k-1)*4)
-        ComCall(66, this,  "ptr", element, "int", scope, "ptr", nativeArray, "int", changeTypes.Length, "ptr", cacheRequest, "ptr", handler)
-    }
-	static RemoveChangesEventHandler(element, handler) => (ComCall(67, this,  "ptr", element, "ptr", handler))
-
-    ; ---------- IUIAutomation5 ----------
-
-	static AddNotificationEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(68, this,  "ptr", element, "uint", scope, "ptr", cacheRequest, "ptr", handler))
-	static RemoveNotificationEventHandler(element, handler) => (ComCall(69, this,  "ptr", element, "ptr", handler))
-
-    ; ---------- IUIAutomation6 ----------
-
-	; Indicates whether an accessible technology client adjusts provider request timeouts when the provider is non-responsive.
-	ConnectionRecoveryBehavior {
-		get => (ComCall(73, this,  "int*", &out), out)
-		set => ComCall(74, this,  "int", value) 
-	}
-	; Gets or sets whether an accessible technology client receives all events, or a subset where duplicate events are detected and filtered.
-	CoalesceEvents {
-		get => (ComCall(75, this,  "int*", &out:=0), out)
-		set => ComCall(76, this,  "int", value)
-	}
-
-	; Registers one or more event listeners in a single method call.
-	static CreateEventHandlerGroup() => (ComCall(70, this,  "ptr*", &out:=0), UIA.IUIAutomationEventHandlerGroup(out))
-	; Registers a collection of event handler methods specified with the IUIAutomation6 CreateEventHandlerGroup.
-	static AddEventHandlerGroup(element, handlerGroup) => (ComCall(71, this,  "ptr", element, "ptr", handlerGroup))
-	static RemoveEventHandlerGroup(element, handlerGroup) => (ComCall(72, this,  "ptr", element, "ptr", handlerGroup))
-	; Registers a method that handles when the active text position changes.
-	static AddActiveTextPositionChangedEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(77, this,  "ptr", element, "int", scope, "ptr", cacheRequest, "ptr", handler))
-	static RemoveActiveTextPositionChangedEventHandler(element, handler) => (ComCall(78, this,  "ptr", element, "ptr", handler))
-
-    ; ---------- IUIAutomation7 ----------
-    ; Has no properties/methods
-
+}    
 /*
 	Exposes methods and properties for a UI Automation element, which represents a UI item.
 	Microsoft documentation: https://docs.microsoft.com/en-us/windows/win32/api/uiautomationclient/nn-uiautomationclient-iuiautomationelement
@@ -888,15 +1011,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             return this.%NewName%
         else if UIA.Property.HasOwnProp(NewName)
             return this.GetPropertyValue(UIA.Property.%NewName%)
-        else if (NewName ~= "i)Pattern\d?") {
-            Name := RegexReplace(NewName, "i)Pattern$")
-            if this.CachedPatterns.Has(Name)
-                return this.CachedPatterns[Name]
-            else if UIA.Pattern.HasOwnProp(Name)
-                return this.CachedPatterns[Name] := this.GetPattern(UIA.Pattern.%Name%)
-            else if ((SubStr(Name, 1, 6) = "Cached") && UIA.Pattern.HasOwnProp(pattern := SubStr(Name, 7)))
-                return this.CachedPatterns[Name] := this.GetCachedPattern(UIA.Pattern.%pattern%)
-        } else {
+        else {
             for pName, pVal in UIA.Pattern.OwnProps()
                 if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") {
                     if UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) 
@@ -968,6 +1083,74 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
     }
 
+    ; Aliases for UIA.GetPattern(UIA.Pattern.PatternName)
+    InvokePattern => this.GetPattern(UIA.Pattern.Invoke) 
+    SelectionPattern => this.GetPattern(UIA.Pattern.Selection) 
+    ValuePattern => this.GetPattern(UIA.Pattern.Value) 
+    RangeValuePattern => this.GetPattern(UIA.Pattern.RangeValue) 
+    ScrollPattern => this.GetPattern(UIA.Pattern.Scroll) 
+    ExpandCollapsePattern => this.GetPattern(UIA.Pattern.ExpandCollapse) 
+    GridPattern => this.GetPattern(UIA.Pattern.Grid) 
+    GridItemPattern => this.GetPattern(UIA.Pattern.GridItem)
+    MultipleViewPattern => this.GetPattern(UIA.Pattern.MultipleView)
+    WindowPattern => this.GetPattern(UIA.Pattern.Window)
+    SelectionItemPattern => this.GetPattern(UIA.Pattern.SelectionItem)
+    DockPattern => this.GetPattern(UIA.Pattern.Dock)
+    TablePattern => this.GetPattern(UIA.Pattern.Table)
+    TableItemPattern => this.GetPattern(UIA.Pattern.TableItem)
+    TextPattern => this.GetPattern(UIA.Pattern.Text) 
+    TogglePattern => this.GetPattern(UIA.Pattern.Toggle) 
+    TransformPattern => this.GetPattern(UIA.Pattern.Transform) 
+    ScrollItemPattern => this.GetPattern(UIA.Pattern.ScrollItem) 
+    LegacyIAccessiblePattern => this.GetPattern(UIA.Pattern.LegacyIAccessible) 
+    ItemContainerPattern => this.GetPattern(UIA.Pattern.ItemContainer) 
+    VirtualizedItemPattern => this.GetPattern(UIA.Pattern.VirtualizedItem) 
+    SynchronizedInputPattern => this.GetPattern(UIA.Pattern.SynchronizedInput) 
+    ObjectModelPattern => this.GetPattern(UIA.Pattern.ObjectModel) 
+    AnnotationPattern => this.GetPattern(UIA.Pattern.Annotation) 
+    StylesPattern => this.GetPattern(UIA.Pattern.Styles) 
+    SpreadsheetPattern => this.GetPattern(UIA.Pattern.Spreadsheet) 
+    SpreadsheetItemPattern => this.GetPattern(UIA.Pattern.SpreadsheetItem)
+    TextChildPattern => this.GetPattern(UIA.Pattern.TextChild) 
+    DragPattern => this.GetPattern(UIA.Pattern.Drag) 
+    DropTargetPattern => this.GetPattern(UIA.Pattern.DropTarget) 
+    TextEditPattern => this.GetPattern(UIA.Pattern.TextEdit) 
+    CustomNavigationPattern => this.GetPattern(UIA.Pattern.CustomNavigation)
+    ; Aliases for UIA.GetCachedPattern(UIA.Pattern.PatternName)
+    CachedInvokePattern => this.GetCachedPattern(UIA.Pattern.Invoke) 
+    CachedSelectionPattern => this.GetCachedPattern(UIA.Pattern.Selection) 
+    CachedValuePattern => this.GetCachedPattern(UIA.Pattern.Value) 
+    CachedRangeValuePattern => this.GetCachedPattern(UIA.Pattern.RangeValue) 
+    CachedScrollPattern => this.GetCachedPattern(UIA.Pattern.Scroll) 
+    CachedExpandCollapsePattern => this.GetCachedPattern(UIA.Pattern.ExpandCollapse) 
+    CachedGridPattern => this.GetCachedPattern(UIA.Pattern.Grid) 
+    CachedGridItemPattern => this.GetCachedPattern(UIA.Pattern.GridItem)
+    CachedMultipleViewPattern => this.GetCachedPattern(UIA.Pattern.MultipleView)
+    CachedWindowPattern => this.GetCachedPattern(UIA.Pattern.Window)
+    CachedSelectionItemPattern => this.GetCachedPattern(UIA.Pattern.SelectionItem)
+    CachedDockPattern => this.GetCachedPattern(UIA.Pattern.Dock)
+    CachedTablePattern => this.GetCachedPattern(UIA.Pattern.Table)
+    CachedTableItemPattern => this.GetCachedPattern(UIA.Pattern.TableItem)
+    CachedTextPattern => this.GetCachedPattern(UIA.Pattern.Text) 
+    CachedTogglePattern => this.GetCachedPattern(UIA.Pattern.Toggle) 
+    CachedTransformPattern => this.GetCachedPattern(UIA.Pattern.Transform) 
+    CachedScrollItemPattern => this.GetCachedPattern(UIA.Pattern.ScrollItem) 
+    CachedLegacyIAccessiblePattern => this.GetCachedPattern(UIA.Pattern.LegacyIAccessible) 
+    CachedItemContainerPattern => this.GetCachedPattern(UIA.Pattern.ItemContainer) 
+    CachedVirtualizedItemPattern => this.GetCachedPattern(UIA.Pattern.VirtualizedItem) 
+    CachedSynchronizedInputPattern => this.GetCachedPattern(UIA.Pattern.SynchronizedInput) 
+    CachedObjectModelPattern => this.GetCachedPattern(UIA.Pattern.ObjectModel) 
+    CachedAnnotationPattern => this.GetCachedPattern(UIA.Pattern.Annotation) 
+    CachedStylesPattern => this.GetCachedPattern(UIA.Pattern.Styles) 
+    CachedSpreadsheetPattern => this.GetCachedPattern(UIA.Pattern.Spreadsheet) 
+    CachedSpreadsheetItemPattern => this.GetCachedPattern(UIA.Pattern.SpreadsheetItem)
+    CachedTextChildPattern => this.GetCachedPattern(UIA.Pattern.TextChild) 
+    CachedDragPattern => this.GetCachedPattern(UIA.Pattern.Drag) 
+    CachedDropTargetPattern => this.GetCachedPattern(UIA.Pattern.DropTarget) 
+    CachedTextEditPattern => this.GetCachedPattern(UIA.Pattern.TextEdit) 
+    CachedCustomNavigationPattern => this.GetCachedPattern(UIA.Pattern.CustomNavigation)
+
+
 	/**
      * Returns the children of this element, optionally filtering by a condition
      * @param c Optional UIA condition object
@@ -995,7 +1178,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 	Dump(scope:=1, maxDepth:=-1) { 
         out := ""
         if scope&1
-            out := "Type: " (ctrlType := this.ControlType) " (" UIA.ControlType.%ctrlType% ")" ((name := this.Name) == "" ? "" : " Name: `"" name "`"") ((val := this.Value) == "" ? "" : " Value: `"" val "`"") ((lct := this.LocalizedControlType) == "" ? "" : " LocalizedControlType: `"" lct "`"") ((aid := this.AutomationId) == "" ? "" : " AutomationId: `"" aid "`"") ((cm := this.ClassName) == "" ? "" : " ClassName: `"" cm "`"") ((ak := this.AcceleratorKey) == "" ? "" : " AcceleratorKey: `"" ak "`"") "`n"
+            out := "Type: " (ctrlType := this.ControlType) " (" UIA.ControlType[ctrlType] ")" ((name := this.Name) == "" ? "" : " Name: `"" name "`"") ((val := this.Value) == "" ? "" : " Value: `"" val "`"") ((lct := this.LocalizedControlType) == "" ? "" : " LocalizedControlType: `"" lct "`"") ((aid := this.AutomationId) == "" ? "" : " AutomationId: `"" aid "`"") ((cm := this.ClassName) == "" ? "" : " ClassName: `"" cm "`"") ((ak := this.AcceleratorKey) == "" ? "" : " AcceleratorKey: `"" ak "`"") "`n"
         if scope&4
             return RTrim(RecurseTree(this, out), "`n")
         if scope&2 {
@@ -1160,10 +1343,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Highlights the element for a chosen period of time.
      * @param showTime Can be one of the following:
-     *     Unset - removes the highlighting. This is the default value.
+     *     Unset - if highlighting exists then removes the highlighting, otherwise highlights for 2 seconds. This is the default value.
      *     0 - Indefinite highlighting
      *     Positive integer (eg 2000) - will highlight and pause for the specified amount of time in ms
      *     Negative integer - will highlight for the specified amount of time in ms, but script execution will continue
+     *     clear - removes the highlighting unconditionally
      * @param color The color of the highlighting. Default is red.
      * @param d The border thickness of the highlighting in pixels. Default is 2.
      * @returns {UIA.IUIAutomationElement}
@@ -1171,20 +1355,20 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     Highlight(showTime:=unset, color:="Red", d:=2) {
         if !this.HasOwnProp("HighlightGui")
             this.HighlightGui := []
-        if !IsSet(showTime) {
-            for _, r in this.HighlightGui
-                r.Destroy()
-            this.HighlightGui := []
-            return this
-        }
+        if (!IsSet(showTime) && this.HighlightGui.Length) || (IsSet(showTime) && showTime = "remove") {
+                for _, r in this.HighlightGui
+                    r.Destroy()
+                this.HighlightGui := []
+                return this
+        } else if !IsSet(showTime)
+            showTime := 2000
         try loc := this.BoundingRectangle
         if !IsSet(loc) || !IsObject(loc)
             return this
         Loop 4 {
             this.HighlightGui.Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
         }
-        Loop 4
-        {
+        Loop 4 {
             i:=A_Index
             , x1:=(i=2 ? loc.r : loc.l-d)
             , y1:=(i=3 ? loc.b : loc.t-d)
@@ -1197,9 +1381,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             Sleep(showTime)
             this.Highlight()
         } else if showTime < 0
-            SetTimer(ObjBindMethod(this, "Highlight"), -Abs(showTime))
+            SetTimer(ObjBindMethod(this, "Highlight", "clear"), -Abs(showTime))
         return this
     }
+    ClearHighlight() => this.Highlight("clear")
 
 	/*
 		FindFirst using search criteria. 
@@ -1286,15 +1471,27 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     */
 
     /**
+     * Waits for this element to not exist
+     * @param timeout Waiting time for element to disappear. Default: indefinite wait
+     * @returns {Integer}
+     */
+	WaitNotExist(timeOut:=-1) { 
+		endtime := A_TickCount + timeout
+		while ((exists := this.Exists) && ((timeout == -1) || (A_Tickcount < endtime)))
+			Sleep 20
+		return !exists
+	}
+
+    /**
      * Wait element to exist.
      * @param condition Property condition(s) or path for the search (see UIA.PropertyCondition).
      * @param timeout Waiting time for element to appear. Default: indefinite wait
-     * @param scope TreeScope search scope for the search
-     * @returns Found element if successful, 0 if timeout happens
+     * @param scope TreeScope search scope for the search, one of UIA.TreeScope values
+     * @returns Found element if successful, empty string if timeout happens
      */
-    WaitExist(condition, timeout := -1, scope := 4) {
+    WaitElement(condition, timeout := -1, scope := 4, startingElement := 0, traversalOptions := 0, cacheRequest := 0) {
         endtime := A_TickCount + timeout
-        While ((timeout == -1) || (A_Tickcount < endtime)) && !(el := (IsObject(condition) ? this.FindFirst(condition, scope) : this.FindByPath(condition)))
+        While ((timeout == -1) || (A_Tickcount < endtime)) && !(el := (IsObject(condition) ? this.FindFirst(condition, scope, startingElement, traversalOptions, cacheRequest) : this.FindByPath(condition)))
             Sleep 20
         return el
     }
@@ -1306,10 +1503,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param scope TreeScope search scope for the search
      * @returns 1 if element disappeared, 0 otherwise
      */
-    WaitNotExist(condition, timeout := -1, scope := 4) {
+    WaitElementNotExist(condition, timeout := -1, scope := 4, startingElement := 0, traversalOptions := 0, cacheRequest := 0) {
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
-            if !(IsObject(condition) ? this.FindFirst(condition, scope) : this.FindByPath(condition))
+            if !(IsObject(condition) ? this.FindFirst(condition, scope, startingElement, traversalOptions, cacheRequest) : this.FindByPath(condition))
                 return 1
         }
         return 0
@@ -1324,6 +1521,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param scope TreeScope search scope for the search
      * @returns {IUIAutomationElement}
      */
+    /*
     FindElement(ControlType, properties := unset, timeOut := 0, scope := 4) {
         index := 1
         if !IsNumber(ControlType) {
@@ -1361,6 +1559,81 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     return
             }
         }
+    }
+    */
+
+    /**
+     * Retrieves the first child or descendant element that matches the specified condition.
+     * @param condition The condition to filter with.
+     * @param scope UIA.TreeScope value
+     * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
+     * @param traversalOptions Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values [requires Windows 10 version 1703+]
+     * @param cacheRequest Optional: cache request object
+     * @returns {UIA.IUIAutomationElement}
+     */
+    FindElement(condition, scope:=4, startingElement:=0, traversalOptions:=0, cacheRequest:=0) {
+        withOptions := startingElement || traversalOptions
+        if !InStr(Type(condition), "Condition") {
+            index := condition.HasOwnProp("index") ? condition.index : condition.HasOwnProp("i") ? condition.i : 1
+            /*
+                If MatchMode is 1:
+                    Use MatchMode 2, but then return all the results and filter using the condition
+                If MatchMode is RegEx:
+                    Find all !"" elements, then filter using the condition
+            */
+            IUIAcondition := UIA.__ConditionBuilder(condition, &sanitized:=False), counter := 0
+            if sanitized {
+                ; Some conditions need validating: MatchMode 1 or RegEx was used
+                unfilteredEls := this.FindAll(IUIAcondition, scope, startingElement, traversalOptions, cacheRequest)
+                for el in unfilteredEls {
+                    if el.ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index {
+                        return el
+                    }
+                }
+                return ""
+            }
+            condition := IUIAcondition
+            ; Were any conditions encountered where we need to filter conditions?
+            if index != 1 {
+                try return this.FindAll(condition, scope, startingElement, traversalOptions, cacheRequest).GetElement(index-1)
+                catch
+                    return ""
+            }
+        }
+        if cacheRequest {
+            if withOptions
+                return this.FindFirstWithOptionsBuildCache(cacheRequest, condition, startingElement, traversalOptions, scope)
+            return this.FindFirstWithOptions(condition, startingElement, traversalOptions, scope)
+        }
+        if withOptions
+            return this.FindFirstWithOptions(condition, startingElement, traversalOptions, scope)
+        return this.FindFirst(condition, scope, cacheRequest)
+    }
+
+    /**
+     * Returns all UI Automation elements that satisfy the specified condition.
+     * @param condition The condition to filter with.
+     * @param scope UIA.TreeScope value
+     * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
+     * @param traversalOptions Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values [requires Windows 10 version 1703+]
+     * @param cacheRequest Optional: cache request object
+     * @returns {[UIA.IUIAutomationElement]}
+     */
+    FindElements(condition, scope := 4, startingElement:=0, traversalOptions:=0, cacheRequest:=0) {
+        withOptions := startingElement || traversalOptions
+        if !InStr(Type(condition), "Condition") {
+            IUIAcondition := UIA.__ConditionBuilder(condition, &sanitized:=False), filteredEls := []
+            if sanitized {
+                unfilteredEls := this.FindAll(IUIAcondition, scope, startingElement, traversalOptions, cacheRequest)
+                for el in unfilteredEls {
+                    if el.ValidateCondition(condition, cacheRequest ? 1 : 0)
+                        filteredEls.Push(el)
+                }
+                return filteredEls
+            }
+            condition := IUIAcondition
+        }
+        return this.FindAll(condition, scope, startingElement, traversalOptions, cacheRequest)
     }
 
 	FindByPath(searchPath:="", c?) {
@@ -1426,50 +1699,48 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
     }
 
-    ValidateCondition(obj) {
-        mm := 3, cs := 1
+    ValidateCondition(obj, cached:=False) {
+        mm := 3, cs := 1, notCond := 0
         switch Type(obj) {
             case "Object":
                 mm := obj.HasOwnProp("matchmode") ? obj.matchmode : obj.HasOwnProp("mm") ? obj.mm : 3
                 cs := obj.HasOwnProp("casesensitive") ? obj.casesensitive : obj.HasOwnProp("cs") ? obj.cs : 1
+                notCond := obj.HasOwnProp("operator") ? obj.operator = "not" : obj.HasOwnProp("op") ? obj.op = "not" : 0
                 obj := obj.OwnProps()
-                operator := "and"
             case "Array":
-                operator := "or"
                 for k, v in obj {
-                    if IsObject(v) && this.ValidateCondition(v)
+                    if IsObject(v) && this.ValidateCondition(v, cached)
                         return true
                 }
                 return false
         }
         for k, v in obj {
             if IsObject(v) { 
-                if (k = "not" ? this.ValidateCondition(v) : !this.ValidateCondition(v))
+                if (k = "not" ? this.ValidateCondition(v, cached) : !this.ValidateCondition(v, cached))
                     return False
                 continue
             }
+            k := unset
             try k := IsInteger(k) ? Integer(k) : UIA.Property.%k%
-            if !IsInteger(k)
+            if !IsSet(k)
                 continue
             if k = 30003 && !IsInteger(v)
                 try v := UIA.ControlType.%v%
             prop := ""
             try prop := UIA.Property[k]
-            currentValue := this.GetPropertyValue(k)
+            currentValue := this.Get%cached ? "Cached" : ""%PropertyValue(k)
             switch mm, False {
                 case "RegEx":
-                    if !RegExMatch(currentValue, v)
-                        return False
+                    result := !RegExMatch(currentValue, v)
                 case 1:
-                    if !((cs && SubStr(currentValue, 1, StrLen(v)) == v) || (!cs && SubStr(currentValue, 1, StrLen(v)) = v))
-                        return False
+                    result := !((cs && SubStr(currentValue, 1, StrLen(v)) == v) || (!cs && SubStr(currentValue, 1, StrLen(v)) = v))
                 case 2:
-                    if !InStr(currentValue, v, cs)
-                        return False
-                case 3:
-                    if !(cs ? currentValue == v : currentValue = v)
-                        return False
+                    result := !InStr(currentValue, v, cs)
+                default:
+                    result := !(cs ? currentValue == v : currentValue = v)
             }
+            if notCond ? result : !result
+                return False
         }
         return True
     }
@@ -1483,82 +1754,68 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     GetRuntimeId() => (ComCall(4, this, "ptr*", &runtimeId := 0), ComValue(0x2003, runtimeId))
 
     ; The scope of the search is relative to the element on which the method is called. Elements are returned in the order in which they are encountered in the tree.
-    ; This function cannot search for ancestor elements in the Microsoft UI Automation tree; that is, TreeScope_Ancestors is not a valid value for the scope parameter.
-    ; When searching for top-level windows on the desktop, be sure to specify TreeScope_Children in the scope parameter, not TreeScope_Descendants. A search through the entire subtree of the desktop could iterate through thousands of items and lead to a stack overflow.
+    ; This function cannot search for ancestor elements in the Microsoft UI Automation tree; that is, UIA.TreeScope.Ancestors is not a valid value for the scope parameter.
+    ; When searching for top-level windows on the desktop, be sure to specify UIA.TreeScope.Children in the scope parameter, not UIA.TreeScope.Descendants. A search through the entire subtree of the desktop could iterate through thousands of items and lead to a stack overflow.
     ; If your client application might try to find elements in its own user interface, you must make all UI Automation calls on a separate thread.
 
-    ; Retrieves the first child or descendant element that matches the specified condition.
-    FindFirst(condition, scope := 4, cacheRequest?) {
-        if !InStr(Type(condition), "Condition") {
-            index := condition.HasOwnProp("index") ? condition.index : condition.HasOwnProp("i") ? condition.i : 1
-            /*
-                If MatchMode is 1:
-                    Use MatchMode 2, but then return all the results and filter using the condition
-                If MatchMode is RegEx:
-                    Find all !"" elements, then filter using the condition
-            */
-            IUIAcondition := UIA.__ConditionBuilder(condition, &sanitized:=False)
-            if sanitized {
-                unfilteredEls := this.FindAll(IUIAcondition, scope), counter := 0
-                for el in unfilteredEls {
-                    if el.ValidateCondition(condition) && ++counter = index {
-                        return el
-                    }
-                }
-                return ""
-            }
-            condition := IUIAcondition
-            ; Were any conditions encountered where we need to filter conditions?
-            if index != 1 {
-                try return (IsSet(cacheRequest) ? this.FindAllBuildCache(condition, scope, cacheRequest) : this.FindAll(condition, scope)).GetElement(index)
-                catch
-                    return ""
-            }
+    /**
+     * Retrieves the first child or descendant element that matches the specified condition.
+     * @param condition The condition to filter with. MatchModes StartsWith, RegEx, and using indexes are not supported with FindFirst, use FindElement for that.
+     * @param scope UIA.TreeScope value
+     * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
+     * @param traversalOptions Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values [requires Windows 10 version 1703+]
+     * @param cacheRequest Optional: cache request object
+     * @returns {UIA.IUIAutomationElement}
+     */
+    FindFirst(condition, scope:=4, startingElement:=0, traversalOptions:=0, cacheRequest:=0) {
+        withOptions := startingElement || traversalOptions
+        if !InStr(Type(condition), "Condition")
+            condition := UIA.CreateCondition(condition)
+        if cacheRequest {
+            if withOptions
+                return this.FindFirstWithOptionsBuildCache(cacheRequest, condition, startingElement, traversalOptions, scope)
+            return this.FindFirstWithOptions(condition, startingElement, traversalOptions, scope)
         }
-        if IsSet(cacheRequest)
-            return this.FindFirstBuildCache(condition, scope, cacheRequest)
-        else if (ComCall(5, this, "int", scope, "ptr", condition, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElement(found)
-        return ""
+        if withOptions
+            return this.FindFirstWithOptions(condition, startingElement, traversalOptions, scope)
+        return (ComCall(5, this, "int", scope, "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElement(found) : ""
     }
 
-    ; Returns all UI Automation elements that satisfy the specified condition.
-    FindAll(condition, scope := 4, cacheRequest?) {
-        if !InStr(Type(condition), "Condition") {
-            IUIAcondition := UIA.__ConditionBuilder(condition, &sanitized:=False)
-            if sanitized {
-                unfilteredEls := this.FindAll(IUIAcondition, scope), filteredEls := []
-                for el in unfilteredEls {
-                    if el.ValidateCondition(condition)
-                        filteredEls.Push(el)
-                }
-                return filteredEls
-            }
-            condition := IUIAcondition
+    /**
+     * Returns all UI Automation elements that satisfy the specified condition.
+     * @param condition The condition to filter with.
+     * @param scope UIA.TreeScope value
+     * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
+     * @param traversalOptions Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values [requires Windows 10 version 1703+]
+     * @param cacheRequest Optional: cache request object
+     * @returns {[UIA.IUIAutomationElement]}
+     */
+    FindAll(condition, scope := 4, startingElement:=0, traversalOptions:=0, cacheRequest:=0) {
+        withOptions := startingElement || traversalOptions
+        if !InStr(Type(condition), "Condition")
+            condition := UIA.CreateCondition(condition)
+        if cacheRequest {
+            if withOptions
+                return this.FindAllWithOptionsBuildCache(cacheRequest, condition, traversalOptions, startingElement, scope)
+            return this.FindAllWithOptions(condition, traversalOptions, startingElement, scope)
         }
-        if IsSet(cacheRequest)
-            return this.FindAllBuildCache(condition, scope, cacheRequest)
-        else if (ComCall(6, this, "int", scope, "ptr", condition, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElementArray(found)
-        return ""
+        if withOptions
+            return this.FindAllWithOptions(condition, traversalOptions, startingElement, scope)
+        return (ComCall(6, this, "int", scope, "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found) : ""
     }
 
     ; Retrieves the first child or descendant element that matches the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    FindFirstBuildCache(condition, scope := 4, cacheRequest?) {
+    FindFirstBuildCache(cacheRequest, condition, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        if (ComCall(7, this, "int", scope, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElement(found)
-        return ""
+        return (ComCall(7, this, "int", scope, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) ? UIA.IUIAutomationElement(found) : ""
     }
 
     ; Returns all UI Automation elements that satisfy the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    FindAllBuildCache(condition, scope := 4, cacheRequest?) {
+    FindAllBuildCache(cacheRequest, condition, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        if (ComCall(8, this, "int", scope, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElementArray(found)
-        return ""
+        return (ComCall(8, this, "int", scope, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found) : ""
     }
 
     ; Retrieves a  UI Automation element with an updated cache.
@@ -1590,7 +1847,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Retrieves the control pattern interface of the specified pattern on this UI Automation element.
     GetPatternAs(patternId, riid) {	; not completed
         if IsNumber(patternId)
-            name := UIA.Pattern.%patternId%
+            name := UIA.Pattern[patternId]
         else
             patternId := UIA.Pattern.%(name := patternId)%
         ComCall(14, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
@@ -1599,14 +1856,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Retrieves the control pattern interface of the specified pattern from the cache of this UI Automation element.
     GetCachedPatternAs(patternId, riid) {	; not completed
-        try {
-            if IsNumber(patternId)
-                name := UIA.Pattern.%patternId%
-            else
-                patternId := UIA.Pattern.%(name := patternId)%
-            ComCall(15, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
-            return UIA.IUIAutomation%name%Pattern(patternObject)
-        }
+        if IsNumber(patternId)
+            name := UIA.Pattern[patternId]
+        else
+            patternId := UIA.Pattern.%(name := patternId)%
+        ComCall(15, this, "int", patternId, "ptr", riid, "ptr*", &patternObject := 0)
+        return UIA.IUIAutomation%name%Pattern(patternObject)
     }
 
     ; Retrieves the IUnknown interface of the specified control pattern on this UI Automation element.
@@ -1615,7 +1870,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     GetPattern(patternId) {
         try {
             if IsNumber(patternId)
-                name := UIA.Pattern.%patternId%
+                name := UIA.Pattern[patternId]
             else
                 patternId := UIA.Pattern.%(name := StrReplace(patternId, "Pattern"))%
             
@@ -1627,14 +1882,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Retrieves from the cache the IUnknown interface of the specified control pattern of this UI Automation element.
     GetCachedPattern(patternId) {
-        try {
-            if IsNumber(patternId)
-                name := UIA.Pattern.%patternId%
-            else
-                patternId := UIA.Pattern.%(name := patternId)%
-            ComCall(17, this, "int", patternId, "ptr*", &patternObject := 0)
-            return UIA.IUIAutomation%name%Pattern(patternObject)
-        }
+        if IsNumber(patternId)
+            name := UIA.Pattern[patternId]
+        else
+            patternId := UIA.Pattern.%(name := patternId)%
+        ComCall(17, this, "int", patternId, "ptr*", &patternObject := 0)
+        return UIA.IUIAutomation%name%Pattern(patternObject)
     }
 
     ; Retrieves from the cache the parent of this UI Automation element.
@@ -1678,7 +1931,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Retrieves the Microsoft UI Automation identifier of the element.
     ; The identifier is unique among sibling elements in a container, and is the same in all instances of the application.
     AutomationId => (ComCall(29, this, "ptr*", &retVal := 0), UIA.BSTR(retVal))
-
+   
     ; Retrieves the class name of the element.
     ; The value of this property is implementation-defined. The property is useful in testing environments.
     ClassName => (ComCall(30, this, "ptr*", &retVal := 0), UIA.BSTR(retVal))
@@ -1898,27 +2151,27 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ;; UIA.IUIAutomationElement7
     ; IUIAutomationCondition, TreeTraversalOptions, UIA.IUIAutomationElement, TreeScope
-    FindFirstWithOptions(condition, traversalOptions:=0, root:=0, scope := 4) {
+    FindFirstWithOptions(condition, root:=0, traversalOptions:=0, scope:=4, cacheRequest:=0) {
+        if cacheRequest
+            return this.FindFirstWithOptionsBuildCache(cacheRequest, condition, root, traversalOptions, scope)
         if (ComCall(110, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
-        throw TargetError("Target element not found.")
     }
-    FindAllWithOptions(condition, traversalOptions:=0, root:=0, scope := 4) {
+    FindAllWithOptions(condition,  root:=0, traversalOptions:=0, scope:=4, cacheRequest:=0) {
+        if cacheRequest
+            return this.FindAllWithOptionsBuildCache(cacheRequest, condition, root, traversalOptions, scope)
         if (ComCall(111, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElementArray(found)
-        throw TargetError("Target elements not found.")
     }
 
     ; TreeScope, IUIAutomationCondition, IUIAutomationCacheRequest, TreeTraversalOptions, UIA.IUIAutomationElement
-    FindFirstWithOptionsBuildCache(condition, traversalOptions:=0, root:=0, scope := 4, cacheRequest?) {
-        if (ComCall(112, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest ?? 0, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
+    FindFirstWithOptionsBuildCache(cacheRequest, condition, root:=0, traversalOptions:=0, scope := 4) {
+        if (ComCall(112, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
-        throw TargetError("Target element not found.")
     }
-    FindAllWithOptionsBuildCache(condition, traversalOptions:=0, root:=0, scope := 4, cacheRequest?) {
-        if (ComCall(113, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest ?? 0, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
+    FindAllWithOptionsBuildCache(cacheRequest, condition, root:=0, traversalOptions:=0, scope := 4) {
+        if (ComCall(113, this, "int", scope, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElementArray(found)
-        throw TargetError("Target elements not found.")
     }
     GetMetadataValue(targetId, metadataId) => (ComCall(114, this, "int", targetId, "int", metadataId, "ptr", returnVal := UIA.ComVar()), returnVal[])
 
@@ -1929,11 +2182,151 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ;; UIA.IUIAutomationElement9
     IsDialog => (ComCall(117, this, "int*", &retVal := 0), retVal)
     CachedIsDialog => (ComCall(118, this, "int*", &retVal := 0), retVal)
+
+    ;; Some aliases for properties from GetPropertyValue
+    /*
+    ClickablePoint => this.GetPropertyValue(UIA.Property.ClickablePoint)
+	IsDockPatternAvailable => this.GetPropertyValue(UIA.Property.IsDockPatternAvailable)
+	IsExpandCollapsePatternAvailable => this.GetPropertyValue(UIA.Property.IsExpandCollapsePatternAvailable)
+	IsGridItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsGridItemPatternAvailable)
+	IsGridPatternAvailable => this.GetPropertyValue(UIA.Property.IsGridPatternAvailable)
+	IsInvokePatternAvailable => this.GetPropertyValue(UIA.Property.IsInvokePatternAvailable)
+	IsMultipleViewPatternAvailable => this.GetPropertyValue(UIA.Property.IsMultipleViewPatternAvailable)
+	IsRangeValuePatternAvailable => this.GetPropertyValue(UIA.Property.IsRangeValuePatternAvailable)
+	IsScrollPatternAvailable => this.GetPropertyValue(UIA.Property.IsScrollPatternAvailable)
+	IsScrollItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsScrollItemPatternAvailable)
+	IsSelectionItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)
+	IsSelectionPatternAvailable => this.GetPropertyValue(UIA.Property.IsSelectionPatternAvailable)
+	IsTablePatternAvailable => this.GetPropertyValue(UIA.Property.IsTablePatternAvailable)
+	IsTableItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsTableItemPatternAvailable)
+	IsTextPatternAvailable => this.GetPropertyValue(UIA.Property.IsTextPatternAvailable)
+	IsTogglePatternAvailable => this.GetPropertyValue(UIA.Property.IsTogglePatternAvailable)
+	IsTransformPatternAvailable => this.GetPropertyValue(UIA.Property.IsTransformPatternAvailable)
+	IsValuePatternAvailable => this.GetPropertyValue(UIA.Property.IsValuePatternAvailable)
+	IsWindowPatternAvailable => this.GetPropertyValue(UIA.Property.IsWindowPatternAvailable)
+	ValueIsReadOnly => this.GetPropertyValue(UIA.Property.ValueIsReadOnly)
+	RangeValueValue => this.GetPropertyValue(UIA.Property.RangeValueValue)
+	RangeValueIsReadOnly => this.GetPropertyValue(UIA.Property.RangeValueIsReadOnly)
+	RangeValueMinimum => this.GetPropertyValue(UIA.Property.RangeValueMinimum)
+	RangeValueMaximum => this.GetPropertyValue(UIA.Property.RangeValueMaximum)
+	RangeValueLargeChange => this.GetPropertyValue(UIA.Property.RangeValueLargeChange)
+	RangeValueSmallChange => this.GetPropertyValue(UIA.Property.RangeValueSmallChange)
+	ScrollHorizontalScrollPercent => this.GetPropertyValue(UIA.Property.ScrollHorizontalScrollPercent)
+	ScrollHorizontalViewSize => this.GetPropertyValue(UIA.Property.ScrollHorizontalViewSize)
+	ScrollVerticalScrollPercent => this.GetPropertyValue(UIA.Property.ScrollVerticalScrollPercent)
+	ScrollVerticalViewSize => this.GetPropertyValue(UIA.Property.ScrollVerticalViewSize)
+	ScrollHorizontallyScrollable => this.GetPropertyValue(UIA.Property.ScrollHorizontallyScrollable)
+	ScrollVerticallyScrollable => this.GetPropertyValue(UIA.Property.ScrollVerticallyScrollable)
+	SelectionSelection => this.GetPropertyValue(UIA.Property.SelectionSelection)
+	SelectionCanSelectMultiple => this.GetPropertyValue(UIA.Property.SelectionCanSelectMultiple)
+	SelectionIsSelectionRequired => this.GetPropertyValue(UIA.Property.SelectionIsSelectionRequired)
+	GridRowCount => this.GetPropertyValue(UIA.Property.GridRowCount)
+	GridColumnCount => this.GetPropertyValue(UIA.Property.GridColumnCount)
+	GridItemRow => this.GetPropertyValue(UIA.Property.GridItemRow)
+	GridItemColumn => this.GetPropertyValue(UIA.Property.GridItemColumn)
+	GridItemRowSpan => this.GetPropertyValue(UIA.Property.GridItemRowSpan)
+	GridItemColumnSpan => this.GetPropertyValue(UIA.Property.GridItemColumnSpan)
+	GridItemContainingGrid => this.GetPropertyValue(UIA.Property.GridItemContainingGrid)
+	DockDockPosition => this.GetPropertyValue(UIA.Property.DockDockPosition)
+	ExpandCollapseExpandCollapseState => this.GetPropertyValue(UIA.Property.ExpandCollapseExpandCollapseState)
+	MultipleViewCurrentView => this.GetPropertyValue(UIA.Property.MultipleViewCurrentView)
+	MultipleViewSupportedViews => this.GetPropertyValue(UIA.Property.MultipleViewSupportedViews)
+	WindowCanMaximize => this.GetPropertyValue(UIA.Property.WindowCanMaximize)
+	WindowCanMinimize => this.GetPropertyValue(UIA.Property.WindowCanMinimize)
+	WindowWindowVisualState => this.GetPropertyValue(UIA.Property.WindowWindowVisualState)
+	WindowWindowInteractionState => this.GetPropertyValue(UIA.Property.WindowWindowInteractionState)
+	WindowIsModal => this.GetPropertyValue(UIA.Property.WindowIsModal)
+	WindowIsTopmost => this.GetPropertyValue(UIA.Property.WindowIsTopmost)
+	SelectionItemIsSelected => this.GetPropertyValue(UIA.Property.SelectionItemIsSelected)
+	SelectionItemSelectionContainer => this.GetPropertyValue(UIA.Property.SelectionItemSelectionContainer)
+	TableRowHeaders => this.GetPropertyValue(UIA.Property.TableRowHeaders)
+	TableColumnHeaders => this.GetPropertyValue(UIA.Property.TableColumnHeaders)
+	TableRowOrColumnMajor => this.GetPropertyValue(UIA.Property.TableRowOrColumnMajor)
+	TableItemRowHeaderItems => this.GetPropertyValue(UIA.Property.TableItemRowHeaderItems)
+	TableItemColumnHeaderItems => this.GetPropertyValue(UIA.Property.TableItemColumnHeaderItems)
+	ToggleToggleState => this.GetPropertyValue(UIA.Property.ToggleToggleState)
+	TransformCanMove => this.GetPropertyValue(UIA.Property.TransformCanMove)
+	TransformCanResize => this.GetPropertyValue(UIA.Property.TransformCanResize)
+	TransformCanRotate => this.GetPropertyValue(UIA.Property.TransformCanRotate)
+	IsLegacyIAccessiblePatternAvailable => this.GetPropertyValue(UIA.Property.IsLegacyIAccessiblePatternAvailable)
+	LegacyIAccessibleChildId => this.GetPropertyValue(UIA.Property.LegacyIAccessibleChildId)
+	LegacyIAccessibleName => this.GetPropertyValue(UIA.Property.LegacyIAccessibleName)
+	LegacyIAccessibleValue => this.GetPropertyValue(UIA.Property.LegacyIAccessibleValue)
+	LegacyIAccessibleDescription => this.GetPropertyValue(UIA.Property.LegacyIAccessibleDescription)
+	LegacyIAccessibleRole => this.GetPropertyValue(UIA.Property.LegacyIAccessibleRole)
+	LegacyIAccessibleState => this.GetPropertyValue(UIA.Property.LegacyIAccessibleState)
+	LegacyIAccessibleHelp => this.GetPropertyValue(UIA.Property.LegacyIAccessibleHelp)
+	LegacyIAccessibleKeyboardShortcut => this.GetPropertyValue(UIA.Property.LegacyIAccessibleKeyboardShortcut)
+	LegacyIAccessibleSelection => this.GetPropertyValue(UIA.Property.LegacyIAccessibleSelection)
+	LegacyIAccessibleDefaultAction => this.GetPropertyValue(UIA.Property.LegacyIAccessibleDefaultAction)
+	IsItemContainerPatternAvailable => this.GetPropertyValue(UIA.Property.IsItemContainerPatternAvailable)
+	IsVirtualizedItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsVirtualizedItemPatternAvailable)
+	IsSynchronizedInputPatternAvailable => this.GetPropertyValue(UIA.Property.IsSynchronizedInputPatternAvailable)
+	IsObjectModelPatternAvailable => this.GetPropertyValue(UIA.Property.IsObjectModelPatternAvailable)
+	AnnotationAnnotationTypeId => this.GetPropertyValue(UIA.Property.AnnotationAnnotationTypeId)
+	AnnotationAnnotationTypeName => this.GetPropertyValue(UIA.Property.AnnotationAnnotationTypeName)
+	AnnotationAuthor => this.GetPropertyValue(UIA.Property.AnnotationAuthor)
+	AnnotationDateTime => this.GetPropertyValue(UIA.Property.AnnotationDateTime)
+	AnnotationTarget => this.GetPropertyValue(UIA.Property.AnnotationTarget)
+	IsAnnotationPatternAvailable => this.GetPropertyValue(UIA.Property.IsAnnotationPatternAvailable)
+	IsTextPattern2Available => this.GetPropertyValue(UIA.Property.IsTextPattern2Available)
+	StylesStyleId => this.GetPropertyValue(UIA.Property.StylesStyleId)
+	StylesStyleName => this.GetPropertyValue(UIA.Property.StylesStyleName)
+	StylesFillColor => this.GetPropertyValue(UIA.Property.StylesFillColor)
+	StylesFillPatternStyle => this.GetPropertyValue(UIA.Property.StylesFillPatternStyle)
+	StylesShape => this.GetPropertyValue(UIA.Property.StylesShape)
+	StylesFillPatternColor => this.GetPropertyValue(UIA.Property.StylesFillPatternColor)
+	StylesExtendedProperties => this.GetPropertyValue(UIA.Property.StylesExtendedProperties)
+	IsStylesPatternAvailable => this.GetPropertyValue(UIA.Property.IsStylesPatternAvailable)
+	IsSpreadsheetPatternAvailable => this.GetPropertyValue(UIA.Property.IsSpreadsheetPatternAvailable)
+	SpreadsheetItemFormula => this.GetPropertyValue(UIA.Property.SpreadsheetItemFormula)
+	SpreadsheetItemAnnotationObjects => this.GetPropertyValue(UIA.Property.SpreadsheetItemAnnotationObjects)
+	SpreadsheetItemAnnotationTypes => this.GetPropertyValue(UIA.Property.SpreadsheetItemAnnotationTypes)
+	IsSpreadsheetItemPatternAvailable => this.GetPropertyValue(UIA.Property.IsSpreadsheetItemPatternAvailable)
+	Transform2CanZoom => this.GetPropertyValue(UIA.Property.Transform2CanZoom)
+	IsTransformPattern2Available => this.GetPropertyValue(UIA.Property.IsTransformPattern2Available)
+	IsTextChildPatternAvailable => this.GetPropertyValue(UIA.Property.IsTextChildPatternAvailable)
+	IsDragPatternAvailable => this.GetPropertyValue(UIA.Property.IsDragPatternAvailable)
+	DragIsGrabbed => this.GetPropertyValue(UIA.Property.DragIsGrabbed)
+	DragDropEffect => this.GetPropertyValue(UIA.Property.DragDropEffect)
+	DragDropEffects => this.GetPropertyValue(UIA.Property.DragDropEffects)
+	IsDropTargetPatternAvailable => this.GetPropertyValue(UIA.Property.IsDropTargetPatternAvailable)
+	DropTargetDropTargetEffect => this.GetPropertyValue(UIA.Property.DropTargetDropTargetEffect)
+	DropTargetDropTargetEffects => this.GetPropertyValue(UIA.Property.DropTargetDropTargetEffects)
+	DragGrabbedItems => this.GetPropertyValue(UIA.Property.DragGrabbedItems)
+	Transform2ZoomLevel => this.GetPropertyValue(UIA.Property.Transform2ZoomLevel)
+	Transform2ZoomMinimum => this.GetPropertyValue(UIA.Property.Transform2ZoomMinimum)
+	Transform2ZoomMaximum => this.GetPropertyValue(UIA.Property.Transform2ZoomMaximum)
+	IsTextEditPatternAvailable => this.GetPropertyValue(UIA.Property.IsTextEditPatternAvailable)
+	IsCustomNavigationPatternAvailable => this.GetPropertyValue(UIA.Property.IsCustomNavigationPatternAvailable)
+	FillColor => this.GetPropertyValue(UIA.Property.FillColor)
+	OutlineColor => this.GetPropertyValue(UIA.Property.OutlineColor)
+	FillType => this.GetPropertyValue(UIA.Property.FillType)
+	VisualEffects => this.GetPropertyValue(UIA.Property.VisualEffects)
+	OutlineThickness => this.GetPropertyValue(UIA.Property.OutlineThickness)
+	CenterPoint => this.GetPropertyValue(UIA.Property.CenterPoint)
+	Rotation => this.GetPropertyValue(UIA.Property.Rotation)
+	Size => this.GetPropertyValue(UIA.Property.Size)
+	IsSelectionPattern2Available => this.GetPropertyValue(UIA.Property.IsSelectionPattern2Available)
+	Selection2FirstSelectedItem => this.GetPropertyValue(UIA.Property.Selection2FirstSelectedItem)
+	Selection2LastSelectedItem => this.GetPropertyValue(UIA.Property.Selection2LastSelectedItem)
+	Selection2CurrentSelectedItem => this.GetPropertyValue(UIA.Property.Selection2CurrentSelectedItem)
+	Selection2ItemCount => this.GetPropertyValue(UIA.Property.Selection2ItemCount)
+    */
 }
 
 class IUIAutomationElementArray extends UIA.IUIAutomationBase {
+    /**
+     * Element[i] returns the i-th element.
+     * Element[-i] returns the i-th last element: Element[-1] will return the last element.
+     */
     __Item[index] {
-        get => this.GetElement(index-1)
+        get {
+            if index>0
+                return this.GetElement(index-1)
+            else
+                return this.GetElement(this.Length+index)
+        }
     }
     __Enum(varCount) {
         maxLen := this.Length-1, i := 0
@@ -1956,6 +2349,7 @@ class IUIAutomationElementArray extends UIA.IUIAutomationBase {
     Length => (ComCall(3, this, "int*", &length := 0), length)
 
     ; Retrieves a Microsoft UI Automation element from the collection.
+    ; Index is 0-based
     GetElement(index) => (ComCall(4, this, "int", index, "ptr*", &element := 0), UIA.IUIAutomationElement(element))
 }
 
@@ -1988,22 +2382,22 @@ class IUIAutomationTreeWalker extends UIA.IUIAutomationBase {
     NormalizeElement(element) => (ComCall(8, this, "ptr", element, "ptr*", &normalized := 0), UIA.IUIAutomationElement(normalized))
 
     ; Retrieves the parent element of the specified UI Automation element, and caches properties and control patterns.
-    GetParentElementBuildCache(element, cacheRequest) => (ComCall(9, this, "ptr", element, "ptr", cacheRequest, "ptr*", &parent := 0), UIA.IUIAutomationElement(parent))
+    GetParentElementBuildCache(cacheRequest, element) => (ComCall(9, this, "ptr", element, "ptr", cacheRequest, "ptr*", &parent := 0), UIA.IUIAutomationElement(parent))
 
     ; Retrieves the first child element of the specified UI Automation element, and caches properties and control patterns.
-    GetFirstChildElementBuildCache(element, cacheRequest) => (ComCall(10, this, "ptr", element, "ptr", cacheRequest, "ptr*", &first := 0), UIA.IUIAutomationElement(first))
+    GetFirstChildElementBuildCache(cacheRequest, element) => (ComCall(10, this, "ptr", element, "ptr", cacheRequest, "ptr*", &first := 0), UIA.IUIAutomationElement(first))
 
     ; Retrieves the last child element of the specified UI Automation element, and caches properties and control patterns.
-    GetLastChildElementBuildCache(element, cacheRequest) => (ComCall(11, this, "ptr", element, "ptr", cacheRequest, "ptr*", &last := 0), UIA.IUIAutomationElement(last))
+    GetLastChildElementBuildCache(cacheRequest, element) => (ComCall(11, this, "ptr", element, "ptr", cacheRequest, "ptr*", &last := 0), UIA.IUIAutomationElement(last))
 
     ; Retrieves the next sibling element of the specified UI Automation element, and caches properties and control patterns.
-    GetNextSiblingElementBuildCache(element, cacheRequest) => (ComCall(12, this, "ptr", element, "ptr", cacheRequest, "ptr*", &next := 0), UIA.IUIAutomationElement(next))
+    GetNextSiblingElementBuildCache(cacheRequest, element) => (ComCall(12, this, "ptr", element, "ptr", cacheRequest, "ptr*", &next := 0), UIA.IUIAutomationElement(next))
 
     ; Retrieves the previous sibling element of the specified UI Automation element, and caches properties and control patterns.
-    GetPreviousSiblingElementBuildCache(element, cacheRequest) => (ComCall(13, this, "ptr", element, "ptr", cacheRequest, "ptr*", &previous := 0), UIA.IUIAutomationElement(previous))
+    GetPreviousSiblingElementBuildCache(cacheRequest, element) => (ComCall(13, this, "ptr", element, "ptr", cacheRequest, "ptr*", &previous := 0), UIA.IUIAutomationElement(previous))
 
     ; Retrieves the ancestor element nearest to the specified Microsoft UI Automation element in the tree view, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    NormalizeElementBuildCache(element, cacheRequest) => (ComCall(14, this, "ptr", element, "ptr", cacheRequest, "ptr*", &normalized := 0), UIA.IUIAutomationElement(normalized))
+    NormalizeElementBuildCache(cacheRequest, element) => (ComCall(14, this, "ptr", element, "ptr", cacheRequest, "ptr*", &normalized := 0), UIA.IUIAutomationElement(normalized))
 
     ; Retrieves the condition that defines the view of the UI Automation tree. This property is read-only.
     ; The condition that defines the view. This is the interface that was passed to CreateTreeWalker.

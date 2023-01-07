@@ -9,7 +9,7 @@ if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
 	ExitApp
 }
-listEl := explorerEl.FindFirst({Type:"List"})
+listEl := explorerEl.FindElement({Type:"List"})
 
 selectionPattern := listEl.SelectionPattern ; Getting a pattern this way will get exactly that pattern. By default, GetCurrentPattern() will get the highest pattern available (for example SelectionPattern2 might also be available).
 MsgBox "SelectionPattern properties: "
@@ -21,7 +21,7 @@ currentSelections := ""
 for index, selection in currentSelectionEls
 	currentSelections .= index ": " selection.Dump() "`n"
 
-windowsListItem := explorerEl.FindFirst({Name:"Windows", Type:"ListItem"})
+windowsListItem := explorerEl.FindElement({Name:"Windows", Type:"ListItem"})
 MsgBox "ListItemPattern properties for Windows folder list item:"
 	. "`nCurrentIsSelected: " windowsListItem.IsSelected
 	. "`nCurrentSelectionContainer: " windowsListItem.SelectionContainer.Dump()
@@ -29,7 +29,7 @@ MsgBox "ListItemPattern properties for Windows folder list item:"
 MsgBox "Press OK to select `"Windows`" folder list item."
 windowsListItem.Select()
 MsgBox "Press OK to add to selection `"Program Files`" folder list item."
-explorerEl.FindFirst({Name:"Program Files", Type:"ListItem"}).AddToSelection()
+explorerEl.FindElement({Name:"Program Files", Type:"ListItem"}).AddToSelection()
 MsgBox "Press OK to remove selection from `"Windows`" folder list item."
 windowsListItem.RemoveFromSelection()
 

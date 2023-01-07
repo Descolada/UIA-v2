@@ -7,7 +7,7 @@ Run "notepad.exe"
 ;WinActivate, "ahk_exe notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 NotepadEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
-editEl := NotepadEl.FindFirst([{Type:"Document"}, {Type:"Edit"}]) ; Get the Edit or Document element (differs between UIAutomation versions)
+editEl := NotepadEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) ; Get the Edit or Document element (differs between UIAutomation versions)
 editEl.Value := lorem ; Set the text to our sample text
 textPattern := editEl.TextPattern
 

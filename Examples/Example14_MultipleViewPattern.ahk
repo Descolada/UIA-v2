@@ -8,7 +8,7 @@ if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
 	ExitApp
 }
-listEl := explorerEl.FindFirst({Type:"List"})
+listEl := explorerEl.FindElement({Type:"List"})
 
 MsgBox "MultipleView properties: "
 	. "`nCurrentCurrentView: " (currentView := listEl.CurrentView)

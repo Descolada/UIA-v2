@@ -8,15 +8,15 @@ if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
 	ExitApp
 }
-fileEl := explorerEl.FindFirst({Type:"Button", Name:"File tab"})
+fileEl := explorerEl.FindElement({Type:"Button", Name:"File tab"})
 MsgBox "Invoke pattern doesn't have any properties. Press OK to call Invoke on the `"File`" button..."
 fileEl.Invoke()
 
 Sleep 1000
 MsgBox "Press OK to navigate to the View tab to test TogglePattern..." ; Not part of this demonstration
-explorerEl.FindFirst({Type:"TabItem", Name:"View"}).Select() ; Not part of this demonstration
+explorerEl.FindElement({Type:"TabItem", Name:"View"}).Select() ; Not part of this demonstration
 
-hiddenItemsCB := explorerEl.FindFirst({Type:"CheckBox", Name:"Hidden items"})
+hiddenItemsCB := explorerEl.FindElement({Type:"CheckBox", Name:"Hidden items"})
 Sleep 500
 MsgBox "TogglePattern properties for `"Hidden items`" checkbox: "
 	. "`nCurrentToggleState: " hiddenItemsCB.ToggleState

@@ -6,7 +6,6 @@
     element for the starting element with ElementFromHandle. For that we can use the same notation 
     as for any other AHK function.
 */
-
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 npEl := UIA.ElementFromHandle("ahk_exe notepad.exe") ; Get the element for the Notepad window
