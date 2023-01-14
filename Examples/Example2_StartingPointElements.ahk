@@ -25,10 +25,9 @@ MsgBox "Edit control element with all descendants: `n`n" editEl.DumpAll()
     element for the renderer control. This special case exists because Chromium-based (browser-based)
     applications frequently have the problem on not being UI-accessible from the main window.
 
-    For this example you need to have VSCode, Skype, Chrome or Edge open (all are Chromium apps).
+    For this example you need to have Chrome open.
 */
-chromiumEl := UIA.ElementFromChromium(WinExist("ahk_exe vscode.exe") || WinExist("ahk_exe skype.exe") || WinExist("ahk_exe msedge.exe")
-    || WinExist("ahk_exe chrome.exe"))
+chromiumEl := UIA.ElementFromChromium("ahk_exe chrome.exe")
 MsgBox "Chromium control element without descendants: `n`n" chromiumEl.Dump()
 
 /*

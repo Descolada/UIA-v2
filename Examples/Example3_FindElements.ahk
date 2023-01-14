@@ -29,7 +29,7 @@ MsgBox "The third MenuItem element: " npEl.FindElement({Type:"MenuItem", i:3}).H
 
 ; By default, FindElement(s) and WaitElement looks for exact matches. To look for partial matches or by
 ; RegEx, then supply "matchmode" or "mm" property with the UIA.MatchMode value (same as AHK-s TitleMatchMode).
-MsgBox "The first element with Name containing 'Bar': " npEl.FindElement({Name:"Bar", mm:2}).Highlight().Dump()
+MsgBox "The first element with Name containing 'Bar': " npEl.FindElement({Name:"Bar", mm:"Substring"}).Highlight().Dump()
 
 ; Search case-sensitivity can be changed with "casesensitive" or "c" property, which by default is case-sensitive:
 MsgBox "The first element with Name 'file', case-insensitive: " npEl.FindElement({Name:"file", cs:0}).Highlight().Dump()
@@ -38,7 +38,7 @@ MsgBox "The first element with Name 'file', case-insensitive: " npEl.FindElement
 MsgBox "The first MenuItem element with Name not 'System': " npEl.FindElement({Type:"MenuItem", not:{Name:"System"}}).Highlight().Dump()
 
 ; FindElement can traverse the tree in reverse, starting the search from the end:
-MsgBox "The first MenuItem element from the end: " npEl.FindElement({Type:"MenuItem"},,,UIA.TreeTraversalOptions.LastToFirstOrder).Highlight().Dump()
+MsgBox "The first MenuItem element from the end: " npEl.FindElement({Type:"MenuItem", order:"LastToFirstOrder"}).Highlight().Dump()
 
 
 ; FindElements works like FindElement, but returns all the matches:

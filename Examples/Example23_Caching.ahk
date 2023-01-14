@@ -22,9 +22,9 @@ Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 
 ; Get element and also build the cache
-npEl:= UIA.ElementFromHandle("ahk_exe notepad.exe",0, cacheRequest)
+npEl:= UIA.ElementFromHandle("ahk_exe notepad.exe", cacheRequest)
 ; We now have a cached "snapshot" of the window from which we can access our desired elements faster.
-MsgBox npEl.CachedDumpAll()
+MsgBox npEl.CachedDump()
 MsgBox npEl.CachedWindowPattern.CachedCanMaximize
 
 ExitApp

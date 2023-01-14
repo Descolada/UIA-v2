@@ -11,7 +11,6 @@ if !explorerEl {
 }
 listEl := explorerEl.FindElement({Type:"List"})
 
-selectionPattern := listEl.SelectionPattern ; Getting a pattern this way will get exactly that pattern. By default, GetCurrentPattern() will get the highest pattern available (for example SelectionPattern2 might also be available).
 MsgBox "SelectionPattern properties: "
 	. "`nCurrentCanSelectMultiple: " listEl.CanSelectMultiple
 	. "`nCurrentIsSelectionRequired: " listEl.IsSelectionRequired

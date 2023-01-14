@@ -17,5 +17,5 @@ documentEl.Highlight()
 documentEl.Value := "Lorem ipsum" 
 
 ; This could also be chained together as: 
-; UIA.ElementFromHandle("ahk_exe notepad.exe").FindFirst([{Type:"Document"}, {Type:"Edit"}]).Highlight(2000).Value := "Lorem ipsum"
+; UIA.ElementFromHandle("ahk_exe notepad.exe").FindFirst([{Type:"Document"}, {Type:"Edit"}]).Highlight().Value := "Lorem ipsum"
 ExitApp
