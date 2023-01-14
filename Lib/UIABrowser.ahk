@@ -236,13 +236,11 @@ class UIA_Mozilla extends UIA_Browser {
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
-			ControlFocus "", this.BrowserId
-			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Enter}", , this.BrowserId
+			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
 		}
 	}
 
 	JSExecute(js) {
-		ControlFocus "", this.BrowserId
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
 		ControlSend "{ctrl down}{shift down}k{ctrl up}{shift up}", , this.BrowserId
 		this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"})	
@@ -250,9 +248,11 @@ class UIA_Mozilla extends UIA_Browser {
 		A_Clipboard := js
 		WinActivate this.BrowserId
 		WinWaitActive this.BrowserId
-		Send "{ctrl down}v{ctrl up}{enter down}{enter up}"
+		ControlSend "{ctrl down}v{ctrl up}", , this.BrowserId
+		Sleep 20
+		ControlSend "{ctrl down}{enter}{ctrl up}", , this.BrowserId
 		sleep 40
-		Send "{ctrl down}{shift down}i{ctrl up}{shift up}"
+		ControlSend "{ctrl down}{shift down}i{ctrl up}{shift up}", , this.BrowserId
 		A_Clipboard := ClipSave
 	}
 
@@ -260,8 +260,10 @@ class UIA_Mozilla extends UIA_Browser {
 	GetAlertText(closeAlert:=True, timeOut:=3000) {
 		this.GetCurrentDocumentElement()
 		local startTime := A_TickCount
-		alertEl := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
-		while (!(IsObject(dialogEl := alertEl.FindElement({AutomationId:"commonDialogWindow"})) && IsObject(OKBut := dialogEl.FindFirst(this.ButtonControlCondition))) && ((A_tickCount - startTime) < timeOut))
+		if !(alertEl := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement)))
+			return
+		
+		while (!((dialogEl := alertEl.FindElement({AutomationId:"commonDialogWindow"})) && (OKBut := dialogEl.FindFirst(this.ButtonControlCondition))) && ((A_tickCount - startTime) < timeOut))
 			Sleep 100
 		try text := dialogEl.FindFirst(this.TextControlCondition).Name
 		if closeAlert
@@ -271,7 +273,7 @@ class UIA_Mozilla extends UIA_Browser {
 
 	CloseAlert() {
 		this.GetCurrentDocumentElement()
-		try UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement)).FindFirst("AutomationId=commonDialogWindow").FindFirst(this.ButtonControlCondition).Click()
+		try UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement)).FindElement({AutomationId:"commonDialogWindow"}).FindFirst(this.ButtonControlCondition).Click()
 	}
 
 	; Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
@@ -689,8 +691,6 @@ class UIA_Browser {
 	}
 
 	Send(text) {
-		if (this.BrowserType = "Mozilla")
-			ControlFocus "", "ahk_id" this.BrowserId
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Enter}" , this.BrowserId
 		ControlSend text, , this.BrowserId
 	}
