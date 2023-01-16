@@ -34,10 +34,19 @@
 	- Get methods vs property getter: currently we use properties when the item stores data, fetching the data is "cheap" and when it doesn't have side-effects, and in computationally expensive cases use Get...(). 
 	- should ElementFromHandle etc methods have activateChromiumAccessibility set to True or False? Currently is True, because Chromium apps are very common, and checking whether its on should be relatively fast.
 
+    Design choices:
+    - ElementArrays are converted to AHK arrays automatically. This is because speed-testing has shown
+      that they are either equal, or AHK array comes on top by far. The situation where it loses to the
+      native one is when we need to get exactly one element from the array and won't use it more. This
+      is optimized by using the native ElementArray in cases of Element[integer].
+
     To-do:
     - Better error handling
 */
 global IUIAutomationMaxVersion := 7
+
+if !A_IsCompiled && A_LineFile = A_ScriptFullPath
+    UIA.Viewer()
 
 class UIA {
 /**
@@ -98,6 +107,7 @@ static __PropertyValueGetter := {get: (obj, value) => UIA.__PropertyFromValue(ob
 static MatchMode := {StartsWith:1, Substring:2, Exact:3, RegEx:"RegEx"}.DefineProp("__Item", this.__PropertyValueGetter)
 
 static ControlType := {Button:50000,Calendar:50001,CheckBox:50002,ComboBox:50003,Edit:50004,Hyperlink:50005,Image:50006,ListItem:50007,List:50008,Menu:50009,MenuBar:50010,MenuItem:50011,ProgressBar:50012,RadioButton:50013,ScrollBar:50014,Slider:50015,Spinner:50016,StatusBar:50017,Tab:50018,TabItem:50019,Text:50020,ToolBar:50021,ToolTip:50022,Tree:50023,TreeItem:50024,Custom:50025,Group:50026,Thumb:50027,DataGrid:50028,DataItem:50029,Document:50030,SplitButton:50031,Window:50032,Pane:50033,Header:50034,HeaderItem:50035,Table:50036,TitleBar:50037,Separator:50038,SemanticZoom:50039,AppBar:50040}.DefineProp("__Item", this.__PropertyValueGetter)
+static Type := UIA.ControlType
 
 static Pattern := {Invoke: 10000, Selection: 10001, Value: 10002, RangeValue: 10003, Scroll: 10004, ExpandCollapse: 10005, Grid: 10006, GridItem: 10007, MultipleView: 10008, Window: 10009, SelectionItem: 10010, Dock: 10011, Table: 10012, TableItem: 10013, Text: 10014, Toggle: 10015, Transform: 10016, ScrollItem: 10017, LegacyIAccessible: 10018, ItemContainer: 10019, VirtualizedItem: 10020, SynchronizedInput: 10021, ObjectModel: 10022, Annotation: 10023, Text2:10024, Styles: 10025, Spreadsheet: 10026, SpreadsheetItem: 10027, Transform2: 10028, TextChild: 10029, Drag: 10030, DropTarget: 10031, TextEdit: 10032, CustomNavigation: 10033, Selection2: 10034}.DefineProp("__Item", this.__PropertyValueGetter)
 
@@ -212,6 +222,16 @@ static BSTR(ptr) {
         s := StrGet(ptr), DllCall("oleaut32\SysFreeString", "ptr", ptr)
         return s
     }
+}
+static SafeArrayToAHKArray(sArr) {
+    local _, v, ret := []
+    if IsInteger(sArr)
+        sArr := ComValue(0x2003, sArr)
+    for _, v in sArr
+        ret.Push(v)
+    ret.DefineProp("__Value", {value:sArr})
+    ret.DefineProp("ptr", {value:sArr.ptr})
+    return ret
 }
 ; X can be pt64 as well, in which case Y should be omitted
 static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
@@ -366,6 +386,47 @@ static RuntimeIdFromString(str) {
 }
 
 /**
+ * Filters elements from an element array if "function" evaluates to True
+ * @param elementArray Array of elements
+ * @param function A function that accepts one parameter (an element) and validates it against
+ *     some condition.
+ * @returns {Array}
+ */
+static Filter(elementArray, function) {
+    if !InStr(Type(elementArray), "Array")
+        throw TypeError("elementArray must be an Array or IUIAutomationElementArray", -1)
+    ret := []
+    for el in elementArray
+        if function(el)
+            ret.Push(el)
+    return ret
+}
+
+/**
+ * Checks whether two rectangles intersect and if they do, then returns an object containing the
+ * rectangle of the intersection: {l:left, t:top, r:right, b:bottom}
+ * Note 1: Overlapping area must be at least 1 unit. 
+ * Note 2: Second rectangle starting at the edge of the first doesn't count as intersecting:
+ *     {l:100, t:100, r:200, b:200} does not intersect {l:200, t:100, 400, 400}
+ * @param l1 x-coordinate of the upper-left corner of the first rectangle
+ * @param t1 y-coordinate of the upper-left corner of the first rectangle
+ * @param r1 x-coordinate of the lower-right corner of the first rectangle
+ * @param b1 y-coordinate of the lower-right corner of the first rectangle
+ * @param l2 x-coordinate of the upper-left corner of the second rectangle
+ * @param t2 y-coordinate of the upper-left corner of the second rectangle
+ * @param r2 x-coordinate of the lower-right corner of the second rectangle
+ * @param b2 y-coordinate of the lower-right corner of the second rectangle
+ * @returns {Object}
+ */
+static IntersectRect(l1, t1, r1, b1, l2, t2, r2, b2) {
+	rect1 := Buffer(16), rect2 := Buffer(16), rectOut := Buffer(16)
+	NumPut("int", l1, "int", t1, "int", r1, "int", b1, rect1)
+	NumPut("int", l2, "int", t2, "int", r2, "int", b2, rect2)
+	if DllCall("user32\IntersectRect", "Ptr", rectOut, "Ptr", rect1, "Ptr", rect2)
+		return {l:NumGet(rectOut, 0, "Int"), t:NumGet(rectOut, 4, "Int"), r:NumGet(rectOut, 8, "Int"), b:NumGet(rectOut, 12, "Int")}
+}
+
+/**
  * Create a property condition from an AHK object
  * @param conditionObject Object or Array that contains property conditions. 
  *     Single property condition consists of an object where the key is the property name, and value is the property value:
@@ -434,7 +495,12 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
         return UIA.TrueCondition
     arr := ComObjArray(0xd, count), i := 0
     for k, v in obj {
-        if IsObject(v) {
+        if k = "RuntimeId" && !v.HasOwnProp("ptr") {
+            cArr := ComObjArray(3, v.Length)
+            for index, value in v
+                cArr[index-1] := value
+            v := cArr
+        } else if IsObject(v) && !(SubStr(Type(v), 1, 6) = "ComObj") && !v.HasOwnProp("ptr") {
             t := UIA.__ConditionBuilder(v, &nonUIAMatchMode?)
             if k = "not" || operator = "not"
                 t := UIA.CreateNotCondition(t)
@@ -576,6 +642,31 @@ static ElementFromPoint(x?, y?, cacheRequest:=0, &activateChromiumAccessibility:
     if cacheRequest
         return UIA.ElementFromPointBuildCache(cacheRequest, pt64)
     return (ComCall(7, this, "int64", pt64, "ptr*", &element := 0), element?UIA.IUIAutomationElement(element):"")
+}
+
+static SmallestElementFromPoint(x?, y?, element?, cacheRequest:=0) {
+    if !cacheRequest {
+        cacheRequest := UIA.CreateCacheRequest()
+        cacheRequest.TreeScope := 5
+        cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
+    } 
+    cacheRequest.AddProperty("BoundingRectangle")
+    if !IsSet(element)
+        element := UIA.ElementFromPoint(x?, y?, cacheRequest)
+    if !(IsSet(x) && IsSet(y))
+        DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
+    lastArr := [element]
+    Loop {
+        nextArr := []
+        for el in lastArr {
+            inEl := UIA.Filter(el.CachedChildren, (fEl) => (rect := fEl.CachedBoundingRectangle, rect.l<=x && rect.r >=x && rect.t <= y && rect.b >= y))
+            for e in inEl
+                nextArr.Push(e)
+        }
+        if nextArr.Length = 0
+            return lastArr[1]
+        lastArr := nextArr
+    }
 }
 
 /**
@@ -943,7 +1034,7 @@ static ReservedMixedAttributeValue {
 static ElementFromIAccessible(accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(56, this, "ptr", accessible, "int", accessible.childId, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(56, this, "ptr", ComObjValue(accessible), "int", childId, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
 
 ; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-static ElementFromIAccessibleBuildCache(cacheRequest, accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(57, this, "ptr", accessible.oAcc, "int", accessible.childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(57, this, "ptr", accessible, "int", childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
+static ElementFromIAccessibleBuildCache(cacheRequest, accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(57, this, "ptr", accessible.accessible, "int", accessible.childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(57, this, "ptr", accessible, "int", childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
 
 ; ---------- IUIAutomation2 ----------
 
@@ -1086,7 +1177,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Enables array-like use of UIA elements to access child elements. 
      * If value is an integer then the nth corresponding child will be returned. 
+     * A negative integer return the nth last child
      *     Eg. Element[2] ==> returns second child of Element
+     *         Element[-1] ==> returns the last child of Element
      * If value is a string, then it will be parsed as a comma-separated path which
      * allows both indexes (nth child), traversing tree sideways with +-, and Type values.
      *     Eg. Element["+1,Button2,4"] ==> gets next sibling element in tree, then from its children
@@ -1102,9 +1195,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             for _, param in params {
                 if IsObject(param)
                     el := el.FindElement(param, 2)
-                else if IsDigit(String(param))
-                    el := el.GetChildren()[param]
-                else if (Type(param) = "String") || (param < 0)
+                else if IsInteger(param) || IsDigit(String(param)) {
+                    ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
+                    if found {
+                        arr := UIA.IUIAutomationElementArray(found)
+                        el := arr.GetElement(param < 0 ? arr.Length+param : param-1)
+                    }
+                } else if (Type(param) = "String") || (param < 0)
                     el := el.FindByPath(param) 
                 else
                     TypeError("Invalid item type!", -1)
@@ -1205,6 +1302,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Object} {x: screen x-coordinate, y: screen y-coordinate, w: width, h: height}
      */
     Location => (br := this.BoundingRectangle, {x: br.l, y: br.t, w: br.r-br.l, h: br.b-br.t})
+    CachedLocation => (br := this.CachedBoundingRectangle, {x: br.l, y: br.t, w: br.r-br.l, h: br.b-br.t})
 
 	; Gets or sets the current value of the element, if the ValuePattern is supported.
 	Value { 
@@ -1221,7 +1319,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Checks whether this object still exists
     Exists {
         get {
-			try return (this.Name this.Value (this.BoundingRectangle.t ? 1 : "")) != ""
+			try return (((br := this.BoundingRectangle) && br.t ? 1 : this.IsOffscreen ? "" : 1)) != ""
 			return 1
         }
     }
@@ -1298,7 +1396,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Returns the children of this element, optionally filtering by a condition
      * @param c Optional UIA condition object
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Children.
-     * @returns {UIA.IUIAutomationElementArray}
+     * @returns {Array}
      */
 	GetChildren(c?, scope:=0x2) => this.FindAll(c ?? UIA.TrueCondition, scope)
 
@@ -1315,10 +1413,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 	/**
      * Returns info about the element: ControlType, Name, Value, LocalizedControlType, AutomationId, AcceleratorKey. 
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
+     * @param delimiter Optional delimiter to separate the returned properties. Default is space.
      * @param maxDepth Optional maximal depth of tree levels traversal. Default is unlimited.
      * @returns {String}
      */
-	Dump(scope:=1, maxDepth:=-1) {
+	Dump(scope:=1, delimiter:=" ", maxDepth:=-1) {
         local out, n, oChild
         static cacheRequest := 0
         ; Speed-testing has shown that DumpAll with Current properties is about 1,5 to 4x slower than with Cached properties.
@@ -1327,10 +1426,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         ; and Cached properties if dumping Descendants. This gives the maximum performance.
         if scope < 4 {
             if scope&1
-                out := this.CurrentDump() "`n"
+                out := this.CurrentDump(delimiter) "`n"
             if scope&2 {
                 for n, oChild in this.GetChildren()
-                    out .= n ": " oChild.CurrentDump() "`n"
+                    out .= n ": " oChild.CurrentDump(delimiter) "`n"
             }
         } else {
             if !cacheRequest {
@@ -1349,12 +1448,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 cacheRequest.AddProperty("AcceleratorKey")
             }
             ; Build the cache for the set scope
-            el := this.FindFirstBuildCache(cacheRequest, UIA.TrueCondition, scope)
+            try el := this.CachedChildren.Length
+            el := el ? this : this.FindFirstBuildCache(cacheRequest, UIA.TrueCondition, scope)
             if scope&1
-                out := el.CachedDump() "`n"
+                out := el.CachedDump(delimiter) "`n"
             if scope&2 {
                 for n, oChild in el.CachedChildren
-                    out .= n ": " oChild.CachedDump() "`n"
+                    out .= n ": " oChild.CachedDump(delimiter) "`n"
             }
             if scope&4
                 return RTrim(RecurseTree(el, out), "`n")
@@ -1369,49 +1469,21 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     return tree
             }
             For i, child in element.CachedChildren {
-                tree .= path (path?",":"") i ": " child.CachedDump() "`n"
+                tree .= path (path?",":"") i ":" delimiter child.CachedDump(delimiter) "`n"
                 tree := RecurseTree(child, tree, path (path?",":"") i)
             }
             return tree
         }
 	}
-    /*
-	Dump(scope:=1, maxDepth:=-1, cacheRequest:=0) { 
-        local out := "", n, oChild, ctrlType
-        if scope&1
-            out := (cacheRequest ? this.CachedDump() : this.CurrentDump()) "`n"
-        if scope&4
-            return RTrim(RecurseTree(this, out), "`n")
-        if scope&2 {
-            for n, oChild in this.Children
-                out .= n ": " oChild.Dump() "`n"
-        }
-        return RTrim(out, "`n")
-
-        RecurseTree(element, tree, path:="") {
-            local i, child
-            if maxDepth > 0 {
-                StrReplace(path, "," , , , &count)
-                if count >= (maxDepth-1)
-                    return tree
-            }
-            For i, child in element.GetChildren() {
-                tree .= path (path?",":"") i ": " child.Dump() "`n"
-                tree := RecurseTree(child, tree, path (path?",":"") i)
-            }
-            return tree
-        }
-	}
-    */
     ; Dumps with only "Current" properties
-    CurrentDump() {
+    CurrentDump(delimiter:=" ") {
         local ctrlType, name, val, lct, aid, cm, ak
-        return "Type: " (ctrlType := this.ControlType) " (" UIA.ControlType[ctrlType] ")" ((name := this.Name) == "" ? "" : " Name: `"" name "`"") ((val := this.Value) == "" ? "" : " Value: `"" val "`"") ((lct := this.LocalizedControlType) == "" ? "" : " LocalizedControlType: `"" lct "`"") ((aid := this.AutomationId) == "" ? "" : " AutomationId: `"" aid "`"") ((cm := this.ClassName) == "" ? "" : " ClassName: `"" cm "`"") ((ak := this.AcceleratorKey) == "" ? "" : " AcceleratorKey: `"" ak "`"")
+        return "Type: " (ctrlType := this.ControlType) " (" UIA.ControlType[ctrlType] ")" ((name := this.Name) == "" ? "" : delimiter "Name: `"" name "`"") ((val := this.Value) == "" ? "" : delimiter "Value: `"" val "`"") ((lct := this.LocalizedControlType) == "" ? "" : delimiter "LocalizedControlType: `"" lct "`"") ((aid := this.AutomationId) == "" ? "" : delimiter "AutomationId: `"" aid "`"") ((cm := this.ClassName) == "" ? "" : delimiter "ClassName: `"" cm "`"") ((ak := this.AcceleratorKey) == "" ? "" : delimiter "AcceleratorKey: `"" ak "`"")
     } 
     ; Dumps with only "Cached" properties
-    CachedDump() {
+    CachedDump(delimiter:=" ") {
         local ctrlType, name, val, lct, aid, cm, ak
-        return "Type: " (ctrlType := this.CachedControlType) " (" UIA.ControlType[ctrlType] ")" ((name := this.CachedName) == "" ? "" : " Name: `"" name "`"") ((val := this.CachedValue) == "" ? "" : " Value: `"" val "`"") ((lct := this.CachedLocalizedControlType) == "" ? "" : " LocalizedControlType: `"" lct "`"") ((aid := this.CachedAutomationId) == "" ? "" : " AutomationId: `"" aid "`"") ((cm := this.CachedClassName) == "" ? "" : " ClassName: `"" cm "`"") ((ak := this.CachedAcceleratorKey) == "" ? "" : " AcceleratorKey: `"" ak "`"")
+        return "Type: " (ctrlType := this.CachedControlType) " (" UIA.ControlType[ctrlType] ")" ((name := this.CachedName) == "" ? "" : delimiter "Name: `"" name "`"") ((val := this.CachedValue) == "" ? "" : delimiter "Value: `"" val "`"") ((lct := this.CachedLocalizedControlType) == "" ? "" : delimiter "LocalizedControlType: `"" lct "`"") ((aid := this.CachedAutomationId) == "" ? "" : delimiter "AutomationId: `"" aid "`"") ((cm := this.CachedClassName) == "" ? "" : delimiter "ClassName: `"" cm "`"") ((ak := this.CachedAcceleratorKey) == "" ? "" : delimiter "AcceleratorKey: `"" ak "`"")
     }
     ToString() => this.Dump()
 	/**
@@ -1419,7 +1491,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param maxDepth Optional maximal depth of tree levels traversal. Default is unlimited.
      * @returns {String}
      */
-    DumpAll(maxDepth:=-1) => this.Dump(5, maxDepth)
+    DumpAll(delimiter:=" ", maxDepth:=-1) => this.Dump(5, delimiter, maxDepth)
 
     /**
      * @param relativeTo CoordMode to be used: client, window or screen. Default is A_CoordModeMouse
@@ -1445,6 +1517,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 	GetWinId() { 
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
         try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetCurrentPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
+	}
+	; Get the parent window hwnd from the element
+	GetControlId() { 
+        static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
+        try return TW.NormalizeElement(this).GetCurrentPropertyValue(UIA.Property.NativeWindowHandle)
 	}
 
     /**
@@ -1563,7 +1640,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         local _, r, i, loc, x1, y1, w1, h1
         if !this.HasOwnProp("HighlightGui")
             this.HighlightGui := []
-        if (!IsSet(showTime) && this.HighlightGui.Length) || (IsSet(showTime) && showTime = "remove") {
+        if (!IsSet(showTime) && this.HighlightGui.Length) || (IsSet(showTime) && showTime = "clear") {
                 for _, r in this.HighlightGui
                     r.Destroy()
                 this.HighlightGui := []
@@ -1572,7 +1649,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             showTime := 2000
         try loc := this.BoundingRectangle
         if !IsSet(loc) || !IsObject(loc)
-            return this
+            try loc := this.CachedBoundingRectangle
+            if !IsSet(loc) || !IsObject(loc)
+                return this
         Loop 4 {
             this.HighlightGui.Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
         }
@@ -1659,20 +1738,27 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 unfilteredEls := withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
                     : this.FindAll(IUIAcondition, scope)
 
-                for el in unfilteredEls {
-                    if el.ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index {
-                        return el
-                    }
+                if index < 0 {
+                    index := -index
+                    Loop (len := unfilteredEls.Length)
+                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index
+                            return unfilteredEls[len-A_Index+1]
+                } else {
+                    for el in unfilteredEls
+                        if el.ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index
+                            return el
                 }
                 return ""
             }
             condition := IUIAcondition
+            if index = -1
+                index := 1, order := order | 2, withOptions := True
             ; Were any conditions encountered where we need to filter conditions?
             if index != 1 {
                 try return (cacheRequest ? (withOptions ? startingElement.FindAllWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
                                 : this.FindAllBuildCache(cacheRequest, condition, scope))
                             : (withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
-                                : this.FindAll(IUIAcondition, scope))).GetElement(index-1)
+                                : this.FindAll(IUIAcondition, scope)))[index]
                 catch
                     return ""
             }
@@ -1783,10 +1869,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 		searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
 		Loop Parse searchPath, "," {
 			if IsDigit(A_LoopField) {
-				children := el.GetChildren(c?, 0x2)
-				if !children || children.Length < A_LoopField
-					throw ValueError("Step " A_Index " with value " A_LoopField " was out of bounds",-1)
-                el := children[A_LoopField]
+                ComCall(6, el, "int", 2, "ptr", c ?? UIA.TrueCondition, "ptr*", &found := 0)
+                if found && (arr := UIA.IUIAutomationElementArray(found)) && (arr.Length >= Abs(A_LoopField)) {
+                    el := arr.GetElement(A_LoopField < 0 ? arr.Length+A_LoopField : A_LoopField-1)
+                } else 
+				    throw ValueError("Step " A_Index " with value " A_LoopField " was out of bounds",-1)
 			} else if RegexMatch(A_LoopField, "i)([a-zA-Z+-]+) *(\d+)?", &m:="") {
                 if (loopFunc := (m[1] = "p") ? "GetParentElement" : (m[1] = "+") ? "GetNextSiblingElement" : (m[1] = "-") ? "GetPreviousSiblingElement" : "") {
                     Loop m[2] || 1 {
@@ -1794,7 +1881,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                             throw ValueError("Step with value " A_LoopField " was out of bounds (" loopFunc " failed)", -1)
                     }
 				} else if UIA.ControlType.HasOwnProp(m[1]) {
-                    el := el.FindFirst({Type:m[1], i:m[2]}, 2)
+                    el := el.FindElement({Type:m[1], i:m[2]}, 2)
                 } else
                     throw ValueError("Invalid path value " A_LoopField " at step " A_index, -1)
 			}
@@ -1874,7 +1961,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; The format of run-time identifiers might change in the future. The returned identifier should be treated as an opaque value and used only for comparison; for example, to determine whether a Microsoft UI Automation element is in the cache.
     GetRuntimeId() {
 		local runtimeId
-		return (ComCall(4, this, "ptr*", &runtimeId := 0), ComValue(0x2003, runtimeId))
+		return (ComCall(4, this, "ptr*", &runtimeId := 0), UIA.SafeArrayToAHKArray(runtimeId))
 	}
 
     /**
@@ -1908,7 +1995,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             throw TypeError("Condition must be an condition object or array", -1)
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        return (ComCall(6, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found) : ""
+        return (ComCall(6, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
     }
 
     ; Retrieves the first child or descendant element that matches the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
@@ -1922,7 +2009,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     FindAllBuildCache(cacheRequest, condition, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        return (ComCall(8, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found) : ""
+        return (ComCall(8, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
     }
 
     ; Retrieves a  UI Automation element with an updated cache.
@@ -2032,7 +2119,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedChildren {
 		get {
 			local children
-			return (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children):[])
+			return (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
 		}
 	}
 
@@ -2272,7 +2359,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ControllerFor {
 		get {
 			local retVal
-			return (ComCall(48, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(48, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2280,7 +2367,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     DescribedBy {
 		get {
 			local retVal
-			return (ComCall(49, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(49, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2288,7 +2375,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     FlowsTo {
 		get {
 			local retVal
-			return (ComCall(50, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(50, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2523,7 +2610,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedControllerFor {
 		get {
 			local retVal
-			return (ComCall(80, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(80, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2531,7 +2618,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedDescribedBy {
 		get {
 			local retVal
-			return (ComCall(81, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(81, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2539,7 +2626,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedFlowsTo {
 		get {
 			local retVal
-			return (ComCall(82, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(82, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2589,13 +2676,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     FlowsFrom {
 		get {
 			local retVal
-			return (ComCall(89, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(89, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
     CachedFlowsFrom {
 		get {
 			local retVal
-			return (ComCall(90, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(90, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2642,7 +2729,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     AnnotationObjects {
 		get {
 			local retVal
-			return (ComCall(98, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(98, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
     CachedPositionInSet {
@@ -2672,7 +2759,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedAnnotationObjects {
 		get {
 			local retVal
-			return (ComCall(103, this, "ptr*", &retVal := 0), UIA.IUIAutomationElementArray(retVal))
+			return (ComCall(103, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 		}
 	}
 
@@ -2731,7 +2818,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if cacheRequest
             return this.FindAllWithOptionsBuildCache(cacheRequest, condition, traversalOptions, root, scope)
         if (ComCall(111, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElementArray(found)
+            return UIA.IUIAutomationElementArray(found).ToArray()
+        else
+            return []
     }
 
     ; TreeScope, IUIAutomationCondition, IUIAutomationCacheRequest, TreeTraversalOptions, UIA.IUIAutomationElement
@@ -2741,7 +2830,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
     FindAllWithOptionsBuildCache(cacheRequest, condition, traversalOptions:=0, root:=0, scope := 4) {
         if (ComCall(113, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
-            return UIA.IUIAutomationElementArray(found)
+            return UIA.IUIAutomationElementArray(found).ToArray()
+        else
+            return []
     }
     GetMetadataValue(targetId, metadataId) {
 		local returnVal
@@ -2908,7 +2999,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     */
 }
 
-class IUIAutomationElementArray extends UIA.IUIAutomationBase {
+class IUIAutomationArray extends UIA.IUIAutomationBase {
     /**
      * Element[i] returns the i-th element.
      * Element[-i] returns the i-th last element: Element[-1] will return the last element.
@@ -2941,6 +3032,16 @@ class IUIAutomationElementArray extends UIA.IUIAutomationBase {
         }
         return (varCount = 1) ? EnumElements : EnumIndexAndElements
     }
+    ; Converts an IUIAutomationArray into AHK array
+    ToArray() {
+        local ret := []
+        Loop this.Length
+            ret.Push(this.GetElement(A_index-1))
+        return ret
+    }
+}
+
+class IUIAutomationElementArray extends UIA.IUIAutomationArray {
     ; Retrieves the number of elements in the collection.
     Length {
 		get {
@@ -3286,7 +3387,7 @@ class IUIAutomationStructureChangedEventHandler {
 	static __IID := "{e81d1b4e-11c5-42f8-9754-e7036c79f054}"
 
 	HandleStructureChangedEvent(pSelf, sender, changeType, runtimeId) {
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, ComValue(0x2003, runtimeId))
+        this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, UIA.SafeArrayToAHKArray(runtimeId))
         DllCall("oleaut32\VariantClear", "ptr", runtimeId)
 	}
 }
@@ -3524,11 +3625,11 @@ class IUIAutomationDragPattern extends UIA.IUIAutomationBase {
      */
     GetGrabbedItems() {
 		local retVal
-		return (ComCall(9, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(9, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
     GetCachedGrabbedItems() {
 		local retVal
-		return (ComCall(10, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(10, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 }
 
@@ -3822,7 +3923,7 @@ class IUIAutomationLegacyIAccessiblePattern extends UIA.IUIAutomationBase {
     ; Retrieves the Microsoft Active Accessibility property that identifies the selected children of this element.
     GetSelection() {
 		local pvarSelectedChildren
-		return (ComCall(14, this, "ptr*", &pvarSelectedChildren := 0), pvarSelectedChildren?UIA.IUIAutomationElementArray(pvarSelectedChildren):[])
+		return (ComCall(14, this, "ptr*", &pvarSelectedChildren := 0), pvarSelectedChildren?UIA.IUIAutomationElementArray(pvarSelectedChildren).ToArray():[])
 	}
 
     ; Retrieves the Microsoft Active Accessibility default action for the element.
@@ -3900,7 +4001,7 @@ class IUIAutomationLegacyIAccessiblePattern extends UIA.IUIAutomationBase {
     ; Retrieves the cached Microsoft Active Accessibility property that identifies the selected children of this element.
     GetCachedSelection() {
 		local pvarSelectedChildren
-		return (ComCall(24, this, "ptr*", &pvarSelectedChildren := 0), pvarSelectedChildren?UIA.IUIAutomationElementArray(pvarSelectedChildren):[])
+		return (ComCall(24, this, "ptr*", &pvarSelectedChildren := 0), pvarSelectedChildren?UIA.IUIAutomationElementArray(pvarSelectedChildren).ToArray():[])
 	}
 
     ; Retrieves the Microsoft Active Accessibility default action for the element.
@@ -3945,7 +4046,7 @@ class IUIAutomationMultipleViewPattern extends UIA.IUIAutomationBase {
     ; Retrieves a collection of control-specific view identifiers.
     GetSupportedViews() {
 		local retVal
-		return (ComCall(6, this, "ptr*", &retVal := 0), ComValue(0x2003, retVal))
+		return (ComCall(6, this, "ptr*", &retVal := 0), UIA.SafeArrayToAHKArray(retVal))
 	}
 
     ; Retrieves the cached control-specific identifier of the current view of the control.
@@ -3960,7 +4061,7 @@ class IUIAutomationMultipleViewPattern extends UIA.IUIAutomationBase {
     ; Retrieves a collection of control-specific view identifiers from the cache.
     GetCachedSupportedViews() {
 		local retVal
-		return (ComCall(8, this, "ptr*", &retVal := 0), ComValue(0x2003, retVal))
+		return (ComCall(8, this, "ptr*", &retVal := 0), UIA.SafeArrayToAHKArray(retVal))
 	}
 }
 
@@ -4325,7 +4426,7 @@ class IUIAutomationSelectionPattern extends UIA.IUIAutomationBase {
     ; Retrieves the selected elements in the container.
     GetSelection() {
 		local retVal
-		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Indicates whether more than one item in the container can be selected at one time.
@@ -4347,7 +4448,7 @@ class IUIAutomationSelectionPattern extends UIA.IUIAutomationBase {
     ; Retrieves the cached selected elements in the container.
     GetCachedSelection() {
 		local retVal
-		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves a cached value that indicates whether more than one item in the container can be selected at one time.
@@ -4449,7 +4550,7 @@ class IUIAutomationSpreadsheetItemPattern extends UIA.IUIAutomationBase {
 	}
     GetAnnotationObjects() {
 		local retVal
-		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
     GetAnnotationTypes() {
 		local retVal
@@ -4463,7 +4564,7 @@ class IUIAutomationSpreadsheetItemPattern extends UIA.IUIAutomationBase {
 	}
     GetCachedAnnotationObjects() {
 		local retVal
-		return (ComCall(7, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(7, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
     GetCachedAnnotationTypes() {
 		local retVal
@@ -4585,25 +4686,25 @@ class IUIAutomationTableItemPattern extends UIA.IUIAutomationBase {
     ; Retrieves the row headers associated with a table item or cell.
     GetRowHeaderItems() {
 		local retVal
-		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves the column headers associated with a table item or cell.
     GetColumnHeaderItems() {
 		local retVal
-		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves the cached row headers associated with a table item or cell.
     GetCachedRowHeaderItems() {
 		local retVal
-		return (ComCall(5, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(5, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves the cached column headers associated with a table item or cell.
     GetCachedColumnHeaderItems() {
 		local retVal
-		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 }
 
@@ -4611,13 +4712,13 @@ class IUIAutomationTablePattern extends UIA.IUIAutomationBase {
     ; Retrieves a collection of UI Automation elements representing all the row headers in a table.
     GetRowHeaders() {
 		local retVal
-		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(3, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves a collection of UI Automation elements representing all the column headers in a table.
     GetColumnHeaders() {
 		local retVal
-		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(4, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves the primary direction of traversal for the table.
@@ -4631,13 +4732,13 @@ class IUIAutomationTablePattern extends UIA.IUIAutomationBase {
     ; Retrieves a cached collection of UI Automation elements representing all the row headers in a table.
     GetCachedRowHeaders() {
 		local retVal
-		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(6, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves a cached collection of UI Automation elements representing all the column headers in a table.
     GetCachedColumnHeaders() {
 		local retVal
-		return (ComCall(7, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal):[])
+		return (ComCall(7, this, "ptr*", &retVal := 0), retVal?UIA.IUIAutomationElementArray(retVal).ToArray():[])
 	}
 
     ; Retrieves the cached primary direction of traversal for the table.
@@ -4702,7 +4803,7 @@ class IUIAutomationTextPattern extends UIA.IUIAutomationBase {
     ; Use the IUIAutomationTextPattern.SupportedTextSelection property to test whether a control supports text selection.
     GetSelection() {
 		local ranges
-		return (ComCall(5, this, "ptr*", &ranges := 0), ranges?UIA.IUIAutomationTextRangeArray(ranges):[])
+		return (ComCall(5, this, "ptr*", &ranges := 0), ranges?UIA.IUIAutomationTextRangeArray(ranges).ToArray():[])
 	}
 
     ; Retrieves an array of disjoint text ranges from a text-based control where each text range represents a contiguous span of visible text.
@@ -4711,7 +4812,7 @@ class IUIAutomationTextPattern extends UIA.IUIAutomationBase {
     ; IUIAutomationTextPattern,,GetVisibleRanges retrieves a degenerate (empty) text range if no text is visible, if all text is scrolled out of view, or if the text-based control contains no text.
     GetVisibleRanges() {
 		local ranges
-		return (ComCall(6, this, "ptr*", &ranges := 0), ranges?UIA.IUIAutomationTextRangeArray(ranges):[])
+		return (ComCall(6, this, "ptr*", &ranges := 0), ranges?UIA.IUIAutomationTextRangeArray(ranges).ToArray():[])
 	}
 
     ; Retrieves a text range that encloses the main text of a document.
@@ -4868,7 +4969,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     ; Retrieves a collection of all embedded objects that fall within the text range.
     GetChildren() {
         local children
-        return (ComCall(20, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children):"")
+        return (ComCall(20, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():"")
     } 
     ; ---------- TextRange2 ----------
 
@@ -4882,7 +4983,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
 	}
     GetChildrenBuildCache(cacheRequest) {
 		local out
-		return (ComCall(23, this, "ptr", cacheRequest, "ptr*", &out:=0), out?UIA.IUIAutomationElementArray(out):[])
+		return (ComCall(23, this, "ptr", cacheRequest, "ptr*", &out:=0), out?UIA.IUIAutomationElementArray(out).ToArray():[])
 	}
     GetAttributeValues(attributeIds, attributeIdCount) {
         local out
@@ -4891,27 +4992,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     }
 }
 
-class IUIAutomationTextRangeArray extends UIA.IUIAutomationBase {
-    __Item[index] {
-        get => this.GetElement(index-1)
-    }
-    __Enum(varCount) {
-        local maxLen := this.Length-1, i := 0
-        EnumElements(&element) {
-            if i > maxLen
-                return false
-            element := this.GetElement(i++)
-            return true
-        }
-        EnumIndexAndElements(&index, &element) {
-            if i > maxLen
-                return false
-            element := this.GetElement(i++)
-            index := i
-            return true
-        }
-        return (varCount = 1) ? EnumElements : EnumIndexAndElements
-    }
+class IUIAutomationTextRangeArray extends UIA.IUIAutomationArray {
     ; Retrieves the number of text ranges in the collection.
     Length {
 		get {
@@ -5236,6 +5317,282 @@ class IUIAutomationWindowPattern extends UIA.IUIAutomationBase {
 			return (ComCall(17, this, "int*", &retVal := 0), retVal)
 		}
 	}
+}
+
+; Internal class: UIAViewer code
+class Viewer {
+    __New() {
+        CoordMode "Mouse", "Screen"
+        this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map()}
+        this.Capturing := False
+        this.cacheRequest := UIA.CreateCacheRequest()
+        ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
+        this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
+        ; Set TreeScope to include the starting element and all descendants as well
+        this.cacheRequest.TreeScope := 5 
+
+        this.gViewer := Gui("AlwaysOnTop Resize +MinSize420x400","UIAViewer")
+        this.gViewer.OnEvent("Close", (*) => ExitApp())
+        this.gViewer.OnEvent("Size", this.GetMethod("gViewer_Size").Bind(this))
+        this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
+        this.LVWin := this.gViewer.Add("ListView", "h135 w250", ["Property", "Value"])
+        this.LVWin.OnEvent("ContextMenu", LV_CopyTextMethod := this.GetMethod("LV_CopyText").Bind(this))
+        this.LVWin.ModifyCol(1,60)
+        this.LVWin.ModifyCol(2,180)
+        for v in ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
+            this.LVWin.Add(,v,"")
+        this.gViewer.Add("Text", "w100", "Properties").SetFont("bold")
+        this.LVProps := this.gViewer.Add("ListView", "h200 w250", ["Property", "Value"])
+        this.LVProps.OnEvent("ContextMenu", LV_CopyTextMethod)
+        this.LVProps.ModifyCol(1,100)
+        this.LVProps.ModifyCol(2,140)
+        this.DisplayedProps := ["ControlType", "LocalizedControlType", "Name", "Value", "AutomationId", "BoundingRectangle", "ClassName", "FullDescription", "HelpText", "AccessKey", "AcceleratorKey", "HasKeyboardFocus", "IsKeyboardFocusable", "ItemType", "ProcessId", "IsEnabled", "IsPassword", "IsOffscreen", "FrameworkId", "IsRequiredForForm", "ItemStatus", "RuntimeId"]
+        for v in this.DisplayedProps {
+            this.LVProps.Add(,v,"")
+            this.cacheRequest.AddProperty(v) 
+        }
+        for pattern, value in UIA.Property.OwnProps() {
+            if pattern ~= "Is([\w]+Pattern.?)Available"
+                this.cacheRequest.AddProperty(value)
+        }
+
+        (this.TextTVPatterns := this.gViewer.Add("Text", "w100", "Patterns")).SetFont("bold")
+        this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250 -0x800")
+
+        this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
+        this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.GetMethod("ButCapture_Click").Bind(this))
+        HotKey("~F1", this.CaptureHotkeyFunc)
+        this.SBMain := this.gViewer.Add("StatusBar",, "  Start capturing, then hold cursor still to construct tree")
+        this.SBMain.OnEvent("Click", this.GetMethod("SBMain_Click").Bind(this))
+        this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_Click").Bind(this))
+        this.gViewer.Add("Text", "x278 y10 w100", "UIA Tree").SetFont("bold")
+        this.TVUIA := this.gViewer.Add("TreeView", "x275 y25 w300 h465 -0x800")
+        this.TVUIA.OnEvent("Click", this.GetMethod("TVUIA_Click").Bind(this))
+        this.TVUIA.OnEvent("ContextMenu", this.GetMethod("TVUIA_ContextMenu").Bind(this))
+        this.TVUIA.Add("Start capturing to show tree")
+        this.TextFilterTVUIA := this.gViewer.Add("Text", "x275 y503", "Filter:")
+        this.EditFilterTVUIA := this.gViewer.Add("Edit", "x305 y500 w100")
+        this.EditFilterTVUIA.OnEvent("Change", this.GetMethod("EditFilterTVUIA_Change").Bind(this))
+        this.gViewer.Show()
+    }
+    ; Resizes window controls when window is resized
+    gViewer_Size(GuiObj, MinMax, Width, Height) {
+        static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
+        this.TVUIA.GetPos(&TV_Pos_X, &TV_Pos_Y, &TV_Pos_W, &TV_Pos_H)
+        this.TVUIA.Move(,,Width-TV_Pos_X-10,Height-TV_Pos_Y-60)
+        this.TextFilterTVUIA.Move(TV_Pos_X, Height-47)
+        this.EditFilterTVUIA.Move(TV_Pos_X+30, Height-50)
+        this.LVProps.GetPos(&LVPropsX, &LVPropsY, &LVPropsWidth, &LVPropsHeight)
+        this.LVProps.Move(,,,Height-LVPropsY-170)
+        this.TextTVPatterns.Move(,Height-165)
+        this.TVPatterns.Move(,Height-145)
+        this.ButCapture.Move(,Height -50)
+        SetTimer(RedrawFunc, -500)
+    }
+    ; Starts showing the element under the cursor with 200ms intervals with CaptureCallback
+    ButCapture_Click(GuiCtrlObj?, Info?) {
+        if this.Capturing {
+            this.StopCapture()
+            return
+        }
+        this.Capturing := True
+        HotKey("~F1", this.CaptureHotkeyFunc, "Off")
+        HotKey("~Esc", this.CaptureHotkeyFunc, "On")
+        this.TVUIA_Click("","") ; Clear highlighting from before
+        this.TVUIA.Delete()
+        this.TVUIA.Add("Hold cursor still to construct tree")
+        this.ButCapture.Text := "Stop capturing (Esc)"
+        this.CaptureCallback := this.GetMethod("CaptureCycle").Bind(this)
+        SetTimer(this.CaptureCallback, 200)
+    }
+    ; Handles right-clicking a listview (copies to clipboard)
+    LV_CopyText(GuiCtrlObj, Info, *) {
+        LVData := Info > GuiCtrlObj.GetCount()
+            ? ListViewGetContent("", GuiCtrlObj)
+            : ListViewGetContent("Selected", GuiCtrlObj)
+        ToolTip("Copied: " (A_Clipboard := RegExReplace(LVData, "([ \w]+)\t", "$1: ")))
+        SetTimer((*) => ToolTip(), -3000)
+    }
+    ; Copies the UIA path to clipboard when statusbar is clicked
+    SBMain_Click(GuiCtrlObj, Info, *) {
+        if InStr(this.SBMain.Text, "Path:") {
+            ToolTip("Copied: " (A_Clipboard := SubStr(this.SBMain.Text, 9)))
+            SetTimer((*) => ToolTip(), -3000)
+        }
+    }
+    ; Stops capturing elements under mouse, unhooks CaptureCallback
+    StopCapture(GuiCtrlObj:=0, Info:=0) {
+        if this.Capturing {
+            this.Capturing := False
+            this.ButCapture.Text := "Start capturing (F1)"
+            HotKey("~Esc", this.CaptureHotkeyFunc, "Off")
+            HotKey("~F1", this.CaptureHotkeyFunc, "On")
+            SetTimer(this.CaptureCallback, 0)
+            this.Stored.CapturedElement.Highlight("clear")
+            return
+        }
+    }
+    ; Gets UIA element under mouse, updates the GUI. 
+    ; If the mouse is not moved for 1 second then constructs the UIA tree.
+    CaptureCycle() {
+        MouseGetPos(&mX, &mY, &mwId)
+        CapturedElement := UIA.SmallestElementFromPoint(mX,mY,,this.cacheRequest)
+        if this.Stored.HasOwnProp("CapturedElement") && IsObject(CapturedElement) {
+            try same := UIA.CompareElements(CapturedElement, this.Stored.CapturedElement) ; Cached element RuntimeIds sometimes cause an error here
+            catch {
+                try same := CapturedElement.CachedDump() == this.Stored.CapturedElement.CachedDump()
+            }
+            if same ?? 0 {
+                if this.FoundTime != 0 && ((A_TickCount - this.FoundTime) > 1000) {
+                    if (mX == this.Stored.mX) && (mY == this.Stored.mY) {
+                        SetTimer(this.CaptureCallback, 0), this.ConstructTreeView(), this.FoundTime := 0
+                        if this.Capturing
+                            SetTimer(this.CaptureCallback, 200)
+                    } else 
+                        this.FoundTime := A_TickCount
+                }
+                this.Stored.mX := mX, this.Stored.mY := mY
+                return
+            } else
+                this.Stored.CapturedElement.Highlight("clear")
+        }
+        this.LVWin.Delete()
+        try WinGetPos(&mwX, &mwY, &mwW, &mwH, mwId)
+        catch
+            return
+        propsOrder := ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
+        props := Map("Title", WinGetTitle(mwId), "Text", WinGetText(mwId), "Id", mwId, "Location", "x: " mwX " y: " mwY " w: " mwW " h: " mwH, "Class(NN)", WinGetClass(mwId), "Process", WinGetProcessName(mwId), "PID", WinGetPID(mwId))
+        for propName in propsOrder
+            this.LVWin.Add(,propName,props[propName])
+        this.PopulatePropsPatterns(CapturedElement)
+        this.Stored.mwId := mwId, this.Stored.CapturedElement := CapturedElement, this.Stored.mX := mX, this.Stored.mY := mY, this.FoundTime := A_TickCount
+    }
+    ; Populates the listview with UIA element properties
+    PopulatePropsPatterns(Element) {
+        Element.Highlight(0, "Blue", 4) ; Indefinite show
+        this.LVProps.Delete()
+        this.TVPatterns.Delete()
+        for v in this.DisplayedProps {
+            try prop := Element.Cached%v%
+            if v = "BoundingRectangle" {
+                prop := prop ? prop : {l:0,t:0,r:0,b:0}
+                try this.LVProps.Add(, "Location", "x: " prop.l " y: " prop.t " w: " (prop.r - prop.l) " h: " (prop.b - prop.t))
+            } else
+                try this.LVProps.Add(, v, v = "RuntimeId" ? UIA.RuntimeIdToString(prop) : prop)
+            prop := ""
+        }
+        for pattern, value in UIA.Property.OwnProps() {
+            if RegExMatch(pattern, "Is([\w]+)Pattern(\d?)Available", &match:=0) && Element.GetCachedPropertyValue(value) {
+                parent := this.TVPatterns.Add(match[1] (match.Count > 1 ? match[2] : ""))
+                if !IsObject(UIA.IUIAutomation%match[1]%Pattern)
+                    continue
+                proto := UIA.IUIAutomation%match[1]%Pattern.Prototype
+                for name in proto.OwnProps() {
+                    if name ~= "i)^(_|Cached)"
+                        continue
+                    this.TVPatterns.Add(name (proto.GetOwnPropDesc(name).HasOwnProp("call") ? "()" : ""), parent)
+                }
+            }
+        }
+
+    }
+    ; Handles selecting elements in the UIA tree, highlights the selected element
+    TVUIA_Click(GuiCtrlObj, Info) {
+        static Element := ""
+        if IsObject(Element)
+            Element.Highlight("clear")
+        if this.Capturing
+            return
+        try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Info] : this.Stored.TreeView[Info]
+        if IsSet(Element) && Element {
+            try this.SBMain.SetText("  Path: " Element.Path)
+            this.PopulatePropsPatterns(Element)
+        }
+    }
+    ; Permits copying the Dump of UIA element(s) to clipboard
+    TVUIA_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
+        TVUIA_Menu := Menu()
+        try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Item] : this.Stored.TreeView[Item]
+        if IsSet(Element)
+            TVUIA_Menu.Add("Copy to Clipboard", (*) => (ToolTip("Copied Dump() output to Clipboard!"), A_Clipboard := Element.CachedDump(), SetTimer((*) => ToolTip(), -3000)))
+        TVUIA_Menu.Add("Copy Tree to Clipboard", (*) => (ToolTip("Copied DumpAll() output to Clipboard!"), A_Clipboard := UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest).DumpAll(), SetTimer((*) => ToolTip(), -3000)))
+        TVUIA_Menu.Show()
+    }
+    ; Handles filtering the UIA elements inside the TreeView when the text hasn't been changed in 500ms.
+    ; Sorts the results by UIA properties.
+    EditFilterTVUIA_Change(GuiCtrlObj, Info, *) {
+        static TimeoutFunc := "", ChangeActive := False
+        if !this.Stored.TreeView.Count
+            return
+        if (Info != "DoAction") || ChangeActive {
+            if !TimeoutFunc
+                TimeoutFunc := this.GetMethod("EditFilterTVUIA_Change").Bind(this, GuiCtrlObj, "DoAction")
+            SetTimer(TimeoutFunc, -500)
+            return
+        }
+        ChangeActive := True
+        this.Stored.FilteredTreeView := Map(), parents := Map()
+        if !(searchPhrase := this.EditFilterTVUIA.Value) {
+            this.ConstructTreeView()
+            ChangeActive := False
+            return
+        }
+        this.TVUIA.Delete()
+        temp := this.TVUIA.Add("Searching...")
+        Sleep -1
+        this.TVUIA.Opt("-Redraw")
+        this.TVUIA.Delete()
+        for index, Element in this.Stored.TreeView {
+            for prop in this.DisplayedProps {
+                try {
+                    if InStr(Element.Cached%Prop%, searchPhrase) {
+                        if !parents.Has(prop)
+                            parents[prop] := this.TVUIA.Add(prop,, "Expand")
+                        this.Stored.FilteredTreeView[this.TVUIA.Add(this.GetShortDescription(Element), parents[prop], "Expand")] := Element
+                    }
+                }
+            }
+        }
+        if !this.Stored.FilteredTreeView.Count
+            this.TVUIA.Add("No results found matching `"" searchPhrase "`"")
+        this.TVUIA.Opt("+Redraw")
+        TimeoutFunc := "", ChangeActive := False
+    }
+    ; Populates the TreeView with the UIA tree when capturing and the mouse is held still
+    ConstructTreeView() {
+        this.TVUIA.Delete()
+        this.TVUIA.Add("Constructing Tree, please wait...")
+        Sleep -1
+        this.TVUIA.Opt("-Redraw")
+        this.TVUIA.Delete()
+        this.Stored.TreeView := Map()
+        this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
+        this.TVUIA.Opt("+Redraw")
+        for k, v in this.Stored.TreeView {
+            same := 0
+            try same := UIA.CompareElements(this.Stored.CapturedElement, v)
+            catch
+                try same := this.Stored.CapturedElement.CachedDump() == v.CachedDump()
+            if same
+                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " v.Path)
+        }
+    }
+    ; Stores the UIA tree with corresponding path values for each element
+    RecurseTreeView(Element, parent:=0, path:="") {
+        this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element.DefineProp("Path", {value:path})
+        for k, v in Element.CachedChildren {
+            this.RecurseTreeView(v, TWEl, path (path?",":"") k)
+        }
+    }
+    ; Creates a short description string for the UIA tree elements
+    GetShortDescription(Element) {
+        elDesc := " `"`""
+        try elDesc := " `"" Element.CachedName "`""
+        try elDesc := Element.CachedLocalizedControlType elDesc
+        catch
+            elDesc := "`"`"" elDesc
+        return elDesc
+    }
 }
 
 }
