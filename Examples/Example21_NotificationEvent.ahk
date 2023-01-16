@@ -5,8 +5,8 @@ Run "calc.exe"
 Sleep 1000
 cEl := UIA.ElementFromHandle("A")
 MsgBox "Press OK to create a new EventHandler for the Notification event.`nTo test this, interact with the Calculator window, and a tooltip should pop up.`n`nTo exit the script, press F5."
-handler := UIA.CreateEventHandler(NotificationEventHandler, "Notification")
-UIA.AddNotificationEventHandler(cEl, handler)
+handler := UIA.CreateNotificationEventHandler(NotificationEventHandler)
+UIA.AddNotificationEventHandler(handler, cEl)
 OnExit(ExitFunc) ; Set up an OnExit call to clean up the handler when exiting the script
 return
 

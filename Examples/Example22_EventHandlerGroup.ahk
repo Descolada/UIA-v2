@@ -6,11 +6,11 @@ Sleep 1000
 cEl := UIA.ElementFromHandle("A")
 
 ehGroup := UIA.CreateEventHandlerGroup()
-h1 := UIA.CreateEventHandler(AutomationEventHandler)
-h2 := UIA.CreateEventHandler(NotificationEventHandler, "Notification")
-ehGroup.AddAutomationEventHandler(UIA.Event.AutomationFocusChanged, h1)
+h1 := UIA.CreateAutomationEventHandler(AutomationEventHandler)
+h2 := UIA.CreateNotificationEventHandler(NotificationEventHandler)
+ehGroup.AddAutomationEventHandler(h1, UIA.Event.AutomationFocusChanged)
 ehGroup.AddNotificationEventHandler(h2)
-UIA.AddEventHandlerGroup(cEl, ehGroup)
+UIA.AddEventHandlerGroup(ehGroup, cEl)
 
 OnExit(ExitFunc) ; Set up an OnExit call to clean up the handler when exiting the script
 return

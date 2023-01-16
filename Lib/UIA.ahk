@@ -827,38 +827,38 @@ static CreateNotCondition(condition) {
 
 /**
  * Registers a method that handles Microsoft UI Automation events.
+ * @param handler Handler object from UIA.CreateEventHandler()
  * @param element UIA element
  * @param eventId One of UIA.Event values
- * @param handler Handler object from UIA.CreateEventHandler()
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddAutomationEventHandler(element, eventId, handler, scope:=0x4, cacheRequest:=0) => ComCall(32, this, "int", IsInteger(eventId) ? eventId : UIA.Event.%eventId%, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
+static AddAutomationEventHandler(handler, element, eventId, scope:=0x4, cacheRequest:=0) => ComCall(32, this, "int", IsInteger(eventId) ? eventId : UIA.Event.%eventId%, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
 
 /**
  * Removes the specified UI Automation event handler.
+ * @param handler Handler object from UIA.CreateEventHandler()
  * @param element UIA element
  * @param eventId One of UIA.Event values
- * @param handler Handler object from UIA.CreateEventHandler()
  */
-static RemoveAutomationEventHandler(element, eventId, handler) => ComCall(33, this, "int", IsInteger(eventId) ? eventId : UIA.Event.%eventId%, "ptr", element, "ptr", handler)
+static RemoveAutomationEventHandler(handler, element, eventId) => ComCall(33, this, "int", IsInteger(eventId) ? eventId : UIA.Event.%eventId%, "ptr", element, "ptr", handler)
 
 ; Registers a method that handles property-changed events.
 ; The UI item specified by element might not support the properties specified by the propertyArray parameter.
 ; This method serves the same purpose as UIA.AddPropertyChangedEventHandler, but takes a native array of property identifiers instead of a SAFEARRAY.
 ; Not needed in this library, use UIA.AddPropertyChangedEventHandler instead.
-static AddPropertyChangedEventHandlerNativeArray(element, propertyArray, propertyCount, handler, scope:=0x4, cacheRequest:=0) => ComCall(34, this, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler, "ptr", propertyArray, "int", propertyCount)
+static AddPropertyChangedEventHandlerNativeArray(handler, element, propertyArray, propertyCount, scope:=0x4, cacheRequest:=0) => ComCall(34, this, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler, "ptr", propertyArray, "int", propertyCount)
 
 /**
  * Registers a method that handles property-changed events.
  * The UI item specified by element might not support the properties specified by the propertyArray parameter.
+ * @param handler Handler object from UIA.CreateEventHandler()
  * @param element UIA element
  * @param propertyArray An array of UIA.Property values
- * @param handler Handler object from UIA.CreateEventHandler()
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddPropertyChangedEventHandler(element, propertyArray, handler, scope:=0x4, cacheRequest:=0) {
+static AddPropertyChangedEventHandler(handler, element, propertyArray, scope:=0x4, cacheRequest:=0) {
     local i, SafeArray
     if !IsObject(propertyArray)
         propertyArray := [propertyArray] 
@@ -869,19 +869,19 @@ static AddPropertyChangedEventHandler(element, propertyArray, handler, scope:=0x
 }
 
 ; Removes a property-changed event handler.
-static RemovePropertyChangedEventHandler(element, handler) => ComCall(36, this, "ptr", element, "ptr", handler)
+static RemovePropertyChangedEventHandler(handler, element) => ComCall(36, this, "ptr", element, "ptr", handler)
 
 /**
  * Registers a method that handles structure-changed events.
- * @param element UIA element
  * @param handler Handler object from UIA.CreateEventHandler()
+ * @param element UIA element
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddStructureChangedEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => ComCall(37, this, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
+static AddStructureChangedEventHandler(handler, element, scope:=0x4, cacheRequest:=0) => ComCall(37, this, "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
 
 ; Removes a structure-changed event handler.
-static RemoveStructureChangedEventHandler(element, handler) => ComCall(38, this, "ptr", element, "ptr", handler)
+static RemoveStructureChangedEventHandler(handler, element) => ComCall(38, this, "ptr", element, "ptr", handler)
 
 /**
  * Registers a method that handles focus-changed events.
@@ -1043,26 +1043,26 @@ static TransactionTimeout {
 
 /**
  * Registers a method that handles programmatic text-edit events.
+ * @param handler Handler object from UIA.CreateEventHandler()
  * @param element UIA element
  * @param textEditChangeType The specific change type to listen for, one of UIA.TextEditChangeType values (None, AutoCorrect, Composition, CompositionFinalized, AutoComplete)
- * @param handler Handler object from UIA.CreateEventHandler()
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddTextEditTextChangedEventHandler(element, textEditChangeType, handler, scope:=0x4, cacheRequest:=0) => (ComCall(64, this,  "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "int", IsInteger(textEditChangeType) ? textEditChangeType : UIA.TextEditChangeType.%textEditChangeType%, "ptr", cacheRequest, "ptr", handler))
-static RemoveTextEditTextChangedEventHandler(element, handler) => ComCall(65, this,  "ptr", element, "ptr", handler)
+static AddTextEditTextChangedEventHandler(handler, element, textEditChangeType, scope:=0x4, cacheRequest:=0) => (ComCall(64, this,  "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "int", IsInteger(textEditChangeType) ? textEditChangeType : UIA.TextEditChangeType.%textEditChangeType%, "ptr", cacheRequest, "ptr", handler))
+static RemoveTextEditTextChangedEventHandler(handler, element) => ComCall(65, this,  "ptr", element, "ptr", handler)
 
 ; ---------- IUIAutomation4 ----------
 
 /**
  * Registers a method that handles change events.
+ * @param handler Handler object from UIA.CreateEventHandler()
  * @param element UIA element
  * @param changeTypes An array of UIA.Changes values that indicate the change types the event represents.
- * @param handler Handler object from UIA.CreateEventHandler()
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddChangesEventHandler(element, changeTypes, handler, scope:=0x4, cacheRequest:=0) {
+static AddChangesEventHandler(handler, element, changeTypes, scope:=0x4, cacheRequest:=0) {
     local k, v
     if !IsObject(changeTypes)
         changeTypes := [changeTypes]
@@ -1071,19 +1071,19 @@ static AddChangesEventHandler(element, changeTypes, handler, scope:=0x4, cacheRe
         NumPut("int", v, nativeArray, (k-1)*4)
     ComCall(66, this,  "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", nativeArray, "int", changeTypes.Length, "ptr", cacheRequest, "ptr", handler)
 }
-static RemoveChangesEventHandler(element, handler) => (ComCall(67, this,  "ptr", element, "ptr", handler))
+static RemoveChangesEventHandler(handler, element) => (ComCall(67, this,  "ptr", element, "ptr", handler))
 
 ; ---------- IUIAutomation5 ----------
 
 /**
  * Registers a method that handles notification events.
- * @param element UIA element
  * @param handler Handler object from UIA.CreateEventHandler()
+ * @param element UIA element
  * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
  * @param cacheRequest Optional: cache request object
  */
-static AddNotificationEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(68, this,  "ptr", element, "uint", scope, "ptr", cacheRequest, "ptr", handler))
-static RemoveNotificationEventHandler(element, handler) => (ComCall(69, this,  "ptr", element, "ptr", handler))
+static AddNotificationEventHandler(handler, element, scope:=0x4, cacheRequest:=0) => (ComCall(68, this,  "ptr", element, "uint", scope, "ptr", cacheRequest, "ptr", handler))
+static RemoveNotificationEventHandler(handler, element) => (ComCall(69, this,  "ptr", element, "ptr", handler))
 
 ; ---------- IUIAutomation6 ----------
 
@@ -1110,11 +1110,11 @@ static CreateEventHandlerGroup() {
     return (ComCall(70, this,  "ptr*", &out:=0), UIA.IUIAutomationEventHandlerGroup(out))
 } 
 ; Registers a collection of event handler methods specified with the IUIAutomation6 CreateEventHandlerGroup.
-static AddEventHandlerGroup(element, handlerGroup) => (ComCall(71, this,  "ptr", element, "ptr", handlerGroup))
-static RemoveEventHandlerGroup(element, handlerGroup) => (ComCall(72, this,  "ptr", element, "ptr", handlerGroup))
+static AddEventHandlerGroup(handlerGroup, element) => (ComCall(71, this,  "ptr", element, "ptr", handlerGroup))
+static RemoveEventHandlerGroup(handlerGroup, element) => (ComCall(72, this,  "ptr", element, "ptr", handlerGroup))
 ; Registers a method that handles when the active text position changes.
-static AddActiveTextPositionChangedEventHandler(element, handler, scope:=0x4, cacheRequest:=0) => (ComCall(77, this,  "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler))
-static RemoveActiveTextPositionChangedEventHandler(element, handler) => (ComCall(78, this,  "ptr", element, "ptr", handler))
+static AddActiveTextPositionChangedEventHandler(handler, element, scope:=0x4, cacheRequest:=0) => (ComCall(77, this,  "ptr", element, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler))
+static RemoveActiveTextPositionChangedEventHandler(handler, element) => (ComCall(78, this,  "ptr", element, "ptr", handler))
 
 ; ---------- IUIAutomation7 ----------
 ; Has no properties/methods
@@ -1271,6 +1271,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     Children => this.GetChildren()
     ; Returns the parent of the element
     Parent => UIA.TreeWalkerTrue.GetParentElement(this)
+    GetCachedParent(cacheRequest:=0) => UIA.TreeWalkerTrue.GetParentElementBuildCache(cacheRequest, this)
     ; Returns the number of children of the element
     Length => this.GetChildren().Length
     /**
@@ -3324,6 +3325,13 @@ static CreateEventHandler(funcObj, handlerType:="") {
     Release(pSelf) {
     }
 }
+static CreateAutomationEventHandler(funcObj) => UIA.CreateEventHandler(funcObj)
+static CreateFocusChangedEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "FocusChanged")
+static CreatePropertyChangedEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "PropertyChanged")
+static CreateStructureChangedEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "StructureChanged")
+static CreateTextEditTextChangedEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "TextEditTextChanged")
+static CreateChangesEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "Changes")
+static CreateNotificationEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "Notification")
 
 class IUIAutomationEventHandler {
 	static __IID := "{146c3c17-f12e-4e22-8c27-f894b9b79c69}"
@@ -3412,8 +3420,8 @@ class IUIAutomationEventHandlerGroup extends UIA.IUIAutomationBase {
 	static __IID := "{C9EE12F2-C13B-4408-997C-639914377F4E}"
 
 	AddActiveTextPositionChangedEventHandler(handler, scope:=0x4, cacheRequest:=0) => ComCall(3, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
-    AddAutomationEventHandler(eventId, handler, scope:=0x4, cacheRequest:=0) => ComCall(4, this, "uint", eventId, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
-    AddChangesEventHandler(changeTypes, handler, scope:=0x4, cacheRequest:=0) {
+    AddAutomationEventHandler(handler, eventId, scope:=0x4, cacheRequest:=0) => ComCall(4, this, "uint", eventId, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
+    AddChangesEventHandler(handler, changeTypes, scope:=0x4, cacheRequest:=0) {
         local k, v
         if !IsObject(changeTypes)
             changeTypes := [changeTypes]
@@ -3423,7 +3431,7 @@ class IUIAutomationEventHandlerGroup extends UIA.IUIAutomationBase {
         return ComCall(5, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", nativeArray, "int", changeTypes.Length, "int", cacheRequest, "ptr", handler)
     }
 	AddNotificationEventHandler(handler, scope:=0x4, cacheRequest:=0) => ComCall(6, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest, "ptr", handler)
-	AddPropertyChangedEventHandler(propertyArray, handler, scope:=0x1,cacheRequest:=0) {
+	AddPropertyChangedEventHandler(handler, propertyArray, scope:=0x1,cacheRequest:=0) {
         local i, propertyId, SafeArray
         if !IsObject(propertyArray)
             propertyArray := [propertyArray]
@@ -3433,7 +3441,7 @@ class IUIAutomationEventHandlerGroup extends UIA.IUIAutomationBase {
 		return ComCall(7, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", cacheRequest,"ptr", handler,"ptr", SafeArray)
 	}
 	AddStructureChangedEventHandler(handler, scope:=0x4, cacheRequest:=0) => ComCall(8, this "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr",cacheRequest, "ptr", handler)
-	AddTextEditTextChangedEventHandler(textEditChangeType, handler:="", scope:=0x4, cacheRequest:=0) => ComCall(9, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "int", IsInteger(textEditChangeType) ? textEditChangeType : UIA.TextEditChangeType.%textEditChangeType%, "ptr", cacheRequest, "ptr", handler)
+	AddTextEditTextChangedEventHandler(handler, textEditChangeType, scope:=0x4, cacheRequest:=0) => ComCall(9, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "int", IsInteger(textEditChangeType) ? textEditChangeType : UIA.TextEditChangeType.%textEditChangeType%, "ptr", cacheRequest, "ptr", handler)
 }
 
 /*

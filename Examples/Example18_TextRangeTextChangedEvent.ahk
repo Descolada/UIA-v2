@@ -29,8 +29,8 @@ Loop {
 }
 
 MsgBox "Press OK to create a new EventHandler for the TextChangedEvent.`nTo test this, type some new text inside Word, and a tooltip should pop up.`n`nTo exit the script, press F5."
-handler := UIA.CreateEventHandler(TextChangedEventHandler) ; Create a new event handler that points to the function TextChangedEventHandler, which must accept two arguments: element and eventId.
-UIA.AddAutomationEventHandler(UIA.Event.Text_TextChanged, wordEl, handler) ; Add a new automation handler for the TextChanged event. Note that we can only use wordEl here, not bodyEd, because the event is handled for the whole window.
+handler := UIA.CreateAutomationEventHandler(TextChangedEventHandler) ; Create a new event handler that points to the function TextChangedEventHandler, which must accept two arguments: element and eventId.
+UIA.AddAutomationEventHandler(handler, UIA.Event.Text_TextChanged, wordEl) ; Add a new automation handler for the TextChanged event. Note that we can only use wordEl here, not bodyEd, because the event is handled for the whole window.
 OnExit(ExitFunc) ; Set up an OnExit call to clean up the handler when exiting the script
 
 return
@@ -44,7 +44,7 @@ TextChangedEventHandler(el, eventId) {
 
 ExitFunc(*) {
 	global handler, wordEl
-	UIA.RemoveAutomationEventHandler(UIA.Event.Text_TextChanged, wordEl, handler) ; Remove the event handler. Alternatively use UIA.RemoveAllEventHandlers() to remove all handlers
+	UIA.RemoveAutomationEventHandler(handler, UIA.Event.Text_TextChanged, wordEl) ; Remove the event handler. Alternatively use UIA.RemoveAllEventHandlers() to remove all handlers
 }
 
 RemoveToolTip() {

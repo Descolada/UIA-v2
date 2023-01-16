@@ -10,8 +10,8 @@ if !explorerEl {
 	ExitApp
 }
 MsgBox "Press OK to create a new EventHandler for the StructureChanged event.`nTo test this, interact with the Explorer window, and a tooltip should pop up.`n`nTo exit the script, press F5."
-handler := UIA.CreateEventHandler(StructureChangedEventHandler, "StructureChanged")
-UIA.AddStructureChangedEventHandler(explorerEl, handler)
+handler := UIA.CreateStructureChangedEventHandler(StructureChangedEventHandler)
+UIA.AddStructureChangedEventHandler(handler, explorerEl)
 OnExit(ExitFunc) ; Set up an OnExit call to clean up the handler when exiting the script
 return
 
