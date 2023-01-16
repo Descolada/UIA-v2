@@ -15,7 +15,7 @@ MsgBox "MultipleView properties: "
 
 supportedViews := listEl.GetSupportedViews()
 viewNames := ""
-for _, view in supportedViews {
+for view in supportedViews {
 	viewNames .= listEl.GetViewName(view) " (" view ")`n"
 }
 MsgBox "This MultipleView supported views:`n" viewNames
