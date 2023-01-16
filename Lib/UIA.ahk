@@ -147,7 +147,7 @@ static CoalesceEventsOptions := {Disabled:0, Enabled:1}.DefineProp("__Item", thi
 
 static ConnectionRecoveryBehaviorOptions := {Disabled:0, Enabled:1}.DefineProp("__Item", this.__PropertyValueGetter)
 
-static PropertyConditionFlags := {None:0, IgnoreCase:1, MatchSubstring:2}.DefineProp("__Item", this.__PropertyValueGetter)
+static PropertyConditionFlags := {None:0, IgnoreCase:1, MatchSubstring:2, IgnoreCaseMatchSubstring:3}.DefineProp("__Item", this.__PropertyValueGetter)
 
 static TreeScope := {None: 0, Element: 1, Children: 2, Family:3, Descendants: 4, Subtree: 7, Parent: 8, Ancestors: 16}.DefineProp("__Item", this.__PropertyValueGetter)
 
@@ -433,7 +433,7 @@ static CreateCondition(conditionObject, value?, flags?) {
         propertyId := IsInteger(conditionObject) ? conditionObject : UIA.Property.%conditionObject%
         if propertyId = 30003 && !IsNumber(value)
             try value := UIA.ControlType.%value%
-        if IsSet(flags) && flags > 0 && (Type(value)="String")
+        if IsSet(flags) && (flags > 0 || flags := UIA.PropertyConditionFlags.%flags%) && (Type(value)="String")
             return UIA.CreatePropertyConditionEx(propertyId, value, flags)
         return UIA.CreatePropertyCondition(propertyId, value)
     }
@@ -3264,7 +3264,7 @@ class IUIAutomationCacheRequest extends UIA.IUIAutomationBase {
 			local scope
 			return (ComCall(6, this, "int*", &scope := 0), scope)
 		}
-        set => ComCall(7, this, "int", Value)
+        set => ComCall(7, this, "int", IsInteger(Value) ? Value : UIA.TreeScope.Value)
     }
 
     TreeFilter {
