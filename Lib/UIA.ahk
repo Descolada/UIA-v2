@@ -403,30 +403,6 @@ static Filter(elementArray, function) {
 }
 
 /**
- * Checks whether two rectangles intersect and if they do, then returns an object containing the
- * rectangle of the intersection: {l:left, t:top, r:right, b:bottom}
- * Note 1: Overlapping area must be at least 1 unit. 
- * Note 2: Second rectangle starting at the edge of the first doesn't count as intersecting:
- *     {l:100, t:100, r:200, b:200} does not intersect {l:200, t:100, 400, 400}
- * @param l1 x-coordinate of the upper-left corner of the first rectangle
- * @param t1 y-coordinate of the upper-left corner of the first rectangle
- * @param r1 x-coordinate of the lower-right corner of the first rectangle
- * @param b1 y-coordinate of the lower-right corner of the first rectangle
- * @param l2 x-coordinate of the upper-left corner of the second rectangle
- * @param t2 y-coordinate of the upper-left corner of the second rectangle
- * @param r2 x-coordinate of the lower-right corner of the second rectangle
- * @param b2 y-coordinate of the lower-right corner of the second rectangle
- * @returns {Object}
- */
-static IntersectRect(l1, t1, r1, b1, l2, t2, r2, b2) {
-	rect1 := Buffer(16), rect2 := Buffer(16), rectOut := Buffer(16)
-	NumPut("int", l1, "int", t1, "int", r1, "int", b1, rect1)
-	NumPut("int", l2, "int", t2, "int", r2, "int", b2, rect2)
-	if DllCall("user32\IntersectRect", "Ptr", rectOut, "Ptr", rect1, "Ptr", rect2)
-		return {l:NumGet(rectOut, 0, "Int"), t:NumGet(rectOut, 4, "Int"), r:NumGet(rectOut, 8, "Int"), b:NumGet(rectOut, 12, "Int")}
-}
-
-/**
  * Create a property condition from an AHK object
  * @param conditionObject Object or Array that contains property conditions. 
  *     Single property condition consists of an object where the key is the property name, and value is the property value:
