@@ -433,7 +433,7 @@ static CreateCondition(conditionObject, value?, flags?) {
         propertyId := IsInteger(conditionObject) ? conditionObject : UIA.Property.%conditionObject%
         if propertyId = 30003 && !IsNumber(value)
             try value := UIA.ControlType.%value%
-        if IsSet(flags) && (flags > 0 || flags := UIA.PropertyConditionFlags.%flags%) && (Type(value)="String")
+        if IsSet(flags) && (IsInteger(flags) || flags := UIA.PropertyConditionFlags.%flags%) && (Type(value)="String")
             return UIA.CreatePropertyConditionEx(propertyId, value, flags)
         return UIA.CreatePropertyCondition(propertyId, value)
     }
@@ -443,7 +443,7 @@ static CreateCondition(conditionObject, value?, flags?) {
 }
 
 static __ConditionBuilder(obj, &nonUIAMatchMode?) {
-    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i
+    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, value
     obj := obj.Clone()
     sanitizeMM := False
     switch Type(obj) {
@@ -5306,6 +5306,7 @@ class IUIAutomationWindowPattern extends UIA.IUIAutomationBase {
 ; Internal class: UIAViewer code
 class Viewer {
     __New() {
+        local v, pattern, value
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map()}
         this.Capturing := False
@@ -5453,6 +5454,7 @@ class Viewer {
     }
     ; Populates the listview with UIA element properties
     PopulatePropsPatterns(Element) {
+        local v, value, pattern, parent, proto, match
         Element.Highlight(0, "Blue", 4) ; Indefinite show
         this.LVProps.Delete()
         this.TVPatterns.Delete()
@@ -5544,6 +5546,7 @@ class Viewer {
     }
     ; Populates the TreeView with the UIA tree when capturing and the mouse is held still
     ConstructTreeView() {
+        local k, v, same
         this.TVUIA.Delete()
         this.TVUIA.Add("Constructing Tree, please wait...")
         Sleep -1
@@ -5563,6 +5566,7 @@ class Viewer {
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="") {
+        local k, v
         this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element.DefineProp("Path", {value:path})
         for k, v in Element.CachedChildren {
             this.RecurseTreeView(v, TWEl, path (path?",":"") k)
@@ -5570,7 +5574,7 @@ class Viewer {
     }
     ; Creates a short description string for the UIA tree elements
     GetShortDescription(Element) {
-        elDesc := " `"`""
+        local elDesc := " `"`""
         try elDesc := " `"" Element.CachedName "`""
         try elDesc := Element.CachedLocalizedControlType elDesc
         catch
