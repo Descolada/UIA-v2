@@ -5,8 +5,8 @@ cacheRequest := UIA.CreateCacheRequest()
 ; Set TreeScope to include the starting element and all descendants as well
 cacheRequest.TreeScope := 5 
 ; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
-cacheRequest.AddProperty("ControlType") 
-cacheRequest.AddProperty("LocalizedControlType")
+cacheRequest.AddProperty("Type") 
+cacheRequest.AddProperty("LocalizedType")
 cacheRequest.AddProperty("AutomationId")
 cacheRequest.AddProperty("Name")
 cacheRequest.AddProperty("Value")

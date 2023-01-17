@@ -15,7 +15,7 @@ cEl.WaitElement({Name:"Six"}).Click()
 ; Specify both name "Five" and control type "Button"
 cEl.FindElement({Name:"Five", Type:"Button"}).Click() 
 cEl.FindElement({Type:"Button", Name:"Plus"}).Click() 
-; The type can be specified as "Button", UIA.ControlType.Button, or 50000 (which is the value of UIA.ControlType.Button)
-cEl.FindElement({Name:"Four", Type:UIA.ControlType.Button}).Click() 
+; The type can be specified as "Button", UIA.Type.Button, or 50000 (which is the value of UIA.Type.Button)
+cEl.FindElement({Name:"Four", Type:UIA.Type.Button}).Click() 
 cEl.FindElement({Name:"Equals", Type:"Button"}).Click()
 ExitApp

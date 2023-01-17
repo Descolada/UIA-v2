@@ -280,7 +280,7 @@ class UIA_Mozilla extends UIA_Browser {
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSensitive:=True) { 
 		if (tabElementOrName != "") {
 			if IsObject(tabElementOrName) {
-				if (tabElementOrName.ControlType == UIA.ControlType.TabItem)
+				if (tabElementOrName.Type == UIA.Type.TabItem)
 					tabElementOrName.Click()
 			} else {
 				try this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSensitive}).Click()
@@ -297,12 +297,12 @@ class UIA_Browser {
 		if !this.BrowserId
 			throw TargetError("UIA_Browser: failed to find the browser!", -1)
 		this.CustomNames := (customNames == "") ? {} : customNames
-		this.TextControlCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Text)
-		this.DocumentControlType := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Document)
-		this.ButtonControlCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Button)
-		this.EditControlCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Edit)
-		this.ToolbarControlCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.ToolBar)
-		this.TabControlCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Tab)
+		this.TextControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Text)
+		this.DocumentControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Document)
+		this.ButtonControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Button)
+		this.EditControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Edit)
+		this.ToolbarControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.ToolBar)
+		this.TabControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Tab)
 		this.ToolbarTreeWalker := UIA.CreateTreeWalker(this.ToolbarControlCondition)
 		this.BrowserElement := UIA.ElementFromHandle(this.BrowserId)
 		this.GetCurrentMainPaneElement()
@@ -372,7 +372,7 @@ class UIA_Browser {
 	GetCurrentDocumentElement() { 
 		if (this.BrowserType = "Mozilla")
 			return (this.CurrentDocumentElement := this.BrowserElement.FindElement({Name:this.GetTab().Name, Type:"Document"}))
-		return (this.CurrentDocumentElement := this.BrowserElement.FindFirst(this.DocumentControlType))
+		return (this.CurrentDocumentElement := this.BrowserElement.FindFirst(this.DocumentControlCondition))
 	}
 
 	GetCurrentReloadButton() {
@@ -466,7 +466,7 @@ class UIA_Browser {
 	GetAlertText(closeAlert:=True, timeOut:=3000) {
 		local startTime := A_TickCount, text
 		if !this.HasOwnProp("DialogTreeWalker")
-			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Custom), UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Window)))
+			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		startTime := A_TickCount
 		while (!(IsObject(dialogEl := this.DialogTreeWalker.GetLastChildElement(this.BrowserElement)) && IsObject(OKBut := dialogEl.FindFirst(this.ButtonControlCondition))) && ((A_tickCount - startTime) < timeOut))
 			Sleep 100
@@ -481,7 +481,7 @@ class UIA_Browser {
 	
 	CloseAlert() {
 		if !this.HasOwnProp("DialogTreeWalker")
-			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Custom), UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Window)))
+			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		try {
 			dialogEl := this.DialogTreeWalker.GetLastChildElement(this.BrowserElement)
 			OKBut := dialogEl.FindFirst(this.ButtonControlCondition)
@@ -503,7 +503,7 @@ class UIA_Browser {
 	}
 	; Gets all link elements from the browser
 	GetAllLinks() {
-		static LinkCondition := UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.Hyperlink)
+		static LinkCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Hyperlink)
 		if !this.IsBrowserVisible()
 			WinActivate this.BrowserId			
 		return this.BrowserElement.FindAll(LinkCondition)
@@ -627,17 +627,15 @@ class UIA_Browser {
 		else {
 			UIA.CreateTreeWalker(this.ButtonControlCondition).GetLastChildElement(this.TabBarElement).Click()
 		}
-		;newTabBut := this.TabBarElement.FindFirstByNameAndType(this.CustomNames.NewTabButtonName ? this.CustomNames.NewTabButtonName : butName, UIA_Enum.UIA_ControlType.Button,,matchMode,caseSensitive)
-		;newTabBut.Click()
 	}
 	
 	GetAllTabs() { 
-		return this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.TabItem))
+		return this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.TabItem))
 	}
 	; Gets all tab elements matching searchPhrase, matchMode and caseSensitive
 	; If searchPhrase is omitted then all tabs will be returned
 	GetTabs(searchPhrase:="", matchMode:=3, caseSensitive:=True) {
-		return (searchPhrase == "") ? this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.ControlType, UIA.ControlType.TabItem)) : this.TabBarElement.FindElements({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+		return (searchPhrase == "") ? this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.TabItem)) : this.TabBarElement.FindElements({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
 	}
 
 	; Gets all the titles of tabs
@@ -651,7 +649,7 @@ class UIA_Browser {
 	
 	; Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	GetTab(searchPhrase:="", matchMode:=3, caseSensitive:=True) { 
-		return (searchPhrase == "") ? this.TabBarElement.FindElement({ControlType:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
 	}
 	
 	; Selects a tab with the text of tabName. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
@@ -667,7 +665,7 @@ class UIA_Browser {
 	; Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSensitive:=True) { 
 		if IsObject(tabElementOrName) {
-			if (tabElementOrName.ControlType == UIA.ControlType.TabItem)
+			if (tabElementOrName.Type == UIA.Type.TabItem)
 				try UIA.TreeWalkerTrue.GetLastChildElement(tabElementOrName).Click()
 		} else {
 			if (tabElementOrName == "") {

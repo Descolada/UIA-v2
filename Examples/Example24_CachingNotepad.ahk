@@ -4,13 +4,12 @@
 cacheRequest := UIA.CreateCacheRequest()
 ; Set TreeScope to include the starting element and all descendants as well
 cacheRequest.TreeScope := 5 
-; Add all the necessary properties that DumpAll uses: ControlType, LocalizedControlType, AutomationId, Name, Value, ClassName, AcceleratorKey
-cacheRequest.AddProperty("ControlType") 
+; Add some properties to be cached
+cacheRequest.AddProperty("Type") 
 cacheRequest.AddProperty("Name")
 cacheRequest.AddProperty("Value")
 
 cacheRequest.AddPattern("Value")
-cacheRequest.AddProperty("ValueValue")
 
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
@@ -19,7 +18,7 @@ MsgBox("Type something in Notepad: note that the document content won't change i
 
 ; Get element and also build the cache
 npEl:= UIA.ElementFromHandle("ahk_exe notepad.exe", cacheRequest)
-docEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}],,,,cacheRequest)
+docEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}],,,,,cacheRequest)
 ; We now have a cached "snapshot" of the window from which we can access our desired elements faster.
 Loop {
     ToolTip "Cached window name: " npEl.CachedName "`nCached document content: " docEl.CachedValue
