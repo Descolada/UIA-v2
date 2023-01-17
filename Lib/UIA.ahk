@@ -83,12 +83,6 @@ static __New() {
         this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
     UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
 }
-static TreeWalkerTrue := ""
-
-; IUIAutomation constants and enumerations.
-; Access properties with UIA.property.subproperty (UIA.ControlType.Button)
-; To get the property name from value, use the array style: UIA.property[value] (UIA.ControlType[50000] == "Button")
-
 ; This is enables getting property names from values using the array style
 static __PropertyFromValue(obj, value) {
     local k, v
@@ -103,6 +97,11 @@ static __PropertyFromValue(obj, value) {
     throw UnsetItemError("Property item `"" value "`" not found!", -2)
 }
 static __PropertyValueGetter := {get: (obj, value) => UIA.__PropertyFromValue(obj, value)}
+
+; ---------- IUIAutomation constants and enumerations. ----------
+
+; Access properties with UIA.property.subproperty (UIA.ControlType.Button)
+; To get the property name from value, use the array style: UIA.property[value] (UIA.ControlType[50000] == "Button")
 
 static MatchMode := {StartsWith:1, Substring:2, Exact:3, RegEx:"RegEx"}.DefineProp("__Item", this.__PropertyValueGetter)
 
@@ -215,161 +214,143 @@ static WindowVisualState := {Normal:0,Maximized:1,Minimized:2}.DefineProp("__Ite
 ; enum WindowInteractionState Contains values that specify the current state of the window for purposes of user interaction.
 static WindowInteractionState := {Running:0,Closing:1,ReadyForUserInteraction:2,BlockedByModalWindow:3,NotResponding:4}.DefineProp("__Item", this.__PropertyValueGetter)
 
-; BSTR wrapper, convert BSTR to AHK string and free it
-static BSTR(ptr) {
-    static _ := DllCall("LoadLibrary", "str", "oleaut32.dll")
-    if ptr {
-        s := StrGet(ptr), DllCall("oleaut32\SysFreeString", "ptr", ptr)
-        return s
+; ---------- UIA Properties ----------
+
+; Check whether a certain version of UIAutomation is available
+static IsIUIAutomation2Available => VerCompare(A_OSVersion, ">=6.2.9200")
+static IsIUIAutomation3Available => VerCompare(A_OSVersion, ">=6.3.9600")
+static IsIUIAutomation4Available => VerCompare(A_OSVersion, ">=10.0.14393")
+static IsIUIAutomation5Available => VerCompare(A_OSVersion, ">=10.0.14393")
+static IsIUIAutomation6Available => VerCompare(A_OSVersion, ">=10.0.17763")
+
+; Check whether a certain version of UIAutomation Element is available
+static IsIUIAutomationElement2Available => VerCompare(A_OSVersion, ">=6.2.9200")
+static IsIUIAutomationElement3Available => VerCompare(A_OSVersion, ">=6.3.9600")
+static IsIUIAutomationElement4Available => VerCompare(A_OSVersion, ">=10")
+static IsIUIAutomationElement5Available => VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement6Available => VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement7Available => VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement8Available => VerCompare(A_OSVersion, ">=10.0.17134")
+static IsIUIAutomationElement9Available => VerCompare(A_OSVersion, ">=10.0.17763")
+
+; Retrieves a predefined TreeWalker made with the TrueCondition
+static TreeWalkerTrue := ""
+
+; Retrieves a predefined condition that selects all elements.
+static TrueCondition => UIA.CreateTrueCondition()
+
+; Retrieves a static token object representing a property or text attribute that is not supported. This property is read-only.
+; This object can be used for comparison with the results from UIA.IUIAutomationElement,,GetPropertyValue or IUIAutomationTextRange,,GetAttributeValue.
+static ReservedNotSupportedValue {
+    get {
+        local notSupportedValue
+        return (ComCall(54, this, "ptr*", &notSupportedValue := 0), ComValue(0xd, notSupportedValue))
     }
-}
-static SafeArrayToAHKArray(sArr) {
-    local _, v, ret := []
-    if IsInteger(sArr)
-        sArr := ComValue(0x2003, sArr)
-    for _, v in sArr
-        ret.Push(v)
-    ret.DefineProp("__Value", {value:sArr})
-    ret.DefineProp("ptr", {value:sArr.ptr})
-    return ret
-}
-; X can be pt64 as well, in which case Y should be omitted
-static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
-    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | X) : X), "UInt", 2)
 }
 
-; Creates a variant to pass into ComCalls
-class Variant {
-    __New(Value := unset, VarType := 0xC) {
-        local v, i
-        static SIZEOF_VARIANT := 8 + (2 * A_PtrSize)
-        this.var := Buffer(SIZEOF_VARIANT, 0)
-        if VarType != 0xC
-            NumPut "ushort", VarType, this.var
-        this.owner := True
-        if IsSet(Value) {
-            if (Type(Value) == "ComVar") {
-                this.var := Value.var, this.ref := Value.ref, this.obj := Value, this.owner := False
-                return
-            } 
-            if (IsObject(Value)) {
-                this.ref := ComValue(0x400C, this.var.ptr)
-                if Value is Array {
-                    if Value.Length {
-                        switch Type(Value[1]) {
-                            case "Integer": VarType := 3
-                            case "String": VarType := 8
-                            case "Float": VarType := 5
-                            case "ComValue", "ComObject": VarType := ComObjType(Value[1])
-                            default: VarType := 0xC
-                        }
-                    } else
-                        VarType := 0xC
-                    ComObjFlags(obj := ComObjArray(VarType, Value.Length), -1), i := 0, this.ref[] := obj
-                    for v in Value
-                        obj[i++] := v
-                    return
-                }
-            }
-        }
-        this.ref := ComValue(0x4000 | VarType, this.var.Ptr + (VarType = 0xC ? 0 : 8))
-        this.ref[] := Value
+; Retrieves a static token object representing a text attribute that is a mixed attribute. This property is read-only.
+; The object retrieved by IUIAutomation,,ReservedMixedAttributeValue can be used for comparison with the results from IUIAutomationTextRange,,GetAttributeValue to determine if a text range contains more than one value for a particular text attribute.
+static ReservedMixedAttributeValue {
+    get {
+        local mixedAttributeValue
+        return (ComCall(55, this, "ptr*", &mixedAttributeValue := 0), ComValue(0xd, mixedAttributeValue))
     }
-    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
-    __Item {
-        get => this.Type=0xB?-this.ref[]:this.ref[]
-        set => this.ref[] := this.Type=0xB?(!value?0:-1):value
+}
+; Retrieves an IUIAutomationTreeWalker interface used to discover control elements.
+static ControlViewWalker {
+    get {
+        local walker
+        return (ComCall(14, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
     }
-    Ptr => this.var.Ptr
-    Size => this.var.Size
-    Type {
-        get => NumGet(this.var, "ushort")
-        set {
-            if (!this.IsVariant)
-                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
-            NumPut("ushort", Value, this.var)
-        }
-    }
-    IsVariant => ComObjType(this.ref) & 0xC
 }
 
-; Construction and deconstruction VARIANT struct
-class ComVar {
-    /**
-     * Construction VARIANT struct, `ptr` property points to the address, `__Item` property returns var's Value
-     * @param vVal Values that need to be wrapped, supports String, Integer, Double, Array, ComValue, ComObjArray
-     * ### example
-     * `var1 := ComVar('string'), MsgBox(var1[])`
-     * 
-     * `var2 := ComVar([1,2,3,4], , true)`
-     * 
-     * `var3 := ComVar(ComValue(0xb, -1))`
-     * @param vType Variant's type, VT_VARIANT(default)
-     * @param convert Convert AHK's array to ComObjArray
-     */
-    __New(vVal := unset, vType := 0xC, convert := false) {
-        local v, i
-        static size := 8 + 2 * A_PtrSize
-        this.var := Buffer(size, 0), this.owner := true
-        this.ref := ComValue(0x4000 | vType, this.var.Ptr + (vType = 0xC ? 0 : 8))
-        if vType != 0xC
-            NumPut "ushort", vType, this.var
-        if IsSet(vVal) {
-            if (Type(vVal) == "ComVar") {
-                this.var := vVal.var, this.ref := vVal.ref, this.obj := vVal, this.owner := false
-            } else {
-                if (IsObject(vVal)) {
-                    if (vType != 0xC)
-                        this.ref := ComValue(0x400C, this.var.ptr)
-                    if convert && (vVal is Array) {
-                        switch Type(vVal[1]) {
-                            case "Integer": vType := 3
-                            case "String": vType := 8
-                            case "Float": vType := 5
-                            case "ComValue", "ComObject": vType := ComObjType(vVal[1])
-                            default: vType := 0xC
-                        }
-                        ComObjFlags(obj := ComObjArray(vType, vVal.Length), -1), i := 0, this.ref[] := obj
-                        for v in vVal
-                            obj[i++] := v
-                    } else
-                        this.ref[] := vVal
-                } else
-                    this.ref[] := vVal
-            }
-        }
+; Retrieves an IUIAutomationTreeWalker interface used to discover content elements.
+static ContentViewWalker {
+    get {
+        local walker
+        return (ComCall(15, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
     }
-    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
-    __Item {
-        get => this.ref[]
-        set => this.ref[] := value
-    }
-    Ptr => this.var.Ptr
-    Size => this.var.Size
-    Type {
-        get => NumGet(this.var, "ushort")
-        set {
-            if (!this.IsVariant)
-                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
-            NumPut("ushort", Value, this.var)
-        }
-    }
-    IsVariant => ComObjType(this.ref) & 0xC
 }
-; NativeArray is C style array, zero-based index, it has `__Item` and `__Enum` property
-class NativeArray {
-    __New(ptr, count, type := "ptr") {
-        static _ := DllCall("LoadLibrary", "str", "ole32.dll")
-        static bits := { UInt: 4, UInt64: 8, Int: 4, Int64: 8, Short: 2, UShort: 2, Char: 1, UChar: 1, Double: 8, Float: 4, Ptr: A_PtrSize, UPtr: A_PtrSize }
-        this.size := (this.count := count) * (bit := bits.%type%), this.ptr := ptr || DllCall("ole32\CoTaskMemAlloc", "uint", this.size, "ptr")
-        this.DefineProp("__Item", { get: (s, i) => NumGet(s, i * bit, type) })
-        this.DefineProp("__Enum", { call: (s, i) => (i = 1 ?
-                (i := 0, (&v) => i < count ? (v := NumGet(s, i * bit, type), ++i) : false) :
-                    (i := 0, (&k, &v) => (i < count ? (k := i, v := NumGet(s, i * bit, type), ++i) : false))
-            ) })
+
+; Retrieves a tree walker object used to traverse an unfiltered view of the UI Automation tree.
+static RawViewWalker {
+    get {
+        local walker
+        return (ComCall(16, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
     }
-    __Delete() => DllCall("ole32\CoTaskMemFree", "ptr", this)
 }
+
+; Retrieves a predefined IUIAutomationCondition interface that selects all UI elements in an unfiltered view.
+static RawViewCondition {
+    get {
+        local condition
+        return (ComCall(17, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+    }
+}
+
+; Retrieves a predefined IUIAutomationCondition interface that selects control elements.
+static ControlViewCondition {
+    get {
+        local condition
+        return (ComCall(18, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+    }
+}
+
+; Retrieves a predefined IUIAutomationCondition interface that selects content elements.
+static ContentViewCondition {
+    get {
+        local condition
+        return (ComCall(19, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+    }
+}
+
+; ---------- IUIAutomation2 properties ----------
+
+; Specifies whether calls to UI Automation control pattern methods automatically set focus to the target element. Default is True. 
+static AutoSetFocus {
+    get {
+        local out
+        return (ComCall(58, this,  "int*", &out:=0), out)
+    }
+    set => ComCall(59, this,  "int", Value)
+}
+; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for an automation element. Default is 20000ms (20 seconds), minimum seems to be 50ms.
+static ConnectionTimeout {
+    get {
+        local out
+        return (ComCall(60, this,  "int*", &out:=0), out)
+    } 
+    set => ComCall(61, this,  "int", Value) ; Minimum seems to be 50 (ms?)
+}
+; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for information about an automation element. Default is 2000ms (2 seconds), minimum seems to be 50ms.
+static TransactionTimeout {
+    get {
+        local out
+        return (ComCall(62, this,  "int*", &out:=0), out)
+    } 
+    set => ComCall(63, this,  "int", Value)
+}
+
+; ---------- IUIAutomation6 properties ----------
+
+; Indicates whether an accessible technology client adjusts provider request timeouts when the provider is non-responsive.
+ConnectionRecoveryBehavior {
+    get {
+        local out
+        return (ComCall(73, this,  "int*", &out), out)
+    } 
+    set => ComCall(74, this,  "int", value) 
+}
+; Gets or sets whether an accessible technology client receives all events, or a subset where duplicate events are detected and filtered.
+CoalesceEvents {
+    get {
+        local out
+        return (ComCall(75, this,  "int*", &out:=0), out)
+    } 
+    set => ComCall(76, this,  "int", value)
+}
+
+; ---------- IUIAutomation methods ----------
 
 static RuntimeIdToString(runtimeId) {
     local str := "", v
@@ -560,8 +541,6 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
     return cEl
 }
 
-; ---------- IUIAutomation ----------
-
 ; Compares two UI Automation elements to determine whether they represent the same underlying UI element.
 static CompareElements(el1, el2) {
 	local areSame
@@ -686,54 +665,6 @@ static CreateTreeWalker(pCondition) {
 	return (ComCall(13, this, "ptr", InStr(Type(pCondition), "Condition") ? pCondition : UIA.CreateCondition(pCondition), "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
 }
 
-; Retrieves an IUIAutomationTreeWalker interface used to discover control elements.
-static ControlViewWalker {
-		get {
-			local walker
-			return (ComCall(14, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
-		}
-	}
-
-; Retrieves an IUIAutomationTreeWalker interface used to discover content elements.
-static ContentViewWalker {
-		get {
-			local walker
-			return (ComCall(15, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
-		}
-	}
-
-; Retrieves a tree walker object used to traverse an unfiltered view of the UI Automation tree.
-static RawViewWalker {
-		get {
-			local walker
-			return (ComCall(16, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
-		}
-	}
-
-; Retrieves a predefined IUIAutomationCondition interface that selects all UI elements in an unfiltered view.
-static RawViewCondition {
-		get {
-			local condition
-			return (ComCall(17, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
-		}
-	}
-
-; Retrieves a predefined IUIAutomationCondition interface that selects control elements.
-static ControlViewCondition {
-		get {
-			local condition
-			return (ComCall(18, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
-		}
-	}
-
-; Retrieves a predefined IUIAutomationCondition interface that selects content elements.
-static ContentViewCondition {
-		get {
-			local condition
-			return (ComCall(19, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
-		}
-	}
-
 ; Creates a cache request.
 ; After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
 static CreateCacheRequest() {
@@ -741,8 +672,6 @@ static CreateCacheRequest() {
 	return (ComCall(20, this, "ptr*", &cacheRequest := 0), cacheRequest?UIA.IUIAutomationCacheRequest(cacheRequest):"")
 }
 
-; Retrieves a predefined condition that selects all elements.
-static TrueCondition => UIA.CreateTrueCondition()
 static CreateTrueCondition() {
 	local newCondition
 	return (ComCall(21, this, "ptr*", &newCondition := 0), newCondition?UIA.IUIAutomationBoolCondition(newCondition):"")
@@ -983,23 +912,6 @@ static CheckNotSupported(value) {
     return isNotSupported
 }
 
-; Retrieves a static token object representing a property or text attribute that is not supported. This property is read-only.
-; This object can be used for comparison with the results from UIA.IUIAutomationElement,,GetPropertyValue or IUIAutomationTextRange,,GetAttributeValue.
-static ReservedNotSupportedValue {
-		get {
-			local notSupportedValue
-			return (ComCall(54, this, "ptr*", &notSupportedValue := 0), ComValue(0xd, notSupportedValue))
-		}
-	}
-
-; Retrieves a static token object representing a text attribute that is a mixed attribute. This property is read-only.
-; The object retrieved by IUIAutomation,,ReservedMixedAttributeValue can be used for comparison with the results from IUIAutomationTextRange,,GetAttributeValue to determine if a text range contains more than one value for a particular text attribute.
-static ReservedMixedAttributeValue {
-		get {
-			local mixedAttributeValue
-			return (ComCall(55, this, "ptr*", &mixedAttributeValue := 0), ComValue(0xd, mixedAttributeValue))
-		}
-	}
 
 ; This method enables UI Automation clients to get UIA.IUIAutomationElement interfaces for accessible objects implemented by a Microsoft Active Accessiblity server.
 ; This method may fail if the server implements UI Automation provider interfaces alongside Microsoft Active Accessibility support.
@@ -1011,33 +923,6 @@ static ElementFromIAccessible(accessible, childId:=0) => (InStr(Type(accessible)
 
 ; Retrieves a UI Automation element for the specified accessible object from a Microsoft Active Accessibility server, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
 static ElementFromIAccessibleBuildCache(cacheRequest, accessible, childId:=0) => (InStr(Type(accessible), "IAccessible") ? (ComCall(57, this, "ptr", accessible.accessible, "int", accessible.childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)) : (ComCall(57, this, "ptr", accessible, "int", childId, "ptr", cacheRequest, "ptr*", &element := 0), UIA.IUIAutomationElement(element)))
-
-; ---------- IUIAutomation2 ----------
-
-; Specifies whether calls to UI Automation control pattern methods automatically set focus to the target element. Default is True. 
-static AutoSetFocus {
-    get {
-        local out
-        return (ComCall(58, this,  "int*", &out:=0), out)
-    }
-    set => ComCall(59, this,  "int", Value)
-}
-; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for an automation element. Default is 20000ms (20 seconds), minimum seems to be 50ms.
-static ConnectionTimeout {
-    get {
-        local out
-        return (ComCall(60, this,  "int*", &out:=0), out)
-    } 
-    set => ComCall(61, this,  "int", Value) ; Minimum seems to be 50 (ms?)
-}
-; Specifies the length of time that UI Automation will wait for a provider to respond to a client request for information about an automation element. Default is 2000ms (2 seconds), minimum seems to be 50ms.
-static TransactionTimeout {
-    get {
-        local out
-        return (ComCall(62, this,  "int*", &out:=0), out)
-    } 
-    set => ComCall(63, this,  "int", Value)
-}
 
 ; ---------- IUIAutomation3 ----------
 
@@ -1087,23 +972,6 @@ static RemoveNotificationEventHandler(handler, element) => (ComCall(69, this,  "
 
 ; ---------- IUIAutomation6 ----------
 
-; Indicates whether an accessible technology client adjusts provider request timeouts when the provider is non-responsive.
-ConnectionRecoveryBehavior {
-    get {
-        local out
-        return (ComCall(73, this,  "int*", &out), out)
-    } 
-    set => ComCall(74, this,  "int", value) 
-}
-; Gets or sets whether an accessible technology client receives all events, or a subset where duplicate events are detected and filtered.
-CoalesceEvents {
-    get {
-        local out
-        return (ComCall(75, this,  "int*", &out:=0), out)
-    } 
-    set => ComCall(76, this,  "int", value)
-}
-
 ; Registers one or more event listeners in a single method call.
 static CreateEventHandlerGroup() {
     local out
@@ -1119,6 +987,165 @@ static RemoveActiveTextPositionChangedEventHandler(handler, element) => (ComCall
 ; ---------- IUIAutomation7 ----------
 ; Has no properties/methods
 
+
+; ---------- Internal methods and properties ----------
+
+
+; BSTR wrapper, convert BSTR to AHK string and free it
+static BSTR(ptr) {
+    static _ := DllCall("LoadLibrary", "str", "oleaut32.dll")
+    if ptr {
+        s := StrGet(ptr), DllCall("oleaut32\SysFreeString", "ptr", ptr)
+        return s
+    }
+}
+static SafeArrayToAHKArray(sArr) {
+    local _, v, ret := []
+    if IsInteger(sArr)
+        sArr := ComValue(0x2003, sArr)
+    for _, v in sArr
+        ret.Push(v)
+    ret.DefineProp("__Value", {value:sArr})
+    ret.DefineProp("ptr", {value:sArr.ptr})
+    return ret
+}
+; X can be pt64 as well, in which case Y should be omitted
+static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
+    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | X) : X), "UInt", 2)
+}
+
+; Creates a variant to pass into ComCalls
+class Variant {
+    __New(Value := unset, VarType := 0xC) {
+        local v, i
+        static SIZEOF_VARIANT := 8 + (2 * A_PtrSize)
+        this.var := Buffer(SIZEOF_VARIANT, 0)
+        if VarType != 0xC
+            NumPut "ushort", VarType, this.var
+        this.owner := True
+        if IsSet(Value) {
+            if (Type(Value) == "ComVar") {
+                this.var := Value.var, this.ref := Value.ref, this.obj := Value, this.owner := False
+                return
+            } 
+            if (IsObject(Value)) {
+                this.ref := ComValue(0x400C, this.var.ptr)
+                if Value is Array {
+                    if Value.Length {
+                        switch Type(Value[1]) {
+                            case "Integer": VarType := 3
+                            case "String": VarType := 8
+                            case "Float": VarType := 5
+                            case "ComValue", "ComObject": VarType := ComObjType(Value[1])
+                            default: VarType := 0xC
+                        }
+                    } else
+                        VarType := 0xC
+                    ComObjFlags(obj := ComObjArray(VarType, Value.Length), -1), i := 0, this.ref[] := obj
+                    for v in Value
+                        obj[i++] := v
+                    return
+                }
+            }
+        }
+        this.ref := ComValue(0x4000 | VarType, this.var.Ptr + (VarType = 0xC ? 0 : 8))
+        this.ref[] := Value
+    }
+    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
+    __Item {
+        get => this.Type=0xB?-this.ref[]:this.ref[]
+        set => this.ref[] := this.Type=0xB?(!value?0:-1):value
+    }
+    Ptr => this.var.Ptr
+    Size => this.var.Size
+    Type {
+        get => NumGet(this.var, "ushort")
+        set {
+            if (!this.IsVariant)
+                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
+            NumPut("ushort", Value, this.var)
+        }
+    }
+    IsVariant => ComObjType(this.ref) & 0xC
+}
+
+; Construction and deconstruction VARIANT struct
+class ComVar {
+    /**
+     * Construction VARIANT struct, `ptr` property points to the address, `__Item` property returns var's Value
+     * @param vVal Values that need to be wrapped, supports String, Integer, Double, Array, ComValue, ComObjArray
+     * ### example
+     * `var1 := ComVar('string'), MsgBox(var1[])`
+     * 
+     * `var2 := ComVar([1,2,3,4], , true)`
+     * 
+     * `var3 := ComVar(ComValue(0xb, -1))`
+     * @param vType Variant's type, VT_VARIANT(default)
+     * @param convert Convert AHK's array to ComObjArray
+     */
+    __New(vVal := unset, vType := 0xC, convert := false) {
+        local v, i
+        static size := 8 + 2 * A_PtrSize
+        this.var := Buffer(size, 0), this.owner := true
+        this.ref := ComValue(0x4000 | vType, this.var.Ptr + (vType = 0xC ? 0 : 8))
+        if vType != 0xC
+            NumPut "ushort", vType, this.var
+        if IsSet(vVal) {
+            if (Type(vVal) == "ComVar") {
+                this.var := vVal.var, this.ref := vVal.ref, this.obj := vVal, this.owner := false
+            } else {
+                if (IsObject(vVal)) {
+                    if (vType != 0xC)
+                        this.ref := ComValue(0x400C, this.var.ptr)
+                    if convert && (vVal is Array) {
+                        switch Type(vVal[1]) {
+                            case "Integer": vType := 3
+                            case "String": vType := 8
+                            case "Float": vType := 5
+                            case "ComValue", "ComObject": vType := ComObjType(vVal[1])
+                            default: vType := 0xC
+                        }
+                        ComObjFlags(obj := ComObjArray(vType, vVal.Length), -1), i := 0, this.ref[] := obj
+                        for v in vVal
+                            obj[i++] := v
+                    } else
+                        this.ref[] := vVal
+                } else
+                    this.ref[] := vVal
+            }
+        }
+    }
+    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
+    __Item {
+        get => this.ref[]
+        set => this.ref[] := value
+    }
+    Ptr => this.var.Ptr
+    Size => this.var.Size
+    Type {
+        get => NumGet(this.var, "ushort")
+        set {
+            if (!this.IsVariant)
+                throw PropertyError("VarType is not VT_VARIANT, Type is read-only.", -2)
+            NumPut("ushort", Value, this.var)
+        }
+    }
+    IsVariant => ComObjType(this.ref) & 0xC
+}
+; NativeArray is C style array, zero-based index, it has `__Item` and `__Enum` property
+class NativeArray {
+    __New(ptr, count, type := "ptr") {
+        static _ := DllCall("LoadLibrary", "str", "ole32.dll")
+        static bits := { UInt: 4, UInt64: 8, Int: 4, Int64: 8, Short: 2, UShort: 2, Char: 1, UChar: 1, Double: 8, Float: 4, Ptr: A_PtrSize, UPtr: A_PtrSize }
+        this.size := (this.count := count) * (bit := bits.%type%), this.ptr := ptr || DllCall("ole32\CoTaskMemAlloc", "uint", this.size, "ptr")
+        this.DefineProp("__Item", { get: (s, i) => NumGet(s, i * bit, type) })
+        this.DefineProp("__Enum", { call: (s, i) => (i = 1 ?
+                (i := 0, (&v) => i < count ? (v := NumGet(s, i * bit, type), ++i) : false) :
+                    (i := 0, (&k, &v) => (i < count ? (k := i, v := NumGet(s, i * bit, type), ++i) : false))
+            ) })
+    }
+    __Delete() => DllCall("ole32\CoTaskMemFree", "ptr", this)
+}
 
 ; The base class for IUIAutomation objects that return releasable pointers
 class IUIAutomationBase {
@@ -1728,7 +1755,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 return ""
             }
             condition := IUIAcondition
-            if index = -1
+            if index = -1 && UIA.IsIUIAutomationElement7Available
                 index := 1, order := order | 2, withOptions := True
             ; Were any conditions encountered where we need to filter conditions?
             if index != 1 {
