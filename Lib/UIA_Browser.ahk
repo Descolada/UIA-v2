@@ -324,12 +324,13 @@ class UIA_Browser {
 	
 	__Get(member, params) {
 		try return this.BrowserElement.%member%
-		try return this.BrowserElement[member]
+		try return UIA.%member%
 		throw Error("This class does not contain property `"" member "`"", -1)
 	}
 	
-	__Call(member, params*) {
-		try return this.BrowserElement[member].Call(this.BrowserElement, params*)
+	__Call(member, params) {
+		try return this.BrowserElement.%member%(params*)
+		try return UIA.%member%(params*)
 		throw Error("This class does not contain method `"" member "`"", -1)
 	}
 	
