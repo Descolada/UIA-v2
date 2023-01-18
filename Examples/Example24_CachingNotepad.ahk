@@ -1,15 +1,17 @@
 ﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
-cacheRequest := UIA.CreateCacheRequest()
-; Set TreeScope to include the starting element and all descendants as well
-cacheRequest.TreeScope := 5 
-; Add some properties to be cached
-cacheRequest.AddProperty("Type") 
-cacheRequest.AddProperty("Name")
-cacheRequest.AddProperty("Value")
-
-cacheRequest.AddPattern("Value")
+cacheRequest := UIA.CreateCacheRequest(["Type", "Name", "Value"],, "Subtree")
+/*
+    ; Instead we could also define a cacherequest like this:
+    cacheRequest := UIA.CreateCacheRequest()
+    ; Set TreeScope to include the starting element and all descendants as well
+    cacheRequest.TreeScope := 5 
+    ; Add some properties to be cached
+    cacheRequest.AddProperty("Type") 
+    cacheRequest.AddProperty("Name")
+    cacheRequest.AddProperty("Value")
+*/
 
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"

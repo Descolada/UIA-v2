@@ -431,10 +431,10 @@ static CreateCondition(condition, value?, flags?) {
 
 static __ConditionBuilder(obj, &nonUIAMatchMode?) {
     local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, value
-    obj := obj.Clone()
     sanitizeMM := False
     switch Type(obj) {
         case "Object":
+            obj := obj.Clone() ; Speed-testing showed that not cloning (getting props with HasOwnProp and then ignoring them in the loop) is as fast as cloning.
             obj.DeleteProp("index"), obj.DeleteProp("i")
             operator := obj.DeleteProp("operator") || obj.DeleteProp("op") || "and"
             cs := obj.HasOwnProp("casesense") ? obj.casesense : obj.HasOwnProp("cs") ? obj.cs : 1
@@ -447,7 +447,7 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
             if IsSet(nonUIAMatchMode) {
                 if (mm = "RegEx" || mm = 1)
                     nonUIAMatchMode := True, sanitizeMM := True
-            } else {
+            } else { ; If creating a "pure" UIA condition, allow only Exact and Substring matchmodes
                 if !((mm = 3) || (mm = 2))
                     throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions. MatchMode 1 and RegEx are allowed with FindFirst, FindAll, and TreeWalking methods.")
             }
@@ -480,7 +480,7 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
             catch
                 throw ValueError("Type '" v '" in a non-existant type!', -1)
         }
-        if sanitizeMM && RegexMatch(UIA.Property[k], "i)Name|AutomationId|Value|ClassName|FrameworkId") {
+        if sanitizeMM && RegexMatch(UIA.Property[k], "i)^((Class)?Name|A(utomationId|cc.*Key|ria.*|nnotation(Author|DateTime|Target|(Annotation)?TypeName))|Value(Value)?|FrameworkId|(Full|Provider)?Description|HelpText|Item.*|Localized(.*?)Type|DropTarget(DropTarget)?Effect|LegacyIAccessible(DefaultAction|Description|Help|KeyboardShortcut|Name|Value)|SpreadsheetItemFormula|Styles(ExtendedProperties|FillPatternSyle|Shape|StyleName))$") {
             t := mm = 1 ? UIA.CreateCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
             arr[i++] := t[]
         } else if (k >= 30000) {
@@ -489,12 +489,14 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
         }
     }
     if count = 1
-        return t
+        return operator = "not" ? UIA.CreateNotCondition(t) : t
     switch operator, false {
         case "and":
             return UIA.CreateAndConditionFromArray(arr)
         case "or":
             return UIA.CreateOrConditionFromArray(arr)
+        case "not":
+            return UIA.CreateNotCondition(UIA.CreateAndConditionFromArray(arr))
         default:
             return UIA.CreateFalseCondition()
     }
@@ -680,11 +682,33 @@ static CreateTreeWalker(pCondition) {
 	return (ComCall(13, this, "ptr", InStr(Type(pCondition), "Condition") ? pCondition : UIA.CreateCondition(pCondition), "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
 }
 
-; Creates a cache request.
-; After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
-static CreateCacheRequest() {
-	local cacheRequest
-	return (ComCall(20, this, "ptr*", &cacheRequest := 0), cacheRequest?UIA.IUIAutomationCacheRequest(cacheRequest):"")
+/**
+ * Creates a cache request. After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
+ * @param properties Optional: an array containing properties that will be added to the CacheRequest
+ * @param patterns Optional: an array containing patterns that will be added to the CacheRequest
+ * @param scope Optional: set the TreeScope for the CacheRequest (one of UIA.TreeScope values)
+ * @param mode Optional: set the AutomationElementMode for the CacheRequest (one of UIA.AutomationElementMode values)
+ * @param filter Optional: a condition for caching elements
+ */
+static CreateCacheRequest(properties?, patterns?, scope?, mode?, filter?) {
+	local cacheRequest, v
+    if cacheRequest := (ComCall(20, this, "ptr*", &cacheRequest := 0), cacheRequest?UIA.IUIAutomationCacheRequest(cacheRequest):"") {
+        if IsSet(properties) {
+            for v in properties
+                cacheRequest.AddProperty(v)
+        }
+        if IsSet(patterns) {
+            for v in patterns
+                cacheRequest.AddPattern(v)
+        }
+        if IsSet(scope)
+            cacheRequest.TreeScope := IsInteger(scope) ? scope : UIA.TreeScope.%scope%
+        if IsSet(mode)
+            cacheRequest.AutomationElementMode := IsInteger(mode) ? mode : UIA.AutomationElementMode.%mode%
+        if IsSet(filter)
+            cacheRequest.TreeFilter := InStr(Type(filter), "Condition") ? filter : UIA.CreateCondition(filter)
+    }
+    return cacheRequest
 }
 
 static CreateTrueCondition() {
@@ -1453,7 +1477,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
 	Dump(scope:=1, delimiter:=" ", maxDepth:=-1) {
         local out, n, oChild
-        static cacheRequest := 0
+        ; Create cache request, add all the necessary properties that Dump uses: Type, LocalizedType, AutomationId, Name, Value, ClassName, AcceleratorKey
+        ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
+        static cacheRequest := UIA.CreateCacheRequest(["Type", "LocalizedType", "AutomationId", "Name", "Value", "ClassName", "AcceleratorKey"],,5,0)
         ; Speed-testing has shown that DumpAll with Current properties is about 1,5 to 4x slower than with Cached properties.
         ; Cached Dump with TreeScope.Element or TreeScope.Children is a bit slower than Current Dump.
         ; This means that we use Current properties if TreeScope is less than Descendants, 
@@ -1466,21 +1492,6 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     out .= n ": " oChild.CurrentDump(delimiter) "`n"
             }
         } else {
-            if !cacheRequest {
-                cacheRequest := UIA.CreateCacheRequest()
-                ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
-                cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
-                ; Set TreeScope to include the starting element and all descendants as well
-                cacheRequest.TreeScope := 5 
-                ; Add all the necessary properties that Dump uses: Type, LocalizedType, AutomationId, Name, Value, ClassName, AcceleratorKey
-                cacheRequest.AddProperty("Type") 
-                cacheRequest.AddProperty("LocalizedType")
-                cacheRequest.AddProperty("AutomationId")
-                cacheRequest.AddProperty("Name")
-                cacheRequest.AddProperty("Value")
-                cacheRequest.AddProperty("ClassName")
-                cacheRequest.AddProperty("AcceleratorKey")
-            }
             ; Build the cache for the set scope
             try el := this.CachedChildren.Length
             el := el ? this : this.FindFirstBuildCache(cacheRequest, UIA.TrueCondition, scope)

@@ -18,6 +18,9 @@ cacheRequest.AddPattern("Window")
 ; Also need to add any pattern properties we wish to use
 cacheRequest.AddProperty("WindowCanMaximize") 
 
+; This all can be done in one line as well:
+; cacheRequest := UIA.CreateCacheRequest(["Type", "LocalizedType", "AutomationId", "Name", "Value", "ClassName", "AcceleratorKey", "WindowCanMaximize"], ["Window"], "Subtree")
+
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 
