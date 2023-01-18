@@ -25,14 +25,14 @@ MsgBox "The first MenuItem element with Name 'File': " npEl.FindElement({Type:"M
 MsgBox "The first element with type Document or type Edit: " npEl.FindElement([{Type:"Document"}, {Type:"Edit"}]).Highlight().Dump()
 
 ; To find an nth element, supply either "index" or "i" property:
-MsgBox "The third MenuItem element: " npEl.FindElement({Type:"MenuItem", i:3}).Highlight().Dump()
+MsgBox "The third MenuItem element: " npEl.FindElement({Type:"MenuItem", index:3}).Highlight().Dump()
 
 ; By default, FindElement(s) and WaitElement looks for exact matches. To look for partial matches or by
 ; RegEx, then supply "matchmode" or "mm" property with the UIA.MatchMode value (same as AHK-s TitleMatchMode).
-MsgBox "The first element with Name containing 'Bar': " npEl.FindElement({Name:"Bar", mm:"Substring"}).Highlight().Dump()
+MsgBox "The first element with Name containing 'Bar': " npEl.FindElement({Name:"Bar", matchmode:"Substring"}).Highlight().Dump() ; Short form for this matchmode is mm:2
 
-; Search case-sensitivity can be changed with "casesensitive" or "c" property, which by default is case-sensitive:
-MsgBox "The first element with Name 'file', case-insensitive: " npEl.FindElement({Name:"file", cs:0}).Highlight().Dump()
+; Search case-sensitivity can be changed with "casesense" or "c" property, which by default is case-sensitive:
+MsgBox "The first element with Name 'file', case-insensitive: " npEl.FindElement({Name:"file", casesense:0}).Highlight().Dump()
 
 ; A "not" condition can be created by having the property key as "not", or supplying an "operator" or "op" property with value "not":
 MsgBox "The first MenuItem element with Name not 'System': " npEl.FindElement({Type:"MenuItem", not:{Name:"System"}}).Highlight().Dump()

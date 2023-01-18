@@ -105,7 +105,9 @@ static __PropertyValueGetter := {get: (obj, value) => UIA.__PropertyFromValue(ob
 
 static MatchMode := {StartsWith:1, Substring:2, Exact:3, RegEx:"RegEx"}.DefineProp("__Item", this.__PropertyValueGetter)
 
-static Type := {Button:50000,Calendar:50001,CheckBox:50002,ComboBox:50003,Edit:50004,Hyperlink:50005,Image:50006,ListItem:50007,List:50008,Menu:50009,MenuBar:50010,MenuItem:50011,ProgressBar:50012,RadioButton:50013,ScrollBar:50014,Slider:50015,Spinner:50016,StatusBar:50017,Tab:50018,TabItem:50019,Text:50020,ToolBar:50021,ToolTip:50022,Tree:50023,TreeItem:50024,Custom:50025,Group:50026,Thumb:50027,DataGrid:50028,DataItem:50029,Document:50030,SplitButton:50031,Window:50032,Pane:50033,Header:50034,HeaderItem:50035,Table:50036,TitleBar:50037,Separator:50038,SemanticZoom:50039,AppBar:50040}.DefineProp("__Item", this.__PropertyValueGetter)
+static CaseSense := {Off:0, On:1, Default:1}.DefineProp("__Item", this.__PropertyValueGetter)
+
+static Type := {Button:50000,Calendar:50001,CheckBox:50002,ComboBox:50003,Edit:50004,Link:50005, Hyperlink:50005,Image:50006,ListItem:50007,List:50008,Menu:50009,MenuBar:50010,MenuItem:50011,ProgressBar:50012,RadioButton:50013,ScrollBar:50014,Slider:50015,Spinner:50016,StatusBar:50017,Tab:50018,TabItem:50019,Text:50020,ToolBar:50021,ToolTip:50022,Tree:50023,TreeItem:50024,Custom:50025,Group:50026,Thumb:50027,DataGrid:50028,DataItem:50029,Document:50030,SplitButton:50031,Window:50032,Pane:50033,Header:50034,HeaderItem:50035,Table:50036,TitleBar:50037,Separator:50038,SemanticZoom:50039,AppBar:50040}.DefineProp("__Item", this.__PropertyValueGetter)
 static ControlType := UIA.Type
 
 static Pattern := {Invoke: 10000, Selection: 10001, Value: 10002, RangeValue: 10003, Scroll: 10004, ExpandCollapse: 10005, Grid: 10006, GridItem: 10007, MultipleView: 10008, Window: 10009, SelectionItem: 10010, Dock: 10011, Table: 10012, TableItem: 10013, Text: 10014, Toggle: 10015, Transform: 10016, ScrollItem: 10017, LegacyIAccessible: 10018, ItemContainer: 10019, VirtualizedItem: 10020, SynchronizedInput: 10021, ObjectModel: 10022, Annotation: 10023, Text2:10024, Styles: 10025, Spreadsheet: 10026, SpreadsheetItem: 10027, Transform2: 10028, TextChild: 10029, Drag: 10030, DropTarget: 10031, TextEdit: 10032, CustomNavigation: 10033, Selection2: 10034}.DefineProp("__Item", this.__PropertyValueGetter)
@@ -385,7 +387,7 @@ static Filter(elementArray, function) {
 
 /**
  * Create a property condition from an AHK object
- * @param conditionObject Object or Array that contains property conditions. 
+ * @param condition Object or Array that contains property conditions. 
  *     Single property condition consists of an object where the key is the property name, and value is the property value:
  *         `{Name:"Test"}` => Creates a condition where the Name property must match "Test" exactly
  *     Everything inside {} is an "and" condition
@@ -396,31 +398,35 @@ static Filter(elementArray, function) {
  * 
  *     matchmode key (short form: mm) can be one of UIA.MatchMode values (except StartsWith and RegEx) and defines the MatchMode 
  *         2=can contain anywhere in string; 3=exact match
- *     casesensitive key (short form: cs) defines case sensitivity (default: case-sensitive/True): True=case sensitive; False=case insensitive
+ *     casesense key (short form: cs) defines case sensitivity (default: case-sensitive/True): True=case sensitive; False=case insensitive
  * 
- * @param value If this is set then UIA.CreatePropertyCondition will be called instead
- * @param flags If `value` was set then this will be passed to UIA.CreatePropertyCondition
+ * @param value If this is set then UIA.CreatePropertyCondition will be called instead, with "condition" being the Property name.
+ * @param flags If `value` was set then this will be passed to UIA.CreatePropertyConditionEx
  *
  * #### Examples:
- * `{Name:"Test"}` => Name must match "Test" exactly, case-sensitive
- * `{Type:"Button", or:[Name:"Something", Name:"Else"]}` => Name must match "Something" OR "Else", AND Type must be Button
- * `{Name:"Test", cs:0, mm:2}` => Name must contain "Test" and is case-insensitive
+ * `CreateCondition({Name:"Test"})` => Name must match "Test" exactly, case-sensitive
+ * `CreateCondition({Type:"Button", or:[Name:"Something", Name:"Else"]})` => Name must match "Something" OR "Else", AND Type must be Button
+ * `CreateCondition({Name:"Test", cs:0, mm:2})` => Name must contain "Test" and is case-insensitive
+ * `CreateCondition("Type", "Button")` => Type must be Button
  * 
  * @returns {UIA.IUIAutomationCondition}
  */
-static CreateCondition(conditionObject, value?, flags?) {
+static CreateCondition(condition, value?, flags?) {
     local propertyId
     if IsSet(value) {
-        propertyId := IsInteger(conditionObject) ? conditionObject : UIA.Property.%conditionObject%
-        if propertyId = 30003 && !IsNumber(value)
+        propertyId := IsInteger(condition) ? condition : UIA.Property.%condition%
+        if propertyId = 30003 && !IsNumber(value) {
             try value := UIA.Type.%value%
+            catch
+                throw ValueError("Type '" value "' is a non-existant type!", -1)
+        }
         if IsSet(flags) && (IsInteger(flags) || flags := UIA.PropertyConditionFlags.%flags%) && (Type(value)="String")
             return UIA.CreatePropertyConditionEx(propertyId, value, flags)
         return UIA.CreatePropertyCondition(propertyId, value)
     }
-    if !IsObject(conditionObject)
+    if !IsObject(condition)
         throw ValueError("Condition must be of type Object or Array", -1)
-    return UIA.__ConditionBuilder(conditionObject)
+    return UIA.__ConditionBuilder(condition)
 }
 
 static __ConditionBuilder(obj, &nonUIAMatchMode?) {
@@ -431,9 +437,13 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
         case "Object":
             obj.DeleteProp("index"), obj.DeleteProp("i")
             operator := obj.DeleteProp("operator") || obj.DeleteProp("op") || "and"
-            cs := obj.HasOwnProp("casesensitive") ? obj.casesensitive : obj.HasOwnProp("cs") ? obj.cs : 1
-            obj.DeleteProp("casesensitive"), obj.DeleteProp("cs")
+            cs := obj.HasOwnProp("casesense") ? obj.casesense : obj.HasOwnProp("cs") ? obj.cs : 1
+            obj.DeleteProp("casesense"), obj.DeleteProp("cs")
             mm := obj.DeleteProp("matchmode") || obj.DeleteProp("mm") || 3
+            if !IsInteger(mm)
+                mm := UIA.MatchMode.%mm%
+            if !IsInteger(cs)
+                cs := UIA.CaseSense.%cs% 
             if IsSet(nonUIAMatchMode) {
                 if (mm = "RegEx" || mm = 1)
                     nonUIAMatchMode := True, sanitizeMM := True
@@ -465,8 +475,11 @@ static __ConditionBuilder(obj, &nonUIAMatchMode?) {
             continue
         }
         k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
-        if k = 30003 && !IsInteger(v)
+        if k = 30003 && !IsInteger(v) {
             try v := UIA.Type.%v%
+            catch
+                throw ValueError("Type '" v '" in a non-existant type!', -1)
+        }
         if sanitizeMM && RegexMatch(UIA.Property[k], "i)Name|AutomationId|Value|ClassName|FrameworkId") {
             t := mm = 1 ? UIA.CreateCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
             arr[i++] := t[]
@@ -577,7 +590,7 @@ static ElementFromHandle(hwnd:="", cacheRequest:=0, activateChromiumAccessibilit
         activateChromiumAccessibility := retEl
     return cacheRequest ? UIA.ElementFromHandleBuildCache(cacheRequest, hwnd) : (ComCall(6, this, "ptr", hwnd, "ptr*", &element := 0), element?UIA.IUIAutomationElement(element):"")
 }
-
+static ElementFromWindow(WinTitle:="", cacheRequest:=0, activateChromiumAccessibility:=True) => UIA.ElementFromHandle(WinTitle, cacheRequest, activateChromiumAccessibility)
 /**
  * Retrieves the UI Automation element at the specified point on the desktop.
  * @param x x coordinate for the screen point. 
@@ -1885,11 +1898,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      *     pn: gets the nth parent
      *     Type n: gets the nth child of Type ("Button2" => second element with type Button)
      *     Eg: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child.
-     * @param c Optional: a condition for tree traversal that selects only elements that match c
+     * @param condition Optional: a condition for tree traversal that selects only elements that match c
      * @returns {UIA.IUIAutomationElement}
      */
-	FindByPath(searchPath:="", c?) {
-		el := this, PathTW := (IsSet(c) ? UIA.CreateTreeWalker(c) : UIA.TreeWalkerTrue)
+	FindByPath(searchPath:="", condition?) {
+		el := this, PathTW := (IsSet(condition) ? UIA.CreateTreeWalker(condition) : UIA.TreeWalkerTrue)
 		searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
 		Loop Parse searchPath, "," {
 			if IsDigit(A_LoopField) {
@@ -1936,7 +1949,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         switch Type(cond) {
             case "Object":
                 mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : 3
-                cs := cond.HasOwnProp("casesensitive") ? cond.casesensitive : cond.HasOwnProp("cs") ? cond.cs : 1
+                cs := cond.HasOwnProp("casesense") ? cond.casesense : cond.HasOwnProp("cs") ? cond.cs : 1
+                if !IsInteger(mm)
+                    mm := UIA.MatchMode.%mm%
+                if !IsInteger(cs)
+                    cs := UIA.CaseSense.%cs%
                 notCond := cond.HasOwnProp("operator") ? cond.operator = "not" : cond.HasOwnProp("op") ? cond.op = "not" : 0
                 cond := cond.OwnProps()
             case "Array":
