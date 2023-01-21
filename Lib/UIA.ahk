@@ -5746,12 +5746,12 @@ class Viewer {
     }
     ; Handles selecting elements in the UIA tree, highlights the selected element
     TVUIA_Click(GuiCtrlObj, Info) {
-        if IsObject(this.Stored.HighlightedElement)
-            this.Stored.HighlightedElement.Highlight("clear")
         if this.Capturing
             return
         try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Info] : this.Stored.TreeView[Info]
         if IsSet(Element) && Element {
+            if IsObject(this.Stored.HighlightedElement) && UIA.CompareElements(Element, this.Stored.HighlightedElement)
+                return (this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0)
             try this.SBMain.SetText("  Path: " Element.Path)
             this.PopulatePropsPatterns(Element)
         }
