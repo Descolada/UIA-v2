@@ -23,7 +23,7 @@ MsgBox "Edit control element with all descendants: `n`n" editEl.DumpAll()
 /*
     A special case for ElementFromHandle using a control is ElementFromChromium, which gets the
     element for the renderer control. This special case exists because Chromium-based (browser-based)
-    applications frequently have the problem on not being UI-accessible from the main window.
+    applications frequently have the problem of not being UI-accessible from the main window.
 
     For this example you need to have Chrome open.
 */
