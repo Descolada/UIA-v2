@@ -20,11 +20,16 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
     Optionally we can also supply a condition for tree traversal that selects only elements that match the condition.
 */
 
-; This should get us to the "Edit" MenuItem
+; UIA path for the "Edit" MenuItem:
+npEl[{T:10,A:"MenuBar"}, {T:11,N:"Edit"}].Highlight()
+; Equivalent:
+; npEl.FindByPath({T:10,A:"MenuBar"}, {T:11,N:"Edit"}).Highlight()
+
+; This should also get us to the "Edit" MenuItem
 editMenuItem := npEl.FindByPath("4,2").Highlight()
 ; Moving two sibling over, we should get to the "View" MenuItem
 editMenuItem.FindByPath("+2").Highlight()
 
 ; We can also use the array notation, which accepts FindByPath paths and also conditions
-npEl[4,1,"+2"].Highlight() ; 4th child, then first element with Name "File"
-npEl["MenuBar2",{Name:"File"}].HighLight()
+npEl[4,1,"+2"].Highlight()
+npEl["MenuBar",{Name:"File"}].HighLight()

@@ -9,7 +9,7 @@ EventHandler(el) {
 
 ExitFunc(*) {
 	global h
-	UIA.RemoveFocusChangedEventHandler(h) ; Remove the event handler. Alternatively use cUIA.RemoveAllEventHandlers() to remove all handlers
+	UIA.RemoveFocusChangedEventHandler(h) ; Remove the event handler. Alternatively use UIA.RemoveAllEventHandlers() to remove all handlers
 }
 
 browserExe := "chrome.exe"
