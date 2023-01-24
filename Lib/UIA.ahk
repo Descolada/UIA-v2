@@ -5657,7 +5657,7 @@ class Viewer {
         }
 
         (this.TextTVPatterns := this.gViewer.Add("Text", "w100", "Patterns")).SetFont("bold")
-        this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250 -0x800")
+        this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250")
 
         this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
         this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.GetMethod("ButCapture_Click").Bind(this))
@@ -5666,7 +5666,7 @@ class Viewer {
         this.SBMain.OnEvent("Click", this.GetMethod("SBMain_Click").Bind(this))
         this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_Click").Bind(this))
         this.gViewer.Add("Text", "x278 y10 w100", "UIA Tree").SetFont("bold")
-        this.TVUIA := this.gViewer.Add("TreeView", "x275 y25 w300 h465 -0x800")
+        this.TVUIA := this.gViewer.Add("TreeView", "x275 y25 w300 h465")
         this.TVUIA.OnEvent("Click", this.GetMethod("TVUIA_Click").Bind(this))
         this.TVUIA.OnEvent("ContextMenu", this.GetMethod("TVUIA_ContextMenu").Bind(this))
         this.TVUIA.Add("Start capturing to show tree")
