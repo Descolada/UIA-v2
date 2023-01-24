@@ -5871,10 +5871,8 @@ class Viewer {
         local k, v, paths := Map()
         this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element.DefineProp("Path", {value:path})
         for k, v in Element.CachedChildren {
-            if paths.Has(p := this.GetCompactCondition(v))
-                p := p ", i:" (++paths[p]) "}"
-            else
-                (paths[p] := 1, p .= "}")
+            p := this.GetCompactCondition(v, &paths)
+            p .= paths[p] = 1 ? "}" : ", i:" paths[p] "}"
             this.RecurseTreeView(v, TWEl, path (path?", ":"") p)
         }
     }
@@ -5887,19 +5885,29 @@ class Viewer {
             elDesc := "`"`"" elDesc
         return elDesc
     }
-    GetCompactCondition(Element) {
-        local n := "", t := "", c := "", a := "", t := ""
+    GetCompactCondition(Element, &pathsMap) {
+        local n := "", c := "", a := ""
         t := Element.CachedType
         t := "{T:" (t-50000)
+        pathsMap[t] := pathsMap.Has(t) ? pathsMap[t] + 1 : 1
         try a := StrReplace(Element.CachedAutomationId, "`"", "```"")
-        if a && !IsInteger(a) ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
-            return t ",A:`"" a "`""
+        if a && !IsInteger(a) { ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
+            a := t ",A:`"" a "`""
+            pathsMap[a] := pathsMap.Has(a) ? pathsMap[a] + 1 : 1 ; This actually shouldn't be needed
+            return a
+        }
         try c := StrReplace(Element.CachedClassName, "`"", "```"")
-        if c
-            return t ",CN:`"" c "`""
+        if c {
+            c := t ",CN:`"" c "`""
+            pathsMap[c] := pathsMap.Has(c) ? pathsMap[c] + 1 : 1
+            return c
+        }
         try n := StrReplace(Element.CachedName, "`"", "```"")
-        if n ; Consider Name last, because it can change (eg. window title)
-            return t ",N:`"" n "`""
+        if n { ; Consider Name last, because it can change (eg. window title)
+            n := t ",N:`"" n "`""
+            pathsMap[n] := pathsMap.Has(n) ? pathsMap[n] + 1 : 1
+            return n
+        }
         return t
     }
 }
