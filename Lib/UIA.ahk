@@ -85,6 +85,9 @@ static __New() {
     ; Define some properties that shouldn't be included in the value->name Map
     UIA.Property[30000], UIA.Property.T := 30003, UIA.Property.ControlType := 30003, UIA.Property.N := 30005, UIA.Property.CN := 30012, UIA.Property.A := 30011
 }
+static __Delete() {
+    try UIA.RemoveAllEventHandlers()
+}
 
 ; ---------- IUIAutomation constants and enumerations. ----------
 
@@ -1272,7 +1275,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             for _, param in params {
                 if IsObject(param)
                     el := el.FindElement(param, 2)
-                else if IsInteger(param) || IsDigit(String(param)) {
+                else if Type(param) = "Integer" || IsDigit(String(param)) {
                     ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
                     if found {
                         arr := UIA.IUIAutomationElementArray(found)
