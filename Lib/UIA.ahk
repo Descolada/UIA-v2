@@ -82,6 +82,8 @@ static __New() {
     if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr)
         this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
     UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
+    ; Define some properties that shouldn't be included in the value->name Map
+    UIA.Property[30000], UIA.Property.T := 30003, UIA.Property.ControlType := 30003, UIA.Property.N := 30005, UIA.Property.CN := 30012, UIA.Property.A := 30011
 }
 
 ; ---------- IUIAutomation constants and enumerations. ----------
@@ -478,13 +480,16 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
             continue
         }
         k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
-        if k = 30003 && !IsInteger(v) {
-            try v := UIA.Type.%v%
-            catch {
-                if InStr(v, "Cached")
-                    return nonUIAEncountered := 2
-                throw ValueError("Type '" v '" in a non-existant type!', -1)
-            }
+        if k = 30003 {
+            if !IsInteger(v) {
+                try v := UIA.Type.%v%
+                catch {
+                    if InStr(v, "Cached")
+                        return nonUIAEncountered := 2
+                    throw ValueError("Type '" v '" in a non-existant type!', -1)
+                }
+            } else if v < 50000
+                v += 50000
         }
         if sanitizeMM && RegexMatch(UIA.Property[k], "i)^((Class)?Name|A(utomationId|cc.*Key|ria.*|nnotation(Author|DateTime|Target|(Annotation)?TypeName))|Value(Value)?|FrameworkId|(Full|Provider)?Description|HelpText|Item.*|Localized(.*?)Type|DropTarget(DropTarget)?Effect|LegacyIAccessible(DefaultAction|Description|Help|KeyboardShortcut|Name|Value)|SpreadsheetItemFormula|Styles(ExtendedProperties|FillPatternSyle|Shape|StyleName))$") {
             t := mm = 1 ? UIA.CreateCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
@@ -1271,12 +1276,19 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
                     if found {
                         arr := UIA.IUIAutomationElementArray(found)
-                        el := arr.GetElement(param < 0 ? arr.Length+param : param-1)
+                        if (i := param < 0 ? arr.Length+param : param-1) <= arr.Length
+                            el := arr.GetElement(i)
+                        else
+                            el := ""
                     }
-                } else if (Type(param) = "String") || (param < 0)
-                    el := el.FindByPath(param) 
-                else
+                } else if (Type(param) = "String") || (param < 0) {
+                    try el := el.FindByPath(param) 
+                    catch
+                        el := ""
+                } else
                     TypeError("Invalid item type!", -1)
+                if !el
+                    throw IndexError("Invalid index/condition at index " _, -1)
             }
             return el
         }
@@ -2050,12 +2062,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
      * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
      * @param cacheRequest Optional: cache request object
-     * @returns Found element if successful, empty string if timeout happens
+     * @returns {UIA.IUIAutomationElement} Found element if successful, empty string if timeout happens
      */
     WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         endtime := A_TickCount + timeOut
-        While ((timeOut == -1) || (A_Tickcount < endtime)) && !(el := (IsObject(condition) ? this.FindElement(condition, scope, index, order, startingElement, cacheRequest) : this.FindByPath(condition)))
+        While ((timeOut == -1) || (A_Tickcount < endtime)) && !(el := this.FindElement(condition, scope, index, order, startingElement, cacheRequest))
             Sleep 20
         return el
     }
@@ -2074,7 +2086,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
-            if !(IsObject(condition) ? this.FindElement(condition, scope, index, order, startingElement, cacheRequest) : this.FindByPath(condition))
+            if !this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
                 return 1
         }
         return 0
@@ -2082,18 +2094,26 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Tries to get an element from a path.
-     * @param searchPath A comma-separated path that defines the route of tree traversal.
-     *     n: gets the nth child
-     *     +n: gets the nth next sibling
-     *     -n: gets the nth previous sibling
-     *     pn: gets the nth parent
-     *     Type n: gets the nth child of Type ("Button2" => second element with type Button)
+     * @param searchPath Either a comma-separated path or an array of conditions, that defines the route of tree traversal.
+     * 
+     *     If searchPath is an array of conditions, then the nth condition means that at depth n a child matching the condition is selected.
+     *     Eg: Element.FindByPath([{Name:"Something"}, {Type:"Button"}]) => gets the first child matchin Name=Something of Element,
+     *             then its first child matching Type=Button.
+     * 
+     *     For the comma-separated path:
+     *         n: gets the nth child
+     *         +n: gets the nth next sibling
+     *         -n: gets the nth previous sibling
+     *         pn: gets the nth parent
+     *         Type n: gets the nth child of Type ("Button2" => second element with type Button)
      *     Eg: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child.
-     * @param condition Optional: a condition for tree traversal that selects only elements that match c
+     * @param filterCondition Optional: a condition for tree traversal (if searchPath is a comma-separated path) that selects only elements that match c
      * @returns {UIA.IUIAutomationElement}
      */
-	FindByPath(searchPath:="", condition?) {
-		el := this, PathTW := (IsSet(condition) ? UIA.CreateTreeWalker(condition) : UIA.TreeWalkerTrue)
+	FindByPath(searchPath:="", filterCondition?) {
+        if searchPath is Array
+            return this[searchPath*]
+		el := this, PathTW := (IsSet(filterCondition) ? UIA.CreateTreeWalker(filterCondition) : UIA.TreeWalkerTrue)
 		searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
 		Loop Parse searchPath, "," {
 			if IsDigit(A_LoopField) {
@@ -2116,6 +2136,21 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 		}
 		return el
 	}
+
+    /**
+     * Wait element to appear at a path.
+     * @param searchPath Either a comma-separated path or an array of conditions, that defines the route of tree traversal.
+     * @param timeOut Waiting time for element to appear. Default: indefinite wait
+     * @param filterCondition Optional: a condition for tree traversal (if searchPath is a comma-separated path) that selects only elements that match the condition
+     * @returns {UIA.IUIAutomationElement}
+     */
+    WaitByPath(searchPath, timeOut:=-1, filterCondition?) {
+        endtime := A_TickCount + timeOut
+        While ((timeOut == -1) || (A_Tickcount < endtime)) {
+            try return this.FindByPath(searchPath, filterCondition?)
+            Sleep 20
+        }
+    }
 
     ; Gets all property values of this element and returns an object where Object.PropertyName = PropertyValue
     ; Use only for debugging purposes, since this will be quite slow.
@@ -5818,20 +5853,29 @@ class Viewer {
         this.TVUIA.Opt("+Redraw")
         this.SBMain.SetText("  Path: ")
         for k, v in this.Stored.TreeView {
-            same := 0
-            try same := UIA.CompareElements(this.Stored.CapturedElement, v)
-            catch
-                try same := this.Stored.CapturedElement.CachedDump() == v.CachedDump()
+            same := 0, brC := v.CachedBoundingRectangle, brE := this.Stored.CapturedElement.CachedBoundingRectangle
+            try same := this.Stored.CapturedElement.CachedDump() == v.CachedDump()
+            if !same {
+                if brC.l || brC.t {
+                    try same := brC.l = brE.l && brC.t = brE.t && brC.r = brE.r && brC.b = brE.b
+                } else {
+                    try same := UIA.CompareElements(this.Stored.CapturedElement, v)
+                }
+            }
             if same
                 this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " v.Path)
         }
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="") {
-        local k, v
+        local k, v, paths := Map()
         this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element.DefineProp("Path", {value:path})
         for k, v in Element.CachedChildren {
-            this.RecurseTreeView(v, TWEl, path (path?",":"") k)
+            if paths.Has(p := this.GetCompactCondition(v))
+                p := p ", i:" (++paths[p]) "}"
+            else
+                (paths[p] := 1, p .= "}")
+            this.RecurseTreeView(v, TWEl, path (path?", ":"") p)
         }
     }
     ; Creates a short description string for the UIA tree elements
@@ -5842,6 +5886,21 @@ class Viewer {
         catch
             elDesc := "`"`"" elDesc
         return elDesc
+    }
+    GetCompactCondition(Element) {
+        local n := "", t := "", c := "", a := "", t := ""
+        t := Element.CachedType
+        t := "{T:" (t-50000)
+        try a := StrReplace(Element.CachedAutomationId, "`"", "```"")
+        if a && !IsInteger(a) ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
+            return t ",A:`"" a "`""
+        try c := StrReplace(Element.CachedClassName, "`"", "```"")
+        if c
+            return t ",CN:`"" c "`""
+        try n := StrReplace(Element.CachedName, "`"", "```"")
+        if n ; Consider Name last, because it can change (eg. window title)
+            return t ",N:`"" n "`""
+        return t
     }
 }
 
