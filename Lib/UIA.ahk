@@ -2237,8 +2237,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 else
                     continue
             }
-            if k = 30003 && !IsInteger(v)
-                try v := UIA.Type.%v%
+            if k = 30003 {
+                if !IsInteger(v) {
+                    try v := UIA.Type.%v%
+                } else if v < 50000
+                    v += 50000
+            }
             try currentValue := this.Get%cached ? "Cached" : ""%PropertyValue(k)
             catch { ; If caching is used, should this throw an error to notify the user of a missing cache property?
                 result := 0
