@@ -629,7 +629,16 @@ static ElementFromPoint(x?, y?, cacheRequest:=0, &activateChromiumAccessibility:
         return UIA.ElementFromPointBuildCache(cacheRequest, pt64)
     return (ComCall(7, this, "int64", pt64, "ptr*", &element := 0), element?UIA.IUIAutomationElement(element):"")
 }
-
+/**
+ * Retrieves the smallest UI Automation element at the specified point on the desktop.
+ * Regular ElementFromPoint doesn't always return the deepest/smallest element.
+ * @param x x coordinate for the screen point. 
+ * Omit both x and y to get the element from the current mouse position.
+ * @param y y coordinate for the screen point.
+ * @param element Optional: optionally provide an element for which the search is performed for
+ * @param cacheRequest Optional: a cache request object.
+ * @returns {UIA.IUIAutomationElement}
+ */
 static SmallestElementFromPoint(x?, y?, element?, cacheRequest:=0) {
     if !cacheRequest {
         cacheRequest := UIA.CreateCacheRequest()
@@ -2171,14 +2180,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if IsObject(conditions[1]) {
             if IsInteger(conditions[conditions.Length])
                 timeOut := conditions.Pop()
-            f := (this.FindByPath).Bind(conditions*)
+            f := this.FindByPath.Bind(this, conditions*)
         } else {
             if conditions.Length > 1 {
                 timeOut := conditions[2]
                 if conditions.Length > 2
                     filterCondition := conditions[3]
             }
-            f := (this.FindByPath).Bind(conditions[1], filterCondition?)
+            f := this.FindByPath.Bind(this, conditions[1], filterCondition?)
         }
         endtime := A_TickCount + timeOut
         While ((timeOut == -1) || (A_Tickcount < endtime)) {
@@ -5742,7 +5751,9 @@ class Viewer {
     ; If the mouse is not moved for 1 second then constructs the UIA tree.
     CaptureCycle() {
         MouseGetPos(&mX, &mY, &mwId)
-        CapturedElement := UIA.SmallestElementFromPoint(mX,mY,,this.cacheRequest)
+        try CapturedElement := UIA.SmallestElementFromPoint(mX,mY,,this.cacheRequest)
+        if !IsSet(CapturedElement)
+            return
         if this.Stored.HasOwnProp("CapturedElement") && IsObject(CapturedElement) {
             try same := UIA.CompareElements(CapturedElement, this.Stored.CapturedElement) ; Cached element RuntimeIds sometimes cause an error here
             catch {
