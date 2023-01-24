@@ -28,7 +28,7 @@ treeEl.Scroll(, UIA.ScrollAmount.LargeDecrement) ; LargeDecrement is equivalent 
 
 Sleep 500
 MsgBox "Press OK to scroll drive C: into view."
-CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName})
+CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName, matchmode:"Substring"})
 if !CDriveEl {
 	MsgBox "C: drive element not found! Exiting app..."
 	ExitApp

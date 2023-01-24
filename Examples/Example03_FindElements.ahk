@@ -9,10 +9,15 @@
     For example, we could only look for elements of certain Type, with certain Name, AutomationId etc.
 */
 
+if VerCompare(A_OSVersion, ">=10.0.22000") {
+    MsgBox "This example works only in Windows 10. Press OK to Exit."
+    ExitApp
+}
+
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
 ; Get the element for the Notepad window
-npEl := UIA.ElementFromHandle("ahk_exe notepad.exe") 
+npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
 
 ; A single property condition consists of an object where the key is the property name, and value is the property value:
 MsgBox "The first MenuItem element: " npEl.FindElement({Type:"MenuItem"}).Highlight().Dump()

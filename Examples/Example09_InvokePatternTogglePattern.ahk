@@ -1,6 +1,11 @@
 ﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
+if VerCompare(A_OSVersion, ">=10.0.22000") {
+    MsgBox "This example works only in Windows 10. Press OK to Exit."
+    ExitApp
+}
+
 Run "explore C:\"
 WinWaitActive DriveGetLabel("C:") " (C:)",, 1
 explorerEl := UIA.ElementFromHandle("A")

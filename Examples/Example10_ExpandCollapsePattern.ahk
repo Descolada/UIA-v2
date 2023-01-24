@@ -9,7 +9,7 @@ if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
 	ExitApp
 }
-CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName})
+CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName, matchmode:"Substring"})
 
 Sleep 500
 MsgBox "ExpandCollapsePattern properties: "
