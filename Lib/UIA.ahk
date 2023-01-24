@@ -2094,27 +2094,31 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Tries to get an element from a path.
-     * @param searchPath Either a comma-separated path or an array of conditions, that defines the route of tree traversal.
+     * This can be used in two ways:
      * 
-     *     If searchPath is an array of conditions, then the nth condition means that at depth n a child matching the condition is selected.
-     *     Eg: Element.FindByPath([{Name:"Something"}, {Type:"Button"}]) => gets the first child matchin Name=Something of Element,
-     *             then its first child matching Type=Button.
+     *     1) FindByPath(condition1[, condition2, ...])
      * 
-     *     For the comma-separated path:
-     *         n: gets the nth child
-     *         +n: gets the nth next sibling
-     *         -n: gets the nth previous sibling
-     *         pn: gets the nth parent
-     *         Type n: gets the nth child of Type ("Button2" => second element with type Button)
-     *     Eg: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child.
-     * @param filterCondition Optional: a condition for tree traversal (if searchPath is a comma-separated path) that selects only elements that match c
+     *        In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Example: Element.FindByPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     * 
+     *     2) FindByPath(searchPath, filterCondition?)
+     * 
+     *        In this case the searchPath is a comma-separated path that defines the route of tree traversal:
+     *             n: gets the nth child
+     *             +n: gets the nth next sibling
+     *             -n: gets the nth previous sibling
+     *             pn: gets the nth parent
+     *             Type n: gets the nth child of Type ("Button2" => second element with type Button)
+     *        filterCondition can optionally be provided: a condition for tree traversal that selects only elements that match the condition.
+     *        Example: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child. 
      * @returns {UIA.IUIAutomationElement}
      */
-	FindByPath(searchPath:="", filterCondition?) {
-        if searchPath is Array
-            return this[searchPath*]
-		el := this, PathTW := (IsSet(filterCondition) ? UIA.CreateTreeWalker(filterCondition) : UIA.TreeWalkerTrue)
-		searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
+	FindByPath(searchPath, filterCondition*) {
+        if IsObject(searchPath) {
+            return this[searchPath, filterCondition*]
+        } else
+            PathTW := filterCondition.Length ? UIA.CreateTreeWalker(filterCondition[1]) : UIA.TreeWalkerTrue
+		el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
 		Loop Parse searchPath, "," {
 			if IsDigit(A_LoopField) {
                 ComCall(6, el, "int", 2, "ptr", c ?? UIA.TrueCondition, "ptr*", &found := 0)
@@ -2138,16 +2142,44 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 	}
 
     /**
-     * Wait element to appear at a path.
-     * @param searchPath Either a comma-separated path or an array of conditions, that defines the route of tree traversal.
-     * @param timeOut Waiting time for element to appear. Default: indefinite wait
-     * @param filterCondition Optional: a condition for tree traversal (if searchPath is a comma-separated path) that selects only elements that match the condition
+     * Wait element to appear at a path. This can be used in two ways:
+     * 
+     *     1) WaitByPath(condition1[, condition2, ..., timeOut := -1])
+     * 
+     *        In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Optionally, timeOut time in milliseconds can be provided as the last argument, default is indefinite wait.
+     *        Example: Element.WaitByPath({Type:"Button"}, {Type:"List"}) => waits for Element to have a child of Button type, and for that element to have a child of List type
+     *         
+     *     2) WaitByPath(searchPath, timeOut := -1, filterCondition?)
+     * 
+     *        In this case the searchPath is a comma-separated path that defines the route of tree traversal:
+     *             n: gets the nth child
+     *             +n: gets the nth next sibling
+     *             -n: gets the nth previous sibling
+     *             pn: gets the nth parent
+     *             Type n: gets the nth child of Type ("Button2" => second element with type Button)
+     *        timeOut can optionally be provided: timeout time in milliseconds, default is indefinite wait.
+     *        filterCondition can optionally be provided: a condition for tree traversal that selects only elements that match the condition.
+     *        Example: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child.
      * @returns {UIA.IUIAutomationElement}
      */
-    WaitByPath(searchPath, timeOut:=-1, filterCondition?) {
+    WaitByPath(conditions*) {
+        local filterCondition, f, timeOut := -1
+        if IsObject(conditions[1]) {
+            if IsInteger(conditions[conditions.Length])
+                timeOut := conditions.Pop()
+            f := (this.FindByPath).Bind(conditions*)
+        } else {
+            if conditions.Length > 1 {
+                timeOut := conditions[2]
+                if conditions.Length > 2
+                    filterCondition := conditions[3]
+            }
+            f := (this.FindByPath).Bind(conditions[1], filterCondition?)
+        }
         endtime := A_TickCount + timeOut
         While ((timeOut == -1) || (A_Tickcount < endtime)) {
-            try return this.FindByPath(searchPath, filterCondition?)
+            try return f()
             Sleep 20
         }
     }
