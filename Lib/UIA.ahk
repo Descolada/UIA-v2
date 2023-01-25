@@ -81,7 +81,7 @@ static __New() {
     ; If all else fails, try the first IUIAutomation version
     if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr)
         this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
-    UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
+    UIA.TrueCondition := UIA.CreateTrueCondition(), UIA.TreeWalkerTrue := UIA.CreateTreeWalker(UIA.TrueCondition)
     ; Define some properties that shouldn't be included in the value->name Map
     UIA.Property[30000], UIA.Property.T := 30003, UIA.Property.ControlType := 30003, UIA.Property.N := 30005, UIA.Property.CN := 30012, UIA.Property.A := 30011
 }
@@ -227,27 +227,27 @@ static WindowInteractionState := {Running:0,Closing:1,ReadyForUserInteraction:2,
 ; ---------- UIA Properties ----------
 
 ; Check whether a certain version of UIAutomation is available
-static IsIUIAutomation2Available => VerCompare(A_OSVersion, ">=6.2.9200")
-static IsIUIAutomation3Available => VerCompare(A_OSVersion, ">=6.3.9600")
-static IsIUIAutomation4Available => VerCompare(A_OSVersion, ">=10.0.14393")
-static IsIUIAutomation5Available => VerCompare(A_OSVersion, ">=10.0.14393")
-static IsIUIAutomation6Available => VerCompare(A_OSVersion, ">=10.0.17763")
+static IsIUIAutomation2Available := VerCompare(A_OSVersion, ">=6.2.9200")
+static IsIUIAutomation3Available := VerCompare(A_OSVersion, ">=6.3.9600")
+static IsIUIAutomation4Available := VerCompare(A_OSVersion, ">=10.0.14393")
+static IsIUIAutomation5Available := VerCompare(A_OSVersion, ">=10.0.14393")
+static IsIUIAutomation6Available := VerCompare(A_OSVersion, ">=10.0.17763")
 
 ; Check whether a certain version of UIAutomation Element is available
-static IsIUIAutomationElement2Available => VerCompare(A_OSVersion, ">=6.2.9200")
-static IsIUIAutomationElement3Available => VerCompare(A_OSVersion, ">=6.3.9600")
-static IsIUIAutomationElement4Available => VerCompare(A_OSVersion, ">=10")
-static IsIUIAutomationElement5Available => VerCompare(A_OSVersion, ">=10.0.15063")
-static IsIUIAutomationElement6Available => VerCompare(A_OSVersion, ">=10.0.15063")
-static IsIUIAutomationElement7Available => VerCompare(A_OSVersion, ">=10.0.15063")
-static IsIUIAutomationElement8Available => VerCompare(A_OSVersion, ">=10.0.17134")
-static IsIUIAutomationElement9Available => VerCompare(A_OSVersion, ">=10.0.17763")
+static IsIUIAutomationElement2Available := VerCompare(A_OSVersion, ">=6.2.9200")
+static IsIUIAutomationElement3Available := VerCompare(A_OSVersion, ">=6.3.9600")
+static IsIUIAutomationElement4Available := VerCompare(A_OSVersion, ">=10")
+static IsIUIAutomationElement5Available := VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement6Available := VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement7Available := VerCompare(A_OSVersion, ">=10.0.15063")
+static IsIUIAutomationElement8Available := VerCompare(A_OSVersion, ">=10.0.17134")
+static IsIUIAutomationElement9Available := VerCompare(A_OSVersion, ">=10.0.17763")
 
 ; Retrieves a predefined TreeWalker made with the TrueCondition
 static TreeWalkerTrue := ""
 
 ; Retrieves a predefined condition that selects all elements.
-static TrueCondition => UIA.CreateTrueCondition()
+static TrueCondition := ""
 
 ; Retrieves a static token object representing a property or text attribute that is not supported. This property is read-only.
 ; This object can be used for comparison with the results from UIA.IUIAutomationElement,,GetPropertyValue or IUIAutomationTextRange,,GetAttributeValue.
@@ -269,48 +269,48 @@ static ReservedMixedAttributeValue {
 ; Retrieves an IUIAutomationTreeWalker interface used to discover control elements.
 static ControlViewWalker {
     get {
-        local walker
-        return (ComCall(14, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        static walker := (ComCall(14, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        return walker
     }
 }
 
 ; Retrieves an IUIAutomationTreeWalker interface used to discover content elements.
 static ContentViewWalker {
     get {
-        local walker
-        return (ComCall(15, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        static walker := (ComCall(15, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        return walker
     }
 }
 
 ; Retrieves a tree walker object used to traverse an unfiltered view of the UI Automation tree.
 static RawViewWalker {
     get {
-        local walker
-        return (ComCall(16, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        static walker := (ComCall(16, this, "ptr*", &walker := 0), walker?UIA.IUIAutomationTreeWalker(walker):"")
+        return walker
     }
 }
 
 ; Retrieves a predefined IUIAutomationCondition interface that selects all UI elements in an unfiltered view.
 static RawViewCondition {
     get {
-        local condition
-        return (ComCall(17, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        static condition := (ComCall(17, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        return condition
     }
 }
 
 ; Retrieves a predefined IUIAutomationCondition interface that selects control elements.
 static ControlViewCondition {
     get {
-        local condition
-        return (ComCall(18, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        static condition := (ComCall(18, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        return condition
     }
 }
 
 ; Retrieves a predefined IUIAutomationCondition interface that selects content elements.
 static ContentViewCondition {
     get {
-        local condition
-        return (ComCall(19, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        static condition := (ComCall(19, this, "ptr*", &condition := 0), condition?UIA.IUIAutomationCondition(condition):"")
+        return condition
     }
 }
 
@@ -621,7 +621,7 @@ static ElementFromPoint(x?, y?, cacheRequest:=0, &activateChromiumAccessibility:
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
     else
-        pt64 := y << 32 | x
+        pt64 := y << 32 | (x & 0xFFFFFFFF)
     if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
         activateChromiumAccessibility := UIA.ActivateChromiumAccessibility(hwnd)
     }
@@ -1073,7 +1073,7 @@ static SafeArrayToAHKArray(sArr, varType:=3) {
 }
 ; X can be pt64 as well, in which case Y should be omitted
 static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
-    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | X) : X), "UInt", 2)
+    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | (X & 0xFFFFFFFF)) : X), "UInt", 2)
 }
 
 /**
@@ -1279,7 +1279,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     __Item[params*] {
         get {
-            local el, _, param
+            local el, _, param, i
             el := this
             for _, param in params {
                 if IsObject(param)
@@ -1620,12 +1620,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 	; Get the parent window hwnd from the element
 	GetWinId() { 
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetCurrentPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
+        try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
 	}
 	; Get the parent window hwnd from the element
 	GetControlId() { 
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return TW.NormalizeElement(this).GetCurrentPropertyValue(UIA.Property.NativeWindowHandle)
+        try return TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle)
 	}
 
     /**
@@ -1654,12 +1654,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         local SleepTime, togglePattern, expandState, selectionPattern, rel, pos, cCount
         if WhichButton = "" or IsInteger(WhichButton) {
             SleepTime := WhichButton ? WhichButton : -1
-			if (this.GetCurrentPropertyValue(UIA.Property.IsInvokePatternAvailable)) {
+			if (this.GetPropertyValue(UIA.Property.IsInvokePatternAvailable)) {
 				this.InvokePattern.Invoke()
 				Sleep SleepTime
 				return 1
 			}
-			if (this.GetCurrentPropertyValue(UIA.Property.IsTogglePatternAvailable)) {
+			if (this.GetPropertyValue(UIA.Property.IsTogglePatternAvailable)) {
 				togglePattern := this.GetCurrentPatternAs("Toggle"), toggleState := togglePattern.CurrentToggleState
 				togglePattern.Toggle()
 				if (togglePattern.CurrentToggleState != toggleState) {
@@ -1667,7 +1667,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 					return 1
 				}
 			}
-			if (this.GetCurrentPropertyValue(UIA.Property.IsExpandCollapsePatternAvailable)) {
+			if (this.GetPropertyValue(UIA.Property.IsExpandCollapsePatternAvailable)) {
 				if ((expandState := (pattern := this.ExpandCollapsePattern).ExpandCollapseState) == 0)
 					pattern.Expand()
 				Else
@@ -1677,7 +1677,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 					return 1
 				}
 			} 
-			if (this.GetCurrentPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)) {
+			if (this.GetPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)) {
 				selectionPattern := this.SelectionItemPattern, selectionState := selectionPattern.IsSelected
 				selectionPattern.Select()
 				if (selectionPattern.IsSelected != selectionState) {
@@ -1685,7 +1685,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 					return 1
 				}
 			}
-			if (this.GetCurrentPropertyValue(UIA.Property.IsLegacyIAccessiblePatternAvailable)) {
+			if (this.GetPropertyValue(UIA.Property.IsLegacyIAccessiblePatternAvailable)) {
 				this.LegacyIAccessiblePattern.DoDefaultAction()
 				Sleep sleepTime
 				return 1
@@ -4483,6 +4483,7 @@ class IUIAutomationRangeValuePattern extends UIA.IUIAutomationBase {
 			local retVal
 			return (ComCall(4, this, "double*", &retVal := 0), retVal)
 		}
+        set => ComCall(3, this, "double", value)
 	}
 
     ; Indicates whether the value of the element can be changed.
@@ -5785,7 +5786,7 @@ class Viewer {
     }
     ; Populates the listview with UIA element properties
     PopulatePropsPatterns(Element) {
-        local v, value, pattern, parent, proto, match
+        local v, value, pattern, parent, proto, match, X, Y, W, H
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear")
         this.Stored.HighlightedElement := Element
