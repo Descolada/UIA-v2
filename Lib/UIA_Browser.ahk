@@ -72,6 +72,11 @@
 		Closes an alert box
 	JSExecute(js)
 		Executes Javascript code using the address bar
+		NOTE: In Firefox this is done by default through the console, which is a slow and inefficient method.
+			A better way is to create a new bookmark with URL "javascript:%s" and keyword "javascript". This
+			allows executing javascript through the address bar with "javascript alert("hello")".
+			To make JSExecute use this method, either create UIA_Mozilla with JavascriptExecutionMethod set to "Bookmark",
+			or set cUIA.JavascriptExecutionMethod := "Bookmark". Default value is "Console".
 	JSReturnThroughClipboard(js)
 		Executes Javascript code using the address bar and returns the return value of the code using the clipboard (resetting it back afterwards)
 	JSReturnThroughTitle(js, timeOut:=500)
@@ -185,7 +190,8 @@ class UIA_Edge extends UIA_Browser {
 }
 
 class UIA_Mozilla extends UIA_Browser {
-	__New(wTitle:="A", customNames:="", maxVersion:="") {
+	__New(wTitle:="A", customNames:="", maxVersion:="", javascriptExecutionMethod:="Console") {
+		this.JavascriptExecutionMethod := javascriptExecutionMethod
 		this.BrowserType := "Mozilla"
 		this.InitiateUIA(wTitle, customNames, maxVersion)
 	}
@@ -216,14 +222,9 @@ class UIA_Mozilla extends UIA_Browser {
 	}
 
 	; Returns the current document/content element of the browser
-	GetCurrentDocumentElement(tabName:="", matchMode:=3, caseSensitive:=True) {
-		local i, el
-		for i, el in this.GetTabs() {
-			if (tabName ? this.__CompareTitles(tabName, el.Name, matchMode, caseSensitive) : el.SelectionItemIsSelected) {
-				this.DocumentPanelElement := this.BrowserElement.FindElements({AutomationId:"panel",mm:2},2)[i+1]
-				return UIA.TreeWalkerTrue.GetFirstChildElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
-			}
-		}
+	GetCurrentDocumentElement() {
+		this.DocumentPanelElement := this.BrowserElement.FindElement({Type:"Custom", IsOffscreen:0},2)
+		return UIA.TreeWalkerTrue.GetFirstChildElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
 	}
 
 	; Presses the New tab button. 
@@ -241,6 +242,10 @@ class UIA_Mozilla extends UIA_Browser {
 	}
 
 	JSExecute(js) {
+		if this.JavascriptExecutionMethod = "Bookmark" {
+			this.SetURL("javascript " js, True)
+			return
+		}
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
 		ControlSend "{ctrl down}{shift down}k{ctrl up}{shift up}", , this.BrowserId
 		this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"})	
