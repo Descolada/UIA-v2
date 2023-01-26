@@ -5689,7 +5689,7 @@ class Viewer {
         this.EditFilterTVUIA.OnEvent("Change", this.GetMethod("EditFilterTVUIA_Change").Bind(this))
         this.GroupBoxMacro := this.gViewer.Add("GroupBox", "x900 y20 w" (this.MacroSidebarWidth-20), "Macro creator")
         (this.TextMacroAction := this.gViewer.Add("Text", "x900 y40 w40", "Action:")).SetFont("bold")
-        this.DDLMacroAction := this.gViewer.Add("DDL", "Choose6 x900 y38 w100",['Click()','Click("left")','ControlClick()', 'SetFocus()','Value := "value"','Highlight()', 'Dump()','DumpAll()', ''])
+        this.DDLMacroAction := this.gViewer.Add("DDL", "Choose1 x900 y38 w120", ["No element selected"])
         (this.ButMacroAddElement := this.gViewer.Add("Button","x900 y37 w90 h20", "Add element")).SetFont("bold")
         this.ButMacroAddElement.OnEvent("Click", this.GetMethod("ButMacroAddElement_Click").Bind(this))
         (this.EditMacroScript := this.gViewer.Add("Edit", "-Wrap HScroll x900 y65 h410 w" (this.MacroSidebarWidth-40), "#include UIA.ahk`n`n")).SetFont("s10") ; Setting a font here disables UTF-8-BOM
@@ -5873,12 +5873,29 @@ class Viewer {
             }
             prop := ""
         }
+        this.DDLMacroAction.Delete()
+        this.DDLMacroAction.Add(['Click()','Click("left")','ControlClick()', 'SetFocus()','Highlight()', 'Dump()','DumpAll()'])
+        this.DDLMacroAction.Choose(5)
         for pattern, value in UIA.Property.OwnProps() {
             if RegExMatch(pattern, "Is([\w]+)Pattern(\d?)Available", &match:=0) && Element.GetCachedPropertyValue(value) {
                 parent := this.TVPatterns.Add(match[1] (match.Count > 1 ? match[2] : ""))
                 if !IsObject(UIA.IUIAutomation%match[1]%Pattern)
                     continue
                 proto := UIA.IUIAutomation%match[1]%Pattern.Prototype
+                switch match[1], 0 {
+                    case "Invoke":
+                        this.DDLMacroAction.Add(['Invoke()'])
+                    case "ExpandCollapse":
+                        this.DDLMacroAction.Add(['Expand()', 'Collapse()'])
+                    case "Value":
+                        this.DDLMacroAction.Add(['Value := "value"'])
+                    case "Toggle":
+                        this.DDLMacroAction.Add(['Toggle()'])
+                    case "SelectionItem":
+                        this.DDLMacroAction.Add(['Select()', 'AddToSelection()', 'RemoveFromSelection()'])
+                    case "ScrollItem":
+                        this.DDLMacroAction.Add(['ScrollIntoView()'])
+                }
                 for name in proto.OwnProps() {
                     if name ~= "i)^(_|Cached)"
                         continue
@@ -5886,7 +5903,6 @@ class Viewer {
                 }
             }
         }
-
     }
     ; Handles selecting elements in the UIA tree, highlights the selected element
     TVUIA_Click(GuiCtrlObj, Info) {
