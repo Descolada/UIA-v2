@@ -5809,7 +5809,8 @@ class Viewer {
                     prop := prop ? prop : {l:0,t:0,r:0,b:0}
                     try this.LVProps.Add(, "Location", "x: " prop.l " y: " prop.t " w: " (prop.r - prop.l) " h: " (prop.b - prop.t))
                 case "RuntimeId":
-                    try this.LVProps.Add(, v, UIA.RuntimeIdToString(prop))
+                    continue ; Don't display this for now, since it might confuse users into using it as a search property.
+                    ; try this.LVProps.Add(, v, UIA.RuntimeIdToString(prop)) ; Uncomment for debugging purposes
                 default:
                     try this.LVProps.Add(, v, prop)
             }
