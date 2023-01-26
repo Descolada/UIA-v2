@@ -5638,14 +5638,14 @@ class Viewer {
         local v, pattern, value
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
         ; Set TreeScope to include the starting element and all descendants as well
         this.cacheRequest.TreeScope := 5 
 
-        this.gViewer := Gui("AlwaysOnTop Resize +MinSize420x400","UIAViewer")
+        this.gViewer := Gui("AlwaysOnTop Resize +MinSize520x400","UIAViewer")
         this.gViewer.OnEvent("Close", (*) => ExitApp())
         this.gViewer.OnEvent("Size", this.GetMethod("gViewer_Size").Bind(this))
         this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
@@ -5687,7 +5687,18 @@ class Viewer {
         this.TextFilterTVUIA := this.gViewer.Add("Text", "x275 y503", "Filter:")
         this.EditFilterTVUIA := this.gViewer.Add("Edit", "x305 y500 w100")
         this.EditFilterTVUIA.OnEvent("Change", this.GetMethod("EditFilterTVUIA_Change").Bind(this))
-        this.gViewer.Show()
+        this.GroupBoxMacro := this.gViewer.Add("GroupBox", "x900 y20 w" (this.MacroSidebarWidth-20), "Macro creator")
+        (this.TextMacroAction := this.gViewer.Add("Text", "x900 y40 w40", "Action:")).SetFont("bold")
+        this.DDLMacroAction := this.gViewer.Add("DDL", "Choose6 x900 y38 w100",['Click()','Click("left")','ControlClick()', 'SetFocus()','Value := "value"','Highlight()', 'Dump()','DumpAll()', ''])
+        (this.ButMacroAddElement := this.gViewer.Add("Button","x900 y37 w90 h20", "Add element")).SetFont("bold")
+        this.ButMacroAddElement.OnEvent("Click", this.GetMethod("ButMacroAddElement_Click").Bind(this))
+        (this.EditMacroScript := this.gViewer.Add("Edit", "-Wrap HScroll x900 y65 h410 w" (this.MacroSidebarWidth-40), "#include UIA.ahk`n`n")).SetFont("s10") ; Setting a font here disables UTF-8-BOM
+        (this.ButMacroScriptRun := this.gViewer.Add("Button", "x900 y120 w70", "Test script")).SetFont("bold")
+        this.ButMacroScriptRun.OnEvent("Click", this.GetMethod("ButMacroScriptRun_Click").Bind(this))
+        this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro sidebar =>")
+        this.ButToggleMacroSidebar.OnEvent("Click", this.GetMethod("ButToggleMacroSidebar_Click").Bind(this))
+        this.gViewer.Show("w600 h550")
+        this.gViewer_Size(this.gViewer,0,600,550)
     }
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
@@ -5695,15 +5706,61 @@ class Viewer {
             this.Stored.HighlightedElement.Highlight("clear")
         static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
         this.TVUIA.GetPos(&TV_Pos_X, &TV_Pos_Y, &TV_Pos_W, &TV_Pos_H)
-        this.TVUIA.Move(,,Width-TV_Pos_X-10,Height-TV_Pos_Y-60)
-        this.TextFilterTVUIA.Move(TV_Pos_X, Height-47)
-        this.EditFilterTVUIA.Move(TV_Pos_X+30, Height-50)
+        this.MoveControls(this.MacroSidebarVisible ? {Control:this.TVUIA,w:(TV_Pos_W:=Width-this.MacroSidebarWidth-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)} : {Control:this.TVUIA,w:(TV_Pos_W:=Width-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)})
+        TV_Pos_R := TV_Pos_X+TV_Pos_W
         this.LVProps.GetPos(&LVPropsX, &LVPropsY, &LVPropsWidth, &LVPropsHeight)
-        this.LVProps.Move(,,,Height-LVPropsY-170)
-        this.TextTVPatterns.Move(,Height-165)
-        this.TVPatterns.Move(,Height-145)
-        this.ButCapture.Move(,Height -50)
-        SetTimer(RedrawFunc, -500)
+        this.ButToggleMacroSidebar.GetPos(,,&ButToggleMacroSidebarW)
+        this.MoveControls({Control:this.TextFilterTVUIA, x:TV_Pos_X, y:Height-47}, {Control:this.ButToggleMacroSidebar, x:TV_Pos_X+TV_Pos_W-ButToggleMacroSidebarW, y:Height-50}, {Control:this.EditFilterTVUIA, x:TV_Pos_X+30, y:Height-50}
+            , {Control:this.LVProps,h:Height-LVPropsY-170}, {Control:this.TextTVPatterns,y:Height-165}, {Control:this.TVPatterns,y:Height-145}, {Control:this.ButCapture,y:Height-50}
+            , {Control:this.GroupBoxMacro,x:TV_Pos_R+15, h:TV_Pos_H+35}, {Control:this.TextMacroAction,x:TV_Pos_R+25}, {Control:this.DDLMacroAction,x:TV_Pos_R+70}, {Control:this.ButMacroAddElement,x:TV_Pos_R+245}, {Control:this.EditMacroScript,x:TV_Pos_R+25,h:TV_Pos_H-50}, {Control:this.ButMacroScriptRun,x:TV_Pos_R+140,y:TV_Pos_Y+TV_Pos_H-2})
+        RedrawFunc()
+        ;SetTimer(RedrawFunc, -500)
+    }
+    MoveControls(ctrls*) {
+        for ctrl in ctrls
+            ctrl.Control.Move(ctrl.HasOwnProp("x") ? ctrl.x : unset, ctrl.HasOwnProp("y") ? ctrl.y : unset, ctrl.HasOwnProp("w") ? ctrl.w : unset, ctrl.HasOwnProp("h") ? ctrl.h : unset)
+    }
+    ; Show/hide macros sidebar
+    ButToggleMacroSidebar_Click(GuiCtrlObj?, Info?) {
+        this.MacroSidebarVisible := !this.MacroSidebarVisible
+        GuiCtrlObj.Text := this.MacroSidebarVisible ? "Hide macro sidebar <=" : "Show macro sidebar =>"
+        this.gViewer.Opt("+MinSize" (520 + (this.MacroSidebarVisible ? this.MacroSidebarWidth : 0)) "x400")
+        this.gViewer.GetPos(,, &w)
+        this.gViewer.Move(,,w+(this.MacroSidebarVisible ? this.MacroSidebarWidth : -this.MacroSidebarWidth))
+    }
+    ButMacroAddElement_Click(GuiCtrlObj?, Info?) {
+        if !this.Stored.HasOwnProp("CapturedElement")
+            return
+        processName := WinGetProcessName(this.Stored.mwId)
+        winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? match[] "El" : "winEl"
+        winElText := winElVariable " := UIA.ElementFromHandle(`"" WinGetTitle(this.Stored.mwId) " ahk_exe " processName "`")"
+        if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
+            this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText "`n"
+        else
+            this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ")
+        winElVariable := winElVariable (SubStr(this.SBMain.Text, 9) ? ".FindByPath(" SubStr(this.SBMain.Text, 9) ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
+        if InStr(this.DDLMacroAction.Text, "Dump")
+            winElVariable := "MsgBox(" winElVariable ")"
+        this.EditMacroScript.Text := this.EditMacroScript.Text "`r`n" RegExReplace(winElVariable, "(?<!``)`"", "`"") "`r`n"
+    }
+    ButMacroScriptRun_Click(GuiCtrlObj?, Info?) {
+        if IsObject(this.Stored.HighlightedElement)
+            this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0
+        DetectHiddenWindows 1
+        WinHide(this.gViewer)
+        try {
+            shell := ComObject("WScript.Shell")
+            oExec := shell.Exec("`"" A_AhkPath "`" /force *")
+            oExec.StdIn.Write(StrReplace(this.EditMacroScript.Text, "`r"))
+            oExec.StdIn.Close(), 
+            pid:=oExec.ProcessID
+            if WinWait("ahk_pid " pid,, 3)
+                WinWaitClose(, , 30)
+        }
+        if WinExist("ahk_pid " pid)
+            WinKill
+        WinShow(this.gViewer)
+        DetectHiddenWindows 0
     }
     ; Starts showing the element under the cursor with 200ms intervals with CaptureCallback
     ButCapture_Click(GuiCtrlObj?, Info?) {
@@ -5839,6 +5896,7 @@ class Viewer {
         if IsSet(Element) && Element {
             if IsObject(this.Stored.HighlightedElement) && UIA.CompareElements(Element, this.Stored.HighlightedElement)
                 return (this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0)
+            this.Stored.CapturedElement := Element
             try this.SBMain.SetText("  Path: " Element.Path)
             this.PopulatePropsPatterns(Element)
         }
