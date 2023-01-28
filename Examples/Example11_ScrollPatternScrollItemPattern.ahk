@@ -22,10 +22,10 @@ MsgBox "ScrollPattern properties: "
 	. "`nCurrentVerticallyScrollable: " treeEl.VerticallyScrollable
 Sleep 50
 MsgBox "Press OK to set scroll percent to 50% vertically and 0% horizontally."
-treeEl.SetScrollPercent(,50)
+treeEl.SetScrollPercent(50)
 Sleep 500
 MsgBox "Press OK to scroll a Page Up equivalent upwards vertically."
-treeEl.Scroll(, UIA.ScrollAmount.LargeDecrement) ; LargeDecrement is equivalent to pressing the PAGE UP key or clicking on a blank part of a scroll bar. SmallDecrement is equivalent to pressing an arrow key or clicking the arrow button on a scroll bar.
+treeEl.Scroll(UIA.ScrollAmount.LargeDecrement) ; LargeDecrement is equivalent to pressing the PAGE UP key or clicking on a blank part of a scroll bar. SmallDecrement is equivalent to pressing an arrow key or clicking the arrow button on a scroll bar.
 
 Sleep 500
 MsgBox "Press OK to scroll drive C: into view."

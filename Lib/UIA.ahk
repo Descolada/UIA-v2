@@ -4589,12 +4589,12 @@ class IUIAutomationScrollItemPattern extends UIA.IUIAutomationBase {
 class IUIAutomationScrollPattern extends UIA.IUIAutomationBase {
     ; Scrolls the visible region of the content area horizontally and vertically.
     ; Default values for horizontalAmount and horizontalAmount is UIA.ScrollAmount.NoAmount
-    Scroll(horizontalAmount:=-1, verticalAmount:=-1) => ComCall(3, this, "int", horizontalAmount, "int", verticalAmount)
+    Scroll(verticalAmount:=-1, horizontalAmount:=-1) => ComCall(3, this, "int", IsInteger(horizontalAmount) ? horizontalAmount : UIA.ScrollAmount.%horizontalAmount%, "int", IsInteger(verticalAmount) ? verticalAmount : UIA.ScrollAmount.%verticalAmount%)
 
     ; Sets the horizontal and vertical scroll positions as a percentage of the total content area within the UI Automation element.
     ; This method is useful only when the content area of the control is larger than the visible region.
     ; Default values for horizontalPercent and verticalPercent is UIA.ScrollAmount.NoAmount
-    SetScrollPercent(horizontalPercent:=-1, verticalPercent:=-1) => ComCall(4, this, "double", horizontalPercent, "double", verticalPercent)
+    SetScrollPercent(verticalPercent:=-1, horizontalPercent:=-1) => ComCall(4, this, "double", horizontalPercent, "double", verticalPercent)
 
     ; Retrieves the horizontal scroll position.
     HorizontalScrollPercent {
