@@ -4602,6 +4602,7 @@ class IUIAutomationScrollPattern extends UIA.IUIAutomationBase {
 			local retVal
 			return (ComCall(5, this, "double*", &retVal := 0), retVal)
 		}
+        set => this.SetScrollPercent(,value)
 	}
 
     ; Retrieves the vertical scroll position.
@@ -4610,6 +4611,7 @@ class IUIAutomationScrollPattern extends UIA.IUIAutomationBase {
 			local retVal
 			return (ComCall(6, this, "double*", &retVal := 0), retVal)
 		}
+        set => this.SetScrollPercent(value)
 	}
 
     ; Retrieves the horizontal size of the viewable region of a scrollable element.
