@@ -5643,7 +5643,7 @@ class Viewer {
         local v, pattern, value
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 0, this.PathUseNumeric := 0
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathUseNumeric := 0
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
