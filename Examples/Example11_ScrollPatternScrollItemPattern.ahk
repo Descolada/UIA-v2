@@ -4,6 +4,7 @@
 Run "explore C:\"
 CDriveName := DriveGetLabel("C:") " (C:)"
 WinWaitActive(CDriveName,,1)
+WinMove(100, 200, 1000, , "A")
 explorerEl := UIA.ElementFromHandle("A")
 if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."

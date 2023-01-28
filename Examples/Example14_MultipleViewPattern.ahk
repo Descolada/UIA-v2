@@ -3,6 +3,7 @@
 
 Run "explore C:\Windows"
 WinWaitActive("Windows",,1)
+WinMove(100, 200, 1000, , "A")
 explorerEl := UIA.ElementFromHandle("A")
 if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
