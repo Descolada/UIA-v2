@@ -6001,9 +6001,11 @@ class Viewer {
         this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
         this.TVUIA.Opt("+Redraw")
         this.SBMain.SetText("  Path: ")
+        if !this.Stored.CapturedElement.HasOwnProp("Path")
+            this.Stored.CapturedElement.DefineProp("Path", {Value:""}), this.Stored.CapturedElement.DefineProp("NumericPath", {Value:""})
         for k, v in this.Stored.TreeView {
             if this.SafeCompareElements(this.Stored.CapturedElement, v)
-                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " (this.PathUseNumeric ? v.NumericPath : v.Path)), this.Stored.CapturedElement.DefineProp("Path", {Value:v.Path}), this.Stored.CapturedElement.DefineProp("NumericPath", {Value:v.NumericPath})
+                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " (this.PathUseNumeric ? v.NumericPath : v.Path)), this.Stored.CapturedElement.Path := v.Path, this.Stored.CapturedElement.NumericPath := v.NumericPath
         }
     }
     ; Stores the UIA tree with corresponding path values for each element
