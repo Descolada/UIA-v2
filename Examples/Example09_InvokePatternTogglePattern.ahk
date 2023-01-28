@@ -8,6 +8,7 @@ if VerCompare(A_OSVersion, ">=10.0.22000") {
 
 Run "explore C:\"
 WinWaitActive DriveGetLabel("C:") " (C:)",, 1
+WinMove(100, 200, 1000, , "A")
 explorerEl := UIA.ElementFromHandle("A")
 if !explorerEl {
 	MsgBox "Drive C: element not found! Exiting app..."
@@ -19,6 +20,8 @@ fileEl.Invoke()
 
 Sleep 1000
 MsgBox "Press OK to navigate to the View tab to test TogglePattern..." ; Not part of this demonstration
+if !explorerEl.FindElement({Name:"Lower ribbon"}) ; Not part of this demonstration
+	try explorerEl.FindElement({T:0,N:"Minimize the Ribbon"}).Invoke() ; Not part of this demonstration
 explorerEl.FindElement({Type:"TabItem", Name:"View"}).Select() ; Not part of this demonstration
 
 hiddenItemsCB := explorerEl.FindElement({Type:"CheckBox", Name:"Hidden items"})
