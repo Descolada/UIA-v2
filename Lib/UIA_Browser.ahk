@@ -328,15 +328,26 @@ class UIA_Browser {
 	}
 	
 	__Get(member, params) {
-		try return this.BrowserElement.%member%
+		if this.HasOwnProp("BrowserElement")
+			try return this.BrowserElement.%member%
 		try return UIA.%member%
 		throw Error("This class does not contain property `"" member "`"", -1)
 	}
 	
 	__Call(member, params) {
-		try return this.BrowserElement.%member%(params*)
+		if this.HasOwnProp("BrowserElement")
+			try return this.BrowserElement.%member%(params*)
 		try return UIA.%member%(params*)
 		throw Error("This class does not contain method `"" member "`"", -1)
+	}
+
+	__Set(member, params, value) {
+		if this.HasOwnProp("BrowserElement")
+			if this.BrowserElement.HasOwnProp(member)
+				this.BrowserElement.%member% := Value
+		if UIA.HasOwnProp(member)
+			UIA.%member% := Value
+		this.DefineProp(member, {Value:value})
 	}
 	
 	; Refreshes UIA_Browser.MainPaneElement and returns it
@@ -545,15 +556,15 @@ class UIA_Browser {
 	
 	; Waits the browser page to load to targetTitle, default timeOut is indefinite waiting, sleepAfter additionally sleeps for 200ms after the page has loaded. 
 	WaitPageLoad(targetTitle:="", timeOut:=-1, sleepAfter:=500, titleMatchMode:="", titleCaseSensitive:=False) {
-		local legacyPattern, startTime := A_TickCount, wTitle
+		local legacyPattern := "", startTime := A_TickCount, wTitle
 		Sleep 200 ; Give some time for the Reload button to change after navigating
 		if this.ReloadButtonDescription
-			legacyPattern := this.ReloadButton.LegacyIAccessiblePattern
+			try legacyPattern := this.ReloadButton.LegacyIAccessiblePattern
 		while ((A_TickCount - startTime) < timeOut) || (timeOut = -1) {
 			if this.BrowserType = "Mozilla"
 				this.GetCurrentReloadButton()
 			if ((this.ReloadButtonName ? InStr(this.ReloadButton.Name, this.ReloadButtonName) : 1) 
-			   && (this.ReloadButtonDescription ? InStr(legacyPattern.Description, this.ReloadButtonDescription) : 1)
+			   && (this.ReloadButtonDescription && legacyPattern ? InStr(legacyPattern.Description, this.ReloadButtonDescription) : 1)
 			   && (this.ReloadButtonFullDescription ? InStr(this.ReloadButton.FullDescription, this.ReloadButtonFullDescription) : 1)) {
 				if targetTitle {
 					wTitle := WinGetTitle(this.BrowserId)
