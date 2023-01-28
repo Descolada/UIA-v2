@@ -1236,8 +1236,9 @@ class NativeArray {
 ; The base class for IUIAutomation objects that return releasable pointers
 class IUIAutomationBase {
     __New(ptr) {
-        if !(this.ptr := ptr)
+        if !ptr
             throw ValueError('Invalid IUnknown interface pointer', -2, this.__Class)
+        this.DefineProp("ptr", {Value:ptr})
     }
     __Delete() => this.Release()
     __Item => (ObjAddRef(this.ptr), ComValue(0xd, this.ptr))
@@ -1261,7 +1262,11 @@ class IUIAutomationBase {
 	Microsoft documentation: https://docs.microsoft.com/en-us/windows/win32/api/uiautomationclient/nn-uiautomationclient-iuiautomationelement
 */
 class IUIAutomationElement extends UIA.IUIAutomationBase {
-    cachedPatterns := Map() ; Used to cache patterns when they are called directly from an element
+    __New(params*) {
+        this.DefineProp("cachedPatterns", {Value:Map()}) ; Used to cache patterns when they are called directly from an element
+        this.DefineProp("HighlightGui", {Value:[]})
+        super.__New(params*)
+    }
 
     /**
      * Enables array-like use of UIA elements to access child elements. 
@@ -1367,7 +1372,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             ; Since LegacyIAccessible was skipped, then try LegacyIAccessible also
         if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : ""
             return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%
-        this.DefineProp(Name, {Value:Value})
+        throw Error("This class does not support adding properties")
     }
     /**
      * Meta-function for calling methods from supperted patterns. 
@@ -1622,7 +1627,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
         try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
 	}
-	; Get the parent window hwnd from the element
+	; Get the control hwnd (that the element belongs to) from the element
 	GetControlId() { 
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
         try return TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle)
@@ -1742,8 +1747,6 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     Highlight(showTime:=unset, color:="Red", d:=2) {
         local _, r, i, loc, x1, y1, w1, h1
-        if !this.HasOwnProp("HighlightGui")
-            this.HighlightGui := []
         if (!IsSet(showTime) && this.HighlightGui.Length) || (IsSet(showTime) && showTime = "clear") {
                 for _, r in this.HighlightGui
                     r.Destroy()
@@ -5638,7 +5641,7 @@ class Viewer {
         local v, pattern, value
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 0, this.PathUseNumeric := 0
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
@@ -5678,7 +5681,7 @@ class Viewer {
         HotKey("~F1", this.CaptureHotkeyFunc)
         this.SBMain := this.gViewer.Add("StatusBar",, "  Start capturing, then hold cursor still to construct tree")
         this.SBMain.OnEvent("Click", this.GetMethod("SBMain_Click").Bind(this))
-        this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_Click").Bind(this))
+        this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_ContextMenu").Bind(this))
         this.gViewer.Add("Text", "x278 y10 w100", "UIA Tree").SetFont("bold")
         this.TVUIA := this.gViewer.Add("TreeView", "x275 y25 w300 h465")
         this.TVUIA.OnEvent("Click", this.GetMethod("TVUIA_Click").Bind(this))
@@ -5714,7 +5717,6 @@ class Viewer {
             , {Control:this.LVProps,h:Height-LVPropsY-170}, {Control:this.TextTVPatterns,y:Height-165}, {Control:this.TVPatterns,y:Height-145}, {Control:this.ButCapture,y:Height-50}
             , {Control:this.GroupBoxMacro,x:TV_Pos_R+15, h:TV_Pos_H+35}, {Control:this.TextMacroAction,x:TV_Pos_R+25}, {Control:this.DDLMacroAction,x:TV_Pos_R+70}, {Control:this.ButMacroAddElement,x:TV_Pos_R+245}, {Control:this.EditMacroScript,x:TV_Pos_R+25,h:TV_Pos_H-50}, {Control:this.ButMacroScriptRun,x:TV_Pos_R+140,y:TV_Pos_Y+TV_Pos_H-2})
         RedrawFunc()
-        ;SetTimer(RedrawFunc, -500)
     }
     MoveControls(ctrls*) {
         for ctrl in ctrls
@@ -5722,6 +5724,7 @@ class Viewer {
     }
     ; Show/hide macros sidebar
     ButToggleMacroSidebar_Click(GuiCtrlObj?, Info?) {
+        local w
         this.MacroSidebarVisible := !this.MacroSidebarVisible
         GuiCtrlObj.Text := this.MacroSidebarVisible ? "Hide macro sidebar <=" : "Show macro sidebar =>"
         this.gViewer.Opt("+MinSize" (520 + (this.MacroSidebarVisible ? this.MacroSidebarWidth : 0)) "x400")
@@ -5729,6 +5732,7 @@ class Viewer {
         this.gViewer.Move(,,w+(this.MacroSidebarVisible ? this.MacroSidebarWidth : -this.MacroSidebarWidth))
     }
     ButMacroAddElement_Click(GuiCtrlObj?, Info?) {
+        local match
         if !this.Stored.HasOwnProp("CapturedElement")
             return
         processName := WinGetProcessName(this.Stored.mwId)
@@ -5784,14 +5788,29 @@ class Viewer {
             ? ListViewGetContent("", GuiCtrlObj)
             : ListViewGetContent("Selected", GuiCtrlObj)
         ToolTip("Copied: " (A_Clipboard := RegExReplace(LVData, "([ \w]+)\t", "$1: ")))
-        SetTimer((*) => ToolTip(), -3000)
+        SetTimer(ToolTip, -3000)
     }
     ; Copies the UIA path to clipboard when statusbar is clicked
     SBMain_Click(GuiCtrlObj, Info, *) {
         if InStr(this.SBMain.Text, "Path:") {
             ToolTip("Copied: " (A_Clipboard := SubStr(this.SBMain.Text, 9)))
-            SetTimer((*) => ToolTip(), -3000)
+            SetTimer(ToolTip, -3000)
         }
+    }
+    SBMain_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
+        SBMain_Menu := Menu()
+        if InStr(this.SBMain.Text, "Path:") {
+            SBMain_Menu.Add("Copy path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.Path)), SetTimer(ToolTip, -3000)))
+            SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
+            SBMain_Menu.Add()
+        }
+        SBMain_Menu.Add("Display numeric path", (*) => (this.PathUseNumeric := !this.PathUseNumeric, this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathUseNumeric ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Ignore Name properties", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
+        if this.PathIgnoreNames
+            SBMain_Menu.Check("Ignore Name properties")
+        if this.PathUseNumeric
+            SBMain_Menu.Check("Display numeric path")
+        SBMain_Menu.Show()
     }
     ; Stops capturing elements under mouse, unhooks CaptureCallback
     StopCapture(GuiCtrlObj:=0, Info:=0) {
@@ -5910,10 +5929,12 @@ class Viewer {
             return
         try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Info] : this.Stored.TreeView[Info]
         if IsSet(Element) && Element {
-            if IsObject(this.Stored.HighlightedElement) && UIA.CompareElements(Element, this.Stored.HighlightedElement)
-                return (this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0)
+            if IsObject(this.Stored.HighlightedElement) {
+                if this.SafeCompareElements(Element, this.Stored.HighlightedElement)
+                    return (this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0)
+            }    
             this.Stored.CapturedElement := Element
-            try this.SBMain.SetText("  Path: " Element.Path)
+            try this.SBMain.SetText("  Path: " (this.PathUseNumeric ? Element.NumericPath : Element.Path))
             this.PopulatePropsPatterns(Element)
         }
     }
@@ -5979,28 +6000,29 @@ class Viewer {
         this.TVUIA.Opt("+Redraw")
         this.SBMain.SetText("  Path: ")
         for k, v in this.Stored.TreeView {
-            same := 0, brC := v.CachedBoundingRectangle, brE := this.Stored.CapturedElement.CachedBoundingRectangle
-            try same := this.Stored.CapturedElement.CachedDump() == v.CachedDump()
-            if !same {
-                if brC.l || brC.t {
-                    try same := brC.l = brE.l && brC.t = brE.t && brC.r = brE.r && brC.b = brE.b
-                } else {
-                    try same := UIA.CompareElements(this.Stored.CapturedElement, v)
-                }
-            }
-            if same
-                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " v.Path)
+            if this.SafeCompareElements(this.Stored.CapturedElement, v)
+                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " (this.PathUseNumeric ? v.NumericPath : v.Path)), this.Stored.CapturedElement.DefineProp("Path", {Value:v.Path}), this.Stored.CapturedElement.DefineProp("NumericPath", {Value:v.NumericPath})
         }
     }
     ; Stores the UIA tree with corresponding path values for each element
-    RecurseTreeView(Element, parent:=0, path:="") {
+    RecurseTreeView(Element, parent:=0, path:="", numpath:="") {
         local k, v, paths := Map()
-        this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element.DefineProp("Path", {value:path})
+        Element.DefineProp("Path", {value:path})
+        Element.DefineProp("NumericPath", {value:numpath})
+        this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element
         for k, v in Element.CachedChildren {
             p := this.GetCompactCondition(v, &paths)
             p .= paths[p] = 1 ? "}" : ", i:" paths[p] "}"
-            this.RecurseTreeView(v, TWEl, path (path?", ":"") p)
+            this.RecurseTreeView(v, TWEl, path (path?", ":"") p, numpath (numpath?",":"") k)
         }
+    }
+    ; CompareElements sometimes fails to match elements, so this compares some properties instead
+    SafeCompareElements(e1, e2) {
+        if e1.CachedDump() == e2.CachedDump() {
+            br_e1 := e1.CachedBoundingRectangle, br_e2 := e2.CachedBoundingRectangle
+            return br_e1.l = br_e2.l && br_e1.t = br_e2.t && br_e1.r = br_e2.r && br_e1.b = br_e2.b
+        }
+        return 0
     }
     ; Creates a short description string for the UIA tree elements
     GetShortDescription(Element) {
@@ -6015,25 +6037,32 @@ class Viewer {
         local n := "", c := "", a := ""
         t := Element.CachedType
         t := "{T:" (t-50000)
-        pathsMap[t] := pathsMap.Has(t) ? pathsMap[t] + 1 : 1
+        if !pathsMap.Has(t) {
+            pathsMap[t] := 1
+            return t
+        }
+        pathsMap[t] := pathsMap[t] + 1
         try a := StrReplace(Element.CachedAutomationId, "`"", "```"")
-        if a && !IsInteger(a) { ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
+        if a != "" && !IsInteger(a) { ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
             a := t ",A:`"" a "`""
-            pathsMap[a] := pathsMap.Has(a) ? pathsMap[a] + 1 : 1 ; This actually shouldn't be needed
-            return a
+            pathsMap[a] := pathsMap.Has(a) ? pathsMap[a] + 1 : 1 ; This actually shouldn't be needed, if AutomationId's are unique
         }
         try c := StrReplace(Element.CachedClassName, "`"", "```"")
-        if c {
+        if c != "" {
             c := t ",CN:`"" c "`""
             pathsMap[c] := pathsMap.Has(c) ? pathsMap[c] + 1 : 1
-            return c
         }
         try n := StrReplace(Element.CachedName, "`"", "```"")
-        if n { ; Consider Name last, because it can change (eg. window title)
+        if !this.PathIgnoreNames && n != "" { ; Consider Name last, because it can change (eg. window title)
             n := t ",N:`"" n "`""
             pathsMap[n] := pathsMap.Has(n) ? pathsMap[n] + 1 : 1
-            return n
         }
+        if a != ""  && !IsInteger(a) {
+            return c != "" ? (pathsMap[a] <= pathsMap[c] ? a : c) : a
+        } else if c != ""
+            return c
+        else if !this.PathIgnoreNames && n != "" && (pathsMap[n] < pathsMap[t])
+            return n
         return t
     }
 }
