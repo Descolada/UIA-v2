@@ -39,6 +39,8 @@
       that they are either equal, or AHK array comes on top by far. The situation where it loses to the
       native one is when we need to get exactly one element from the array and won't use it more. This
       is optimized by using the native ElementArray in cases of Element[integer].
+    - FindElement doesn't throw an error if no element is found. This is because it's one of the 
+      expected results, and also to avoid too many unnecessary try...catch blocks.
 
     To-do:
     - Better error handling
@@ -125,6 +127,7 @@ static Event := {ToolTipOpened:20000,ToolTipClosed:20001,StructureChanged:20002,
 static Property := {RuntimeId:30000,BoundingRectangle:30001,ProcessId:30002,ControlType:30003,Type:30003,LocalizedControlType:30004, LocalizedType:30004,Name:30005,AcceleratorKey:30006,AccessKey:30007,HasKeyboardFocus:30008,IsKeyboardFocusable:30009,IsEnabled:30010,AutomationId:30011,ClassName:30012,HelpText:30013,ClickablePoint:30014,Culture:30015,IsControlElement:30016,IsContentElement:30017,LabeledBy:30018,IsPassword:30019,NativeWindowHandle:30020,ItemType:30021,IsOffscreen:30022,Orientation:30023,FrameworkId:30024,IsRequiredForForm:30025,ItemStatus:30026,IsDockPatternAvailable:30027,IsExpandCollapsePatternAvailable:30028,IsGridItemPatternAvailable:30029,IsGridPatternAvailable:30030,IsInvokePatternAvailable:30031,IsMultipleViewPatternAvailable:30032,IsRangeValuePatternAvailable:30033,IsScrollPatternAvailable:30034,IsScrollItemPatternAvailable:30035,IsSelectionItemPatternAvailable:30036,IsSelectionPatternAvailable:30037,IsTablePatternAvailable:30038,IsTableItemPatternAvailable:30039,IsTextPatternAvailable:30040,IsTogglePatternAvailable:30041,IsTransformPatternAvailable:30042,IsValuePatternAvailable:30043,IsWindowPatternAvailable:30044,ValueValue:30045,Value:30045,ValueIsReadOnly:30046,RangeValueValue:30047,RangeValueIsReadOnly:30048,RangeValueMinimum:30049,RangeValueMaximum:30050,RangeValueLargeChange:30051,RangeValueSmallChange:30052,ScrollHorizontalScrollPercent:30053,ScrollHorizontalViewSize:30054,ScrollVerticalScrollPercent:30055,ScrollVerticalViewSize:30056,ScrollHorizontallyScrollable:30057,ScrollVerticallyScrollable:30058,SelectionSelection:30059,SelectionCanSelectMultiple:30060,SelectionIsSelectionRequired:30061,GridRowCount:30062,GridColumnCount:30063,GridItemRow:30064,GridItemColumn:30065,GridItemRowSpan:30066,GridItemColumnSpan:30067,GridItemContainingGrid:30068,DockDockPosition:30069,ExpandCollapseExpandCollapseState:30070,MultipleViewCurrentView:30071,MultipleViewSupportedViews:30072,WindowCanMaximize:30073,WindowCanMinimize:30074,WindowWindowVisualState:30075,WindowWindowInteractionState:30076,WindowIsModal:30077,WindowIsTopmost:30078,SelectionItemIsSelected:30079,SelectionItemSelectionContainer:30080,TableRowHeaders:30081,TableColumnHeaders:30082,TableRowOrColumnMajor:30083,TableItemRowHeaderItems:30084,TableItemColumnHeaderItems:30085,ToggleToggleState:30086,TransformCanMove:30087,TransformCanResize:30088,TransformCanRotate:30089,IsLegacyIAccessiblePatternAvailable:30090,LegacyIAccessibleChildId:30091,LegacyIAccessibleName:30092,LegacyIAccessibleValue:30093,LegacyIAccessibleDescription:30094,LegacyIAccessibleRole:30095,LegacyIAccessibleState:30096,LegacyIAccessibleHelp:30097,LegacyIAccessibleKeyboardShortcut:30098,LegacyIAccessibleSelection:30099,LegacyIAccessibleDefaultAction:30100,AriaRole:30101,AriaProperties:30102,IsDataValidForForm:30103,ControllerFor:30104,DescribedBy:30105,FlowsTo:30106,ProviderDescription:30107,IsItemContainerPatternAvailable:30108,IsVirtualizedItemPatternAvailable:30109,IsSynchronizedInputPatternAvailable:30110,OptimizeForVisualContent:30111,IsObjectModelPatternAvailable:30112,AnnotationAnnotationTypeId:30113,AnnotationAnnotationTypeName:30114,AnnotationAuthor:30115,AnnotationDateTime:30116,AnnotationTarget:30117,IsAnnotationPatternAvailable:30118,IsTextPattern2Available:30119,StylesStyleId:30120,StylesStyleName:30121,StylesFillColor:30122,StylesFillPatternStyle:30123,StylesShape:30124,StylesFillPatternColor:30125,StylesExtendedProperties:30126,IsStylesPatternAvailable:30127,IsSpreadsheetPatternAvailable:30128,SpreadsheetItemFormula:30129,SpreadsheetItemAnnotationObjects:30130,SpreadsheetItemAnnotationTypes:30131,IsSpreadsheetItemPatternAvailable:30132,Transform2CanZoom:30133,IsTransformPattern2Available:30134,LiveSetting:30135,IsTextChildPatternAvailable:30136,IsDragPatternAvailable:30137,DragIsGrabbed:30138,DragDropEffect:30139,DragDropEffects:30140,IsDropTargetPatternAvailable:30141,DropTargetDropTargetEffect:30142,DropTargetDropTargetEffects:30143,DragGrabbedItems:30144,Transform2ZoomLevel:30145,Transform2ZoomMinimum:30146,Transform2ZoomMaximum:30147,FlowsFrom:30148,IsTextEditPatternAvailable:30149,IsPeripheral:30150,IsCustomNavigationPatternAvailable:30151,PositionInSet:30152,SizeOfSet:30153,Level:30154,AnnotationTypes:30155,AnnotationObjects:30156,LandmarkType:30157,LocalizedLandmarkType:30158,FullDescription:30159,FillColor:30160,OutlineColor:30161,FillType:30162,VisualEffects:30163,OutlineThickness:30164,CenterPoint:30165,Rotation:30166,Size:30167,IsSelectionPattern2Available:30168,Selection2FirstSelectedItem:30169,Selection2LastSelectedItem:30170,Selection2CurrentSelectedItem:30171,Selection2ItemCount:30173,IsDialog:30174, base:UIA.Enumeration.Prototype}
 
 static PropertyVariantType := Map(30000,0x2003,30001,0x2005,30002,3,30003,3,30004,8,30005,8,30006,8,30007,8,30008,0xB,30009,0xB,30010,0xB,30011,8,30012,8,30013,8,30014,0x2005,30015,3,30016,0xB,30017,0xB,30018,0xD,30019,0xB,30020,3,30021,8,30022,0xB,30023,3,30024,8,30025,0xB,30026,8,30027,0xB,30028,0xB,30029,0xB,30030,0xB,30031,0xB,30032,0xB,30033,0xB,30034,0xB,30035,0xB,30036,0xB,30037,0xB,30038,0xB,30039,0xB,30040,0xB,30041,0xB,30042,0xB,30043,0xB,30044,0xB,30045,8,30046,0xB,30047,5,30048,0xB,30049,5,30050,5,30051,5,30052,5,30053,5,30054,5,30055,5,30056,5,30057,0xB,30058,0xB,30059,0x200D,30060,0xB,30061,0xB,30062,3,30063,3,30064,3,30065,3,30066,3,30067,3,30068,0xD,30069,3,30070,3,30071,3,30072,0x2003,30073,0xB,30074,0xB,30075,3,30076,3,30077,0xB,30078,0xB,30079,0xB,30080,0xD,30081,0x200D,30082,0x200D,30083,0x2003,30084,0x200D,30085,0x200D,30086,3,30087,0xB,30088,0xB,30089,0xB,30090,0xB,30091,3,30092,8,30093,8,30094,8,30095,3,30096,3,30097,8,30098,8,30099,0x200D,30100,8,30101,8,30102,8,30103,0xB,30104,0xD,30105,0xD,30106,0xD,30107,8,30108,0xB,30109,0xB,30110,0xB,30111,0xB,30112,0xB,30113,3,30114,8,30115,8,30116,8,30117,0xD,30118,0xB,30119,0xB,30120,3,30121,8,30122,3,30123,8,30124,8,30125,3,30126,8,30127,0xB,30128,0xB,30129,8,30130,0x200D,30131,0x2003,30132,0xB,30133,0xB,30134,0xB,30135,3,30136,0xB,30137,0xB,30138,0xB,30139,8,30140,0x2008,30141,0xB,30142,8,30143,0x2008,30144,0x200D,30145,5,30146,5,30147,5,30148,0x200D,30149,0xB,30150,0xB,30151,0xB,30152,3,30153,3,30154,3,30155,0x2003,30156,0x2003,30157,3,30158,8,30159,8,30160,3,30161,0x2003,30162,3,30163,3,30164,0x2005,30165,0x2005,30166,5,30167,0x2005,30168,0xB)
+static PropertyVariantTypeBSTR := Map(30004,8,30005,8,30006,8,30007,8,30011,8,30012,8,30013,8,30021,8,30024,8,30026,8,30045,8,30092,8,30093,8,30094,8,30097,8,30098,8,30100,8,30101,8,30102,8,30107,8,30114,8,30115,8,30116,8,30121,8,30123,8,30124,8,30126,8,30129,8,30139,8,30142,8,30158,8,30159,8)
 
 static TextAttribute := {AnimationStyle:40000,BackgroundColor:40001,BulletStyle:40002,CapStyle:40003,Culture:40004,FontName:40005,FontSize:40006,FontWeight:40007,ForegroundColor:40008,HorizontalTextAlignment:40009,IndentationFirstLine:40010,IndentationLeading:40011,IndentationTrailing:40012,IsHidden:40013,IsItalic:40014,IsReadOnly:40015,IsSubscript:40016,IsSuperscript:40017,MarginBottom:40018,MarginLeading:40019,MarginTop:40020,MarginTrailing:40021,OutlineStyles:40022,OverlineColor:40023,OverlineStyle:40024,StrikethroughColor:40025,StrikethroughStyle:40026,Tabs:40027,TextFlowDirections:40028,UnderlineColor:40029,UnderlineStyle:40030,AnnotationTypes:40031,AnnotationObjects:40032,StyleName:40033,StyleId:40034,Link:40035,IsActive:40036,SelectionActiveEnd:40037,CaretPosition:40038,CaretBidiMode:40039,LineSpacing:40040,BeforeParagraphSpacing:40041,AfterParagraphSpacing:40042,SayAsInterpretAs:40043, base:UIA.Enumeration.Prototype}
 
@@ -161,6 +164,9 @@ static PropertyConditionFlags := {None:0, IgnoreCase:1, MatchSubstring:2, Ignore
 static TreeScope := {None: 0, Element: 1, Children: 2, Family:3, Descendants: 4, Subtree: 7, Parent: 8, Ancestors: 16, base:UIA.Enumeration.Prototype}
 
 static TreeTraversalOptions := {Default:0, PostOrder:1, LastToFirstOrder:2, LastToFirstPostOrder:3, base:UIA.Enumeration.Prototype}
+
+static TreeTraversalDirection := {Up:0, Down:1, Left:2, Right:3, Next:3, Previous:2, FirstChild:1, LastChild:4, Parent:0, Normalize:5}
+
 ; enum ActiveEnd Contains possible values for the SelectionActiveEnd text attribute, which indicates the location of the caret relative to a text range that represents the currently selected text.
 static ActiveEnd := {None:0,Start:1,End:2, base:UIA.Enumeration.Prototype}
 ; enum AnimationStyle Contains values for the AnimationStyle text attribute.
@@ -362,6 +368,114 @@ CoalesceEvents {
 
 ; ---------- IUIAutomation methods ----------
 
+/**
+ * Encodes an array of conditions consisting of only Type and index properties to an UIA path,
+ * which is a string of characters/numbers/symbols in base64 encoding.
+ * @param path The array of conditions
+ * @returns {String}
+ */
+static EncodePath(path) {
+    /*
+        FYI, this is probably the most disgusting algorithm I have ever created.
+
+        It goes like this:
+        The input (path variable) is an array of conditions, which can only have the Type property and an index.
+        This gets encoded into a string of characters. This is a base64 character set of A-Z, a-z, 
+            0-9, and /?<>= with the exception of letters "p" and "P". This is to maintain backwards
+            compatability with the TraverseTree paths, where "p" signifies "parent".
+        Now, since there are 45 different Types, I've allocated the first 50 encoding characters
+            (hopefully no more that 5 will be added in the future to UIA) to the Types.
+        If the condition contains an index as well, then the start of an index is signaled by an
+            encoding character 50 to 60. 50 means index 2, because index 1 doesn't have to be encoded (it's the default value).
+            Then the next symbols will be added to the index until a character smaller than 64 is encountered.
+            Negative indices are 61 to 64, and also the next symbols will be subtracted to calculate
+            the final index.
+        Why only 10 symbols for indices 2-11, yet 3 for negative ones? No particular reason other
+            than it seems pragmatic to include more positive integers than negative to be encoded
+            with only 1 character. Currently UIAViewer doesn't even use negative indices, users
+            may create them themselves.
+        Note that this encoding doesn't allow any other properties (eg AutomationId, Name etc),
+            although this support might be added in later versions.
+
+        Example: "VE0q" => [{Type:"Document"}, {Type:"ScrollBar"}, {Type:"Button", index:2}]
+            "V" corresponds in Base64IntToChar to 31 which is Type Document, "E" is ScrollBar, 
+            "0" is Button, "q" is 50 which is the first index number, and positive indices start with 2.
+    */
+    static Base64IntToChar := Map(0,'0',1,'1',2,'2',3,'3',4,'4',5,'5',6,'6',7,'7',8,'8',9,'9',10,'A',11,'B',12,'C',13,'D',14,'E',15,'F',16,'G',17,'H',18,'I',19,'J',20,'K',21,'L',22,'M',23,'N',24,'O',25,'Q',26,'R',27,'S',28,'T',29,'U',30,'V',31,'W',32,'X',33,'Y',34,'Z',35,'a',36,'b',37,'c',38,'d',39,'e',40,'f',41,'g',42,'h',43,'i',44,'j',45,'k',46,'l',47,'m',48,'n',49,'o',50,'q',51,'r',52,'s',53,'t',54,'u',55,'v',56,'w',57,'x',58,'y',59,'z',60,'/',61,'?',62,'<',63,'>',64,'=')
+    if !(path is Array)
+        path := [path]
+    out := ""
+    for cond in path {
+        t := cond.HasOwnProp("T") ? cond.t : cond.HasOwnProp("Type") ? cond.Type : cond.HasOwnProp("ControlType") ? cond.ControlType : -1
+        if t = -1
+            throw ValueError("Encodable path requires a Type")
+        if !IsInteger(t)
+            t := UIA.Type.%t%
+        if t >= 50000
+            t -= 50000
+        out .= Base64IntToChar[t]
+        i := cond.HasOwnProp("i") ? cond.i : cond.HasOwnProp("index") ? cond.index : 1
+        if i != 0 && i != 1 {
+            ; 50 = index 2
+            ; 60 = index 12 and up
+            ; 61 = index -1
+            ; 62 = index -2
+            ; 63 = index -3
+            ; 64 = index -4 and lower
+            if i > 1 && i < 12
+                out .= Base64IntToChar[48 + i] ; signals that an index will follow
+            else if i < 0 && i > -4
+                out .= Base64IntToChar[60 - i]
+            else { 
+                if i < 0 {
+                    out .= Base64IntToChar[64]
+                    i += 4, i := -i
+                } else {
+                    out .= Base64IntToChar[60]
+                    i -= 12
+                }
+                Loop i // 64
+                    out .= Base64IntToChar[64]
+                out .= Base64IntToChar[Mod(i, 64)]
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * Decodes an UIA path to an array of conditions (consisting of only Type and index properties).
+ * @param path A string UIA path
+ * @returns {Array}
+ */
+static DecodePath(path) {
+    static Base64CharToInt := Map('0',0,'1',1,'2',2,'3',3,'4',4,'5',5,'6',6,'7',7,'8',8,'9',9,'A',10,'B',11,'C',12,'D',13,'E',14,'F',15,'G',16,'H',17,'I',18,'J',19,'K',20,'L',21,'M',22,'N',23,'O',24,'Q',25,'R',26,'S',27,'T',28,'U',29,'V',30,'W',31,'X',32,'Y',33,'Z',34,'a',35,'b',36,'c',37,'d',38,'e',39,'f',40,'g',41,'h',42,'i',43,'j',44,'k',45,'l',46,'m',47,'n',48,'o',49,'q',50,'r',51,'s',52,'t',53,'u',54,'v',55,'w',56,'x',57,'y',58,'z',59,'/',60,'?',61,'<',62,'>',63,'=',64)
+    out := [], calculatingIndex := 0, cond := ""
+    loop parse path {
+        num := Base64CharToInt[A_LoopField]
+        if num > 49 && calculatingIndex = 0 {
+            cond.DefineProp("i", {value:num < 61 ? num-48 : 60-num}) ; 50 => index 2 (index 1 would not exist) ; 60 => index -1
+            calculatingIndex := num = 60 ? 1 : num = 64 ? -1 : 0
+            continue
+        }
+        if calculatingIndex {
+            if calculatingIndex > 0
+                cond.i += num
+            else 
+                cond.i -= num
+            if num < 64
+                calculatingIndex := 0
+        } else {
+            if cond
+                out.Push(cond)
+            cond := {Type:50000+num}
+        }
+    }
+    if cond
+        out.Push(cond)
+    return out
+}
+
 static RuntimeIdToString(runtimeId) {
     local str := "", v
     for v in runtimeId
@@ -470,37 +584,44 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
         return UIA.TrueCondition
     arr := ComObjArray(0xd, count), i := 0
     for k, v in obj {
-        if k = "RuntimeId" && !v.HasOwnProp("ptr") {
-            cArr := ComObjArray(3, v.Length)
-            for index, value in v
-                cArr[index-1] := value
-            v := cArr
+        try k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
+        if IsInteger(k) && k >= 30000 {
+            switch Type(v), 0 {
+                case "Array":
+                    if (UIA.PropertyVariantType[k] & 0x2000)
+                        v := UIA.AHKArrayToSafeArray(v, UIA.PropertyVariantType[k] & ~0x2000)
+                    else
+                        throw ValueError("Invalid condition: propertyId " k " does not support Array type values", -2)
+                case "String":
+                    if k = 30000
+                        v := UIA.RuntimeIdFromString(v)
+                    else if k = 30003 {
+                        try v := UIA.Type.%v%
+                        catch {
+                            if InStr(v, "Cached")
+                                return nonUIAEncountered := 2
+                            throw ValueError("Type '" v '" in a non-existant type!', -1)
+                        }
+                    }
+                case "Integer":
+                    if k = 30003 && v < 50000
+                        v += 50000
+            }
+            if sanitizeMM && UIA.PropertyVariantTypeBSTR.Has(k) {
+                t := mm = 1 ? UIA.CreateCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
+                arr[i++] := t[]
+            } else if (k >= 30000) {
+                t := UIA.CreateCondition(k, v, flags)
+                arr[i++] := t[]
+            }
         } else if IsObject(v) && !(SubStr(Type(v), 1, 6) = "ComObj") && !v.HasOwnProp("ptr") {
             t := UIA.__ConditionBuilder(v, &nonUIAEncountered?)
             if k = "not" || operator = "not"
                 t := UIA.CreateNotCondition(t)
             arr[i++] := t[]
             continue
-        }
-        k := IsNumber(k) ? Integer(k) : UIA.Property.%k%
-        if k = 30003 {
-            if !IsInteger(v) {
-                try v := UIA.Type.%v%
-                catch {
-                    if InStr(v, "Cached")
-                        return nonUIAEncountered := 2
-                    throw ValueError("Type '" v '" in a non-existant type!', -1)
-                }
-            } else if v < 50000
-                v += 50000
-        }
-        if sanitizeMM && RegexMatch(UIA.Property[k], "i)^((Class)?Name|A(utomationId|cc.*Key|ria.*|nnotation(Author|DateTime|Target|(Annotation)?TypeName))|Value(Value)?|FrameworkId|(Full|Provider)?Description|HelpText|Item.*|Localized(.*?)Type|DropTarget(DropTarget)?Effect|LegacyIAccessible(DefaultAction|Description|Help|KeyboardShortcut|Name|Value)|SpreadsheetItemFormula|Styles(ExtendedProperties|FillPatternSyle|Shape|StyleName))$") {
-            t := mm = 1 ? UIA.CreateCondition(k, v, !cs | 2) : UIA.CreateNotCondition(UIA.CreatePropertyCondition(k, ""))
-            arr[i++] := t[]
-        } else if (k >= 30000) {
-            t := UIA.CreateCondition(k, v, flags)
-            arr[i++] := t[]
-        }
+        } else
+            throw ValueError("Invalid condition encountered: " k, -2)
     }
     if count = 1
         return operator = "not" ? UIA.CreateNotCondition(t) : t
@@ -1071,6 +1192,12 @@ static SafeArrayToAHKArray(sArr, varType:=3) {
     ret.DefineProp("ptr", {value:sArr.ptr})
     return ret
 }
+static AHKArrayToSafeArray(arr, varType:=3) {
+    cArr := ComObjArray(varType, arr.Length)
+    for index, value in arr
+        cArr[index-1] := value
+    return cArr
+}
 ; X can be pt64 as well, in which case Y should be omitted
 static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
     return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | (X & 0xFFFFFFFF)) : X), "UInt", 2)
@@ -1274,11 +1401,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * A negative integer return the nth last child
      *     Eg. Element[2] ==> returns second child of Element
      *         Element[-1] ==> returns the last child of Element
-     * If value is a string, then it will be parsed as a comma-separated path which
-     * allows both indexes (nth child), traversing tree sideways with +-, and Type values.
-     *     Eg. Element["+1,Button2,4"] ==> gets next sibling element in tree, then from its children
-     *     the second button, then its fourth child
-     * If value is an object, then it will be used in a FindFirst call with scope set to Children.
+     * If value is a string, then it will be parsed either as an UIA path that was generated by
+     *     UIAViewer, or an comma-separated path of integers/Types
+     * If value is an object, then it will be used in a FindElement call with scope set to Children.
      *     Eg. Element[{Type:"Button"}] will return the first child with Type Button.
      * @returns {UIA.IUIAutomationElement}
      */
@@ -1287,20 +1412,41 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             local el, _, param, i
             el := this
             for _, param in params {
-                if IsObject(param)
-                    el := el.FindElement(param, 2)
-                else if Type(param) = "Integer" || IsDigit(String(param)) {
-                    ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
-                    if found {
-                        arr := UIA.IUIAutomationElementArray(found)
-                        if (i := param < 0 ? arr.Length+param : param-1) <= arr.Length
-                            el := arr.GetElement(i)
-                        else
+                if IsObject(param) {
+                    try el := el.FindElement(param, 2)
+                    catch {
+                        try el := el.FindCachedElement(param, 2)
+                        catch
                             el := ""
                     }
-                } else if (Type(param) = "String") || (param < 0) {
-                    try el := el.FindByPath(param) 
-                    catch
+                } else if IsInteger(param) {
+                    try {
+                        ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
+                        if found {
+                            arr := UIA.IUIAutomationElementArray(found)
+                            if (i := param < 0 ? arr.Length+param : param-1) <= arr.Length
+                                el := arr.GetElement(i)
+                            else
+                                el := ""
+                        }
+                    } catch {
+                        try el := el.CachedChildren[param < 0 ? arr.Length+param+1 : param]
+                        catch
+                            el := ""
+                    }
+                } else if param is String {
+                    try {
+                        if InStr(param, ".") || InStr(param, ",")
+                            el := el[StrSplit(StrReplace(param, ".", ","), ",")*]
+                        else if RegexMatch(param, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
+                            try el := el.FindElement({Type:m[1], i:(m.Count > 1 ? m[2] : 1)}, 2)
+                            catch
+                                try el := el.FindCachedElement({Type:m[1], i:m[2]}, 2)
+                        } else if !(param ~= ",\.+-")
+                            el := el[UIA.DecodePath(param)*]
+                        else
+                            el := ""
+                    } catch
                         el := ""
                 } else
                     TypeError("Invalid item type!", -1)
@@ -1351,11 +1497,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             for pName, pVal in UIA.Pattern.OwnProps()
                 if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") { ; Skip LegacyIAccessible to avoid name collisions (eg Select)
                     if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : ""
-                        return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName%
+                        try return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName%
                 }
             ; Since LegacyIAccessible was skipped, then try LegacyIAccessible also
             if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : ""
-                return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%
+                try return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%
             throw Error("Property " Name " not found in " this.__Class " Class.",-1,Name)
         }
     }
@@ -1367,11 +1513,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         for pName, pVal in UIA.Pattern.OwnProps()
             if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && pName != "LegacyIAccessible" {
                 if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : ""
-                    return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName% := Value
+                    try return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName% := Value
             }
             ; Since LegacyIAccessible was skipped, then try LegacyIAccessible also
         if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : ""
-            return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%
+            try return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%
         throw Error("This class does not support adding properties")
     }
     /**
@@ -1385,11 +1531,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             return this.%NewName%(Params*)
         for pName, pVal in UIA.Pattern.OwnProps()
             if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") {
-                if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(NewName) ? NewName : ""
-                    return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName%(Params*)
+                if (tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(NewName) ? NewName : "")
+                    try return (this.CachedPatterns.Has(pName) ? this.CachedPatterns[pName] : this.CachedPatterns[pName] := this.GetPattern(pVal)).%tryName%(Params*)
             }
             if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(NewName) ? NewName : ""
-                return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%(Params*)
+                try return (this.CachedPatterns.Has("LegacyIAccessible") ? this.CachedPatterns["LegacyIAccessible"] : this.CachedPatterns["LegacyIAccessible"] := this.GetPattern(UIA.Pattern.LegacyIAccessible)).%tryName%(Params*)
         throw Error("Method " Name " not found in " this.__Class " Class.",-1,Name)
     }
     ; Returns all direct children of the element
@@ -1546,8 +1692,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         ; This means that we use Current properties if TreeScope is less than Descendants, 
         ; and Cached properties if dumping Descendants. This gives the maximum performance.
         if scope < 4 {
-            if scope&1
+            if scope&1 {
                 out := this.CurrentDump(delimiter) "`n"
+            }
             if scope&2 {
                 for n, oChild in this.GetChildren()
                     out .= n ": " oChild.CurrentDump(delimiter) "`n"
@@ -1817,6 +1964,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Retrieves the first child or descendant element that matches the specified condition.
+     * If no element is found, then an empty string / nothing is returned.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
      *     Default MatchMode is "Exact", and CaseSense "On".
      *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
@@ -2108,95 +2256,124 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     /**
-     * Tries to get an element from a path.
-     * This can be used in two ways:
+     * Tries to get an element from a path. If no element is found, an empty string / nothing is returned.
      * 
-     *     1) FindByPath(condition1[, condition2, ...])
+     *     TryElementFromPath(path1[, path2, ...])
      * 
-     *        In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
-     *        Example: Element.FindByPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     *     Paths can be:
+     *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
+     *        to integer values, or TypeN which selects the nth occurrence of Type.
+     *        Eg. Element.ElementFromPath("3,2") => selects Elements third childs second child
+     *            Element.ElementFromPath("Button3,2") => selects Elements third child of type Button, then its second child
      * 
-     *     2) FindByPath(searchPath, filterCondition?)
+     *     2) UIA path copied from UIAViewer.
+     *        Eg. Element.ElementFromPath("bAx3")
      * 
-     *        In this case the searchPath is a comma-separated path that defines the route of tree traversal:
-     *             n: gets the nth child
-     *             +n: gets the nth next sibling
-     *             -n: gets the nth previous sibling
-     *             pn: gets the nth parent
-     *             Type n: gets the nth child of Type ("Button2" => second element with type Button)
-     *        filterCondition can optionally be provided: a condition for tree traversal that selects only elements that match the condition.
-     *        Example: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child. 
+     *     3) A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Eg. Element.ElementFromPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     * 
      * @returns {UIA.IUIAutomationElement}
      */
-	FindByPath(searchPath, filterCondition*) {
-        if IsObject(searchPath) {
-            return this[searchPath, filterCondition*]
-        } else
-            PathTW := filterCondition.Length ? UIA.CreateTreeWalker(filterCondition[1]) : UIA.TreeWalkerTrue
-		el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
-		Loop Parse searchPath, "," {
-			if IsDigit(A_LoopField) {
-                ComCall(6, el, "int", 2, "ptr", c ?? UIA.TrueCondition, "ptr*", &found := 0)
-                if found && (arr := UIA.IUIAutomationElementArray(found)) && (arr.Length >= Abs(A_LoopField)) {
-                    el := arr.GetElement(A_LoopField < 0 ? arr.Length+A_LoopField : A_LoopField-1)
-                } else 
-				    throw ValueError("Step " A_Index " with value " A_LoopField " was out of bounds",-1)
-			} else if RegexMatch(A_LoopField, "i)([a-zA-Z+-]+) *(\d+)?", &m:="") {
-                if (loopFunc := (m[1] = "p") ? "GetParentElement" : (m[1] = "+") ? "GetNextSiblingElement" : (m[1] = "-") ? "GetPreviousSiblingElement" : "") {
-                    Loop m[2] || 1 {
-                        if !(el := PathTW.%loopFunc%(el))
-                            throw ValueError("Step with value " A_LoopField " was out of bounds (" loopFunc " failed)", -1)
-                    }
-				} else if UIA.Type.HasOwnProp(m[1]) {
-                    el := el.FindElement({Type:m[1], i:m[2]}, 2)
-                } else
-                    throw ValueError("Invalid path value " A_LoopField " at step " A_index, -1)
-			}
-		}
+    TryElementFromPath(paths*) {
+        try return this[paths*]
+    }
+
+    /**
+     * Tries to get an element from a path. If no element is found, an error is thrown.
+     * 
+     *     ElementFromPath(path1[, path2, ...])
+     * 
+     *     Paths can be:
+     *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
+     *        to integer values, or TypeN which selects the nth occurrence of Type.
+     *        Eg. Element.ElementFromPath("3,2") => selects Elements third childs second child
+     *            Element.ElementFromPath("Button3,2") => selects Elements third child of type Button, then its second child
+     * 
+     *     2) UIA path copied from UIAViewer.
+     *        Eg. Element.ElementFromPath("bAx3")
+     * 
+     *     3) A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Eg. Element.ElementFromPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     * 
+     * @returns {UIA.IUIAutomationElement}
+     */
+	ElementFromPath(paths*) {
+        local el
+        try el := this[paths*]
+        catch Any as err
+            throw TargetError(err.Message, -1)
 		return el
 	}
 
     /**
-     * Wait element to appear at a path. This can be used in two ways:
+     * Wait element to appear at a path. 
      * 
-     *     1) WaitByPath(condition1[, condition2, ..., timeOut := -1])
+     *     ElementFromPath(path1[, path2, ...])
      * 
-     *        In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
-     *        Optionally, timeOut time in milliseconds can be provided as the last argument, default is indefinite wait.
-     *        Example: Element.WaitByPath({Type:"Button"}, {Type:"List"}) => waits for Element to have a child of Button type, and for that element to have a child of List type
-     *         
-     *     2) WaitByPath(searchPath, timeOut := -1, filterCondition?)
+     *     Paths can be:
+     *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
+     *        to integer values, or TypeN which selects the nth occurrence of Type.
+     *        Eg. Element.ElementFromPath("3,2") => selects Elements third childs second child
+     *            Element.ElementFromPath("Button3,2") => selects Elements third child of type Button, then its second child
      * 
-     *        In this case the searchPath is a comma-separated path that defines the route of tree traversal:
-     *             n: gets the nth child
+     *     2) UIA path copied from UIAViewer.
+     *        Eg. Element.ElementFromPath("bAx3")
+     * 
+     *     3) A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Eg. Element.ElementFromPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     * 
+     * Optionally, timeOut time in milliseconds can be provided as the last argument, default is indefinite wait.
+     * Example: Element.WaitElementFromPath({Type:"Button"}, {Type:"List"}) => waits for Element to have a child of Button type, and for that element to have a child of List type
+     * 
+     * @returns {UIA.IUIAutomationElement}
+     */
+    WaitElementFromPath(paths*) {
+        local timeOut := -1
+        if paths.Length > 1 && paths[paths.Length] is Integer
+            paths := paths.Clone(), timeOut := paths.Pop()
+        endtime := A_TickCount + timeOut
+        While ((timeOut == -1) || (A_Tickcount < endtime)) {
+            try return this[paths*]
+            Sleep 20
+        }
+    }
+
+    /**
+     * Traverses the tree purely using a TreeWalker that is created with an optional filter-condition (default is TrueCondition)
+     * 
+     *        searchPath is a comma-separated path that defines the route of tree traversal:
+     *             n: gets the nth child (using GetFirstChildElement and GetNextSiblingElement)
      *             +n: gets the nth next sibling
      *             -n: gets the nth previous sibling
      *             pn: gets the nth parent
-     *             Type n: gets the nth child of Type ("Button2" => second element with type Button)
-     *        timeOut can optionally be provided: timeout time in milliseconds, default is indefinite wait.
+     *             "n": normalizes the element (returns the first parent or the element itself matching the filterCondition)
      *        filterCondition can optionally be provided: a condition for tree traversal that selects only elements that match the condition.
-     *        Example: Element.FindByPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child.
+     * 
+     *        Example: Element.ElementFromPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child. 
      * @returns {UIA.IUIAutomationElement}
      */
-    WaitByPath(conditions*) {
-        local filterCondition, f, timeOut := -1
-        if IsObject(conditions[1]) {
-            if IsInteger(conditions[conditions.Length])
-                timeOut := conditions.Pop()
-            f := this.FindByPath.Bind(this, conditions*)
-        } else {
-            if conditions.Length > 1 {
-                timeOut := conditions[2]
-                if conditions.Length > 2
-                    filterCondition := conditions[3]
-            }
-            f := this.FindByPath.Bind(this, conditions[1], filterCondition?)
-        }
-        endtime := A_TickCount + timeOut
-        While ((timeOut == -1) || (A_Tickcount < endtime)) {
-            try return f()
-            Sleep 20
-        }
+    TraverseTree(searchPath, filterCondition?) {
+        PathTW := IsSet(filterCondition) ? UIA.CreateTreeWalker(filterCondition) : UIA.TreeWalkerTrue
+		el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
+		Loop Parse searchPath, "," {
+			if IsDigit(A_LoopField) {
+                el := PathTW.GetFirstChildElement(el)
+                if A_LoopField > 1
+                    el := el.TraverseTree("+" A_LoopField-1)
+			} else if A_LoopField = "n" {
+                el := PathTW.NormalizeElement(el)
+            } else if RegexMatch(A_LoopField, "i)([p+-]+) *(\d+)?", &m:="") {
+                if (loopFunc := (m[1] = "p") ? "GetParentElement" : (m[1] = "+") ? "GetNextSiblingElement" : (m[1] = "-") ? "GetPreviousSiblingElement" : "") {
+                    Loop m[2] || 1 {
+                        if !(el := PathTW.%loopFunc%(el))
+                            throw TargetError("Step with value " A_LoopField " was out of bounds (" loopFunc " failed)", -1)
+                    }
+				} else
+                    throw TargetError("Invalid path value " A_LoopField " at step " A_index, -1)
+			} else
+                throw TargetError("Invalid path value " A_LoopField " at step " A_index, -1)
+		}
+		return el
     }
 
     ; Gets all property values of this element and returns an object where Object.PropertyName = PropertyValue
@@ -2301,7 +2478,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             throw TypeError("Condition must be an condition object or array", -1)
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        return (ComCall(5, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElement(found) : ""
+        if (ComCall(5, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr*", &found := 0), found)
+            return UIA.IUIAutomationElement(found)
     }
 
     /**
@@ -2325,7 +2503,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     FindFirstBuildCache(cacheRequest, condition, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.CreateCondition(condition)
-        return (ComCall(7, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) ? UIA.IUIAutomationElement(found) : ""
+        if (ComCall(7, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) 
+            return UIA.IUIAutomationElement(found)
     }
 
     ; Returns all UI Automation elements that satisfy the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
@@ -2351,7 +2530,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 		if !IsNumber(propertyId)
 			try propertyId := UIA.Property.%propertyId%
         ComCall(10, this, "int", propertyId, "ptr", val := UIA.ComVar())
-        return val[]
+        return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
     } 
 
     ; Retrieves a property value for this UI Automation element, optionally ignoring any default value.
@@ -2360,20 +2539,23 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; This method returns a failure code if the requested property was not previously cached.
     GetPropertyValueEx(propertyId, ignoreDefaultValue) {
         local val
-        return (ComCall(11, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "int", ignoreDefaultValue, "ptr", val := UIA.ComVar()), val[])
+        ComCall(11, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "int", ignoreDefaultValue, "ptr", val := UIA.ComVar())
+        return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
     }
 
     ; Retrieves a property value from the cache for this UI Automation element.
     ; This is called when Element.CachedProperty is used (eg Element.CachedName)
     GetCachedPropertyValue(propertyId) {
 		local val
-		return (ComCall(12, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "ptr", val := UIA.ComVar()), val[])
+        ComCall(12, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "ptr", val := UIA.ComVar())
+		return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
 	}
 
     ; Retrieves a property value from the cache for this UI Automation element, optionally ignoring any default value.
     GetCachedPropertyValueEx(propertyId, ignoreDefaultValue, retVal) {
 		local val
-		return (ComCall(13, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "int", ignoreDefaultValue, "ptr", val := UIA.ComVar()), val[])
+        ComCall(13, this, "int", IsInteger(propertyId) ? propertyId : UIA.Property.%propertyId%, "int", ignoreDefaultValue, "ptr", val := UIA.ComVar())
+		return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
 	}
 
     ; Retrieves the control pattern interface of the specified pattern on this UI Automation element.
@@ -5641,9 +5823,10 @@ class IUIAutomationWindowPattern extends UIA.IUIAutomationBase {
 class Viewer {
     __New() {
         local v, pattern, value
+        OnError this.GetMethod("ErrorHandler").Bind(this)
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathUseNumeric := 0
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathType := ""
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
@@ -5677,6 +5860,7 @@ class Viewer {
 
         (this.TextTVPatterns := this.gViewer.Add("Text", "w100", "Patterns")).SetFont("bold")
         this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250")
+        this.TVPatterns.OnEvent("DoubleClick", this.GetMethod("TVPatterns_DoubleClick").Bind(this))
 
         this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
         this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.GetMethod("ButCapture_Click").Bind(this))
@@ -5705,6 +5889,7 @@ class Viewer {
         this.gViewer.Show("w600 h550")
         this.gViewer_Size(this.gViewer,0,600,550)
     }
+    ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
         if MinMax = -1 && IsObject(this.Stored.HighlightedElement)
@@ -5733,6 +5918,7 @@ class Viewer {
         this.gViewer.GetPos(,, &w)
         this.gViewer.Move(,,w+(this.MacroSidebarVisible ? this.MacroSidebarWidth : -this.MacroSidebarWidth))
     }
+    ; Handles adding elements with actions to the macro Edit
     ButMacroAddElement_Click(GuiCtrlObj?, Info?) {
         local match
         if !this.Stored.HasOwnProp("CapturedElement")
@@ -5744,11 +5930,12 @@ class Viewer {
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText "`n"
         else
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ")
-        winElVariable := winElVariable (SubStr(this.SBMain.Text, 9) ? ".FindByPath(" SubStr(this.SBMain.Text, 9) ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
+        winElVariable := winElVariable (SubStr(this.SBMain.Text, 9) ? ".ElementFromPath(" SubStr(this.SBMain.Text, 9) ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
         if InStr(this.DDLMacroAction.Text, "Dump")
             winElVariable := "MsgBox(" winElVariable ")"
         this.EditMacroScript.Text := this.EditMacroScript.Text "`r`n" RegExReplace(winElVariable, "(?<!``)`"", "`"") "`r`n"
     }
+    ; Tries to run the code in the macro Edit
     ButMacroScriptRun_Click(GuiCtrlObj?, Info?) {
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0
@@ -5789,8 +5976,40 @@ class Viewer {
         LVData := Info > GuiCtrlObj.GetCount()
             ? ListViewGetContent("", GuiCtrlObj)
             : ListViewGetContent("Selected", GuiCtrlObj)
-        ToolTip("Copied: " (A_Clipboard := RegExReplace(LVData, "([ \w]+)\t", "$1: ")))
+        out := ""
+        for LVData in StrSplit(LVData, "`n") {
+            LVData := StrSplit(LVData, "`t",,2)
+            switch LVData[1], 0 {
+                case "Type":
+                    LVData[2] := "`"" RTrim(SubStr(LVData[2],8), ")") "`""
+                case "Location":
+                    LVData[2] := "{" RegExReplace(LVData[2], "(\w:) (\d+)(?= )", "$1$2,") "}"
+            }
+            Property := -1
+            try Property := UIA.Property.%LVData[1]%
+            out .= ", " LVData[1] ":" (UIA.PropertyVariantTypeBSTR.Has(Property) ? StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") : LVData[2])
+        }
+        ToolTip("Copied: " (A_Clipboard := SubStr(out, 3)))
         SetTimer(ToolTip, -3000)
+    }
+    ; Handles running pattern methods, first trying to find the live element by RuntimeId
+    TVPatterns_DoubleClick(GuiCtrlObj, Info) {
+        if !Info
+            return
+        Item := GuiCtrlObj.GetText(Info)
+        if !InStr(Item, "()")
+            return
+        Item := SubStr(Item, 1, -2)
+        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).FindElement({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
+            return MsgBox("Live element not found!",,"4096")
+        if Item ~= "Value|Scroll" {
+            this.gViewer.Opt("-AlwaysOnTop")
+            Ret := InputBox("Insert value", Item, "W200 H120")
+            this.gViewer.Opt("+AlwaysOnTop")
+            if Ret.Result != "OK"
+                return
+        }
+        try CurrentEl.%GuiCtrlObj.GetText(GuiCtrlObj.GetParent(Info)) "Pattern"%.%Item%(IsSet(Ret) ? Ret.Value : unset)
     }
     ; Copies the UIA path to clipboard when statusbar is clicked
     SBMain_Click(GuiCtrlObj, Info, *) {
@@ -5799,19 +6018,24 @@ class Viewer {
             SetTimer(ToolTip, -3000)
         }
     }
+    ; StatusBar context menu creation
     SBMain_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
         SBMain_Menu := Menu()
         if InStr(this.SBMain.Text, "Path:") {
             SBMain_Menu.Add("Copy path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.Path)), SetTimer(ToolTip, -3000)))
+            SBMain_Menu.Add("Copy condition path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.ConditionPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add()
         }
-        SBMain_Menu.Add("Display numeric path", (*) => (this.PathUseNumeric := !this.PathUseNumeric, this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathUseNumeric ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
-        SBMain_Menu.Add("Ignore Name properties", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
+        SBMain_Menu.Add("Display numeric path", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display condition path", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Ignore Name properties in condition path", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
         if this.PathIgnoreNames
-            SBMain_Menu.Check("Ignore Name properties")
-        if this.PathUseNumeric
+            SBMain_Menu.Check("Ignore Name properties in condition path")
+        if this.PathType = "Numeric"
             SBMain_Menu.Check("Display numeric path")
+        if this.PathType = "Condition"
+            SBMain_Menu.Check("Display condition path")
         SBMain_Menu.Show()
     }
     ; Stops capturing elements under mouse, unhooks CaptureCallback
@@ -5936,7 +6160,7 @@ class Viewer {
                     return (this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0)
             }    
             this.Stored.CapturedElement := Element
-            try this.SBMain.SetText("  Path: " (this.PathUseNumeric ? Element.NumericPath : Element.Path))
+            try this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? Element.NumericPath : this.PathType = "Condition" ? Element.ConditionPath : Element.Path))
             this.PopulatePropsPatterns(Element)
         }
     }
@@ -6001,23 +6225,31 @@ class Viewer {
         this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
         this.TVUIA.Opt("+Redraw")
         this.SBMain.SetText("  Path: ")
-        if !this.Stored.CapturedElement.HasOwnProp("Path")
-            this.Stored.CapturedElement.DefineProp("Path", {Value:""}), this.Stored.CapturedElement.DefineProp("NumericPath", {Value:""})
+        if !this.Stored.CapturedElement.HasOwnProp("Path") {
+            this.Stored.CapturedElement.DefineProp("Path", {Value:""})
+            this.Stored.CapturedElement.DefineProp("NumericPath", {Value:""})
+            this.Stored.CapturedElement.DefineProp("ConditionPath", {Value:""})
+        }
         for k, v in this.Stored.TreeView {
-            if this.SafeCompareElements(this.Stored.CapturedElement, v)
-                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " (this.PathUseNumeric ? v.NumericPath : v.Path)), this.Stored.CapturedElement.Path := v.Path, this.Stored.CapturedElement.NumericPath := v.NumericPath
+            if this.SafeCompareElements(this.Stored.CapturedElement, v) {
+                this.TVUIA.Modify(k, "Vis Select"), this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? v.NumericPath : this.PathType = "Condition" ? v.ConditionPath : v.Path))
+                , this.Stored.CapturedElement.Path := v.Path
+                , this.Stored.CapturedElement.NumericPath := v.NumericPath
+                , this.Stored.CapturedElement.ConditionPath := v.ConditionPath
+            }
         }
     }
     ; Stores the UIA tree with corresponding path values for each element
-    RecurseTreeView(Element, parent:=0, path:="", numpath:="") {
-        local k, v, paths := Map()
-        Element.DefineProp("Path", {value:path})
+    RecurseTreeView(Element, parent:=0, path:="", conditionpath := "", numpath:="") {
+        local i, t, k, v, paths := Map()
+        Element.DefineProp("Path", {value:"`"" path "`""})
+        Element.DefineProp("ConditionPath", {value:conditionpath})
         Element.DefineProp("NumericPath", {value:numpath})
         this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element
         for k, v in Element.CachedChildren {
-            p := this.GetCompactCondition(v, &paths)
-            p .= paths[p] = 1 ? "}" : ", i:" paths[p] "}"
-            this.RecurseTreeView(v, TWEl, path (path?", ":"") p, numpath (numpath?",":"") k)
+            p := this.GetCompactCondition(v, &paths, &t)
+            i := paths[p], p .= i = 1 ? "}" : ", i:" i "}"
+            this.RecurseTreeView(v, TWEl, path UIA.EncodePath([{Type:v.CachedType, i:paths[t]}]), conditionpath (conditionpath?", ":"") p, numpath (numpath?",":"") k)
         }
     }
     ; CompareElements sometimes fails to match elements, so this compares some properties instead
@@ -6037,7 +6269,7 @@ class Viewer {
             elDesc := "`"`"" elDesc
         return elDesc
     }
-    GetCompactCondition(Element, &pathsMap) {
+    GetCompactCondition(Element, &pathsMap, &t := "") {
         local n := "", c := "", a := ""
         t := Element.CachedType
         t := "{T:" (t-50000)
