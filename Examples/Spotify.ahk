@@ -37,7 +37,7 @@ class Spotify {
     }
     ; Internal methods to get some commonly used Spotify UIA elements
     static GetSpotifyElement() => UIA.ElementFromHandle(Spotify.winExe)[1]
-    static GetLikeElement() => Spotify.GetSpotifyElement().FindByPath({T:26, i:3}, {T:26,N:"Now playing: ",mm:2}, {T:0,N:"Library", mm:2})
+    static GetLikeElement() => Spotify.GetSpotifyElement().ElementFromPath({T:26, i:3}, {T:26,N:"Now playing: ",mm:2}, {T:0,N:"Library", mm:2})
     static GetCurrentSongElement() => Spotify.FullscreenState ? Spotify.GetSpotifyElement() : Spotify.GetSpotifyElement()[{T:26, i:3}]
 
     static LikeState {
