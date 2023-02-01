@@ -1,9 +1,9 @@
 ﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
-/*  To find elements we have a few methods available: FindElement, FindElements, WaitElement, FindByPath, and TreeWalkers.
+/*  To find elements we have a few methods available: FindElement, FindElements, WaitElement, ElementFromPath, and TreeWalkers.
     This file will demonstrate use of FindElement, FindElements, WaitElement, and using conditions.
-    To see examples on FindByPath and TreeWalkers, see Example4.
+    To see examples on ElementFromPath and TreeWalkers, see Example4.
 
     A "condition" is a set of conditions that the found elements must match.
     For example, we could only look for elements of certain Type, with certain Name, AutomationId etc.
