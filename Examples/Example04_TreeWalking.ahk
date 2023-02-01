@@ -16,7 +16,7 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
     This can be either integers (integer n chooses nth child), TypeN (chooses Nth element of Type),
     or conditions.
 
-    For traversing the tree in any direction we can use TraverseTree(path, filterCondition?)
+    For traversing the tree in any direction we can use WalkTree(path, filterCondition?)
         n: gets the nth child
         +n: gets the nth next sibling
         -n: gets the nth previous sibling
@@ -36,7 +36,7 @@ else
 ; This should also get us to the "Edit" MenuItem in Windows 10, but to the Minimize button in Windows 11
 editMenuItem := npEl.ElementFromPath("4,2").Highlight()
 ; Moving two sibling over, we should get to the "View" MenuItem, or in Windows 11 to "Close"
-editMenuItem.TraverseTree("+2").Highlight()
+editMenuItem.WalkTree("+2").Highlight()
 
 ; We can also use the array notation, which accepts ElementFromPath paths and also conditions
 npEl[4,1].Highlight()

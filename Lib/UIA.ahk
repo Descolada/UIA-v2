@@ -382,7 +382,7 @@ static EncodePath(path) {
         The input (path variable) is an array of conditions, which can only have the Type property and an index.
         This gets encoded into a string of characters. This is a base64 character set of A-Z, a-z, 
             0-9, and /?<>= with the exception of letters "p" and "P". This is to maintain backwards
-            compatability with the TraverseTree paths, where "p" signifies "parent".
+            compatability with the WalkTree paths, where "p" signifies "parent".
         Now, since there are 45 different Types, I've allocated the first 50 encoding characters
             (hopefully no more that 5 will be added in the future to UIA) to the Types.
         If the condition contains an index as well, then the start of an index is signaled by an
@@ -2352,14 +2352,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      *        Example: Element.ElementFromPath("p,+2,1") => gets the parent of Element, then the second sibling of the parent, then that siblings first child. 
      * @returns {UIA.IUIAutomationElement}
      */
-    TraverseTree(searchPath, filterCondition?) {
+    WalkTree(searchPath, filterCondition?) {
         PathTW := IsSet(filterCondition) ? UIA.CreateTreeWalker(filterCondition) : UIA.TreeWalkerTrue
 		el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
 		Loop Parse searchPath, "," {
 			if IsDigit(A_LoopField) {
                 el := PathTW.GetFirstChildElement(el)
                 if A_LoopField > 1
-                    el := el.TraverseTree("+" A_LoopField-1)
+                    el := el.WalkTree("+" A_LoopField-1)
 			} else if A_LoopField = "n" {
                 el := PathTW.NormalizeElement(el)
             } else if RegexMatch(A_LoopField, "i)([p+-]+) *(\d+)?", &m:="") {
@@ -2375,8 +2375,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 		}
 		return el
     }
-    TryTraverseTree(searchPath, filterCondition?) {
-        try return this.TraverseTree(searchPath, filterCondition?)
+    TryWalkTree(searchPath, filterCondition?) {
+        try return this.WalkTree(searchPath, filterCondition?)
     }
 
     ; Gets all property values of this element and returns an object where Object.PropertyName = PropertyValue
