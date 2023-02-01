@@ -20,7 +20,7 @@ fileEl.Invoke()
 
 Sleep 1000
 MsgBox "Press OK to navigate to the View tab to test TogglePattern..." ; Not part of this demonstration
-if !explorerEl.FindElement({Name:"Lower ribbon"}) ; Not part of this demonstration
+if !explorerEl.FindElement({Name:"Lower ribbon", cs:0}) ; Not part of this demonstration
 	try explorerEl.FindElement({T:0,N:"Minimize the Ribbon"}).Invoke() ; Not part of this demonstration
 explorerEl.FindElement({Type:"TabItem", Name:"View"}).Select() ; Not part of this demonstration
 
