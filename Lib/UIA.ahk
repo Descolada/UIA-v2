@@ -2308,7 +2308,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Wait element to appear at a path. 
      * 
-     *     ElementFromPath(path1[, path2, ...])
+     *     WaitElementFromPath(path1[, path2, ...])
      * 
      *     Paths can be:
      *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
@@ -2374,6 +2374,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 throw TargetError("Invalid path value " A_LoopField " at step " A_index, -1)
 		}
 		return el
+    }
+    TryTraverseTree(searchPath, filterCondition?) {
+        try return this.TraverseTree(searchPath, filterCondition?)
     }
 
     ; Gets all property values of this element and returns an object where Object.PropertyName = PropertyValue
