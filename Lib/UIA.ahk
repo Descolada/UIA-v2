@@ -76,7 +76,7 @@ static __New() {
         if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
             continue
         try {
-            this.ptr := ComObjValue(this.__ := ComObject("{e22ad333-b25f-460c-83d0-0581107395c9}", __IID.IUIAutomation%this.IUIAutomationVersion%))
+            this.ptr := ComObjValue(this.__ := ComObject("{e22ad333-b25f-460c-83d0-0581107395c9}", __IID.IUIAutomation%(this.IUIAutomationVersion)%))
             break
         }
     }
@@ -2219,7 +2219,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Wait element to exist.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     * @param timeOut Waiting time for element to appear. Default: indefinite wait
+     * @param timeOut Waiting time for element to appear in ms. Default: indefinite wait
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
