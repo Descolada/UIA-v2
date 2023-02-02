@@ -116,7 +116,8 @@ class UIA_Chrome extends UIA_Browser {
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		this.BrowserElement.WaitElement({Type:"Document"})
+		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			 this.URLEditElement := this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
 			try {
@@ -130,10 +131,17 @@ class UIA_Chrome extends UIA_Browser {
 					this.MainPaneElement := this.BrowserElement
 				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
 					this.TabBarElement := this.MainPaneElement
-				this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
-				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
-				this.ReloadButtonFullDescription := ""
-				this.ReloadButtonName := this.ReloadButton.Name
+				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
+				Loop 2 {
+					try {
+						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
+						this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
+						this.ReloadButtonName := this.ReloadButton.Name
+					}
+					if (this.ReloadButtonDescription || this.ReloadButtonName)
+						break
+					Sleep 200
+				}
 				return this.MainPaneElement
 			} catch {
 				WinActivate "ahk_id " this.BrowserId
@@ -153,7 +161,8 @@ class UIA_Edge extends UIA_Browser {
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
 		local k, v
-		this.BrowserElement.WaitElement({Type:"Document"})
+		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			try {
 				if !(this.URLEditElement := this.BrowserElement.FindFirst(this.EditControlCondition)) {
@@ -175,10 +184,17 @@ class UIA_Edge extends UIA_Browser {
 					this.MainPaneElement := this.BrowserElement
 				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
 					this.TabBarElement := this.MainPaneElement
-				this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
-				this.ReloadButtonDescription := ""
-				this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
-				this.ReloadButtonName := this.ReloadButton.Name
+				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
+				Loop 2 {
+					try {
+						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
+						this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
+						this.ReloadButtonName := this.ReloadButton.Name
+					}
+					if (this.ReloadButtonDescription || this.ReloadButtonName)
+						break
+					Sleep 200
+				}
 				return this.MainPaneElement
 			} catch {
 				WinActivate "ahk_id " this.BrowserId
@@ -208,10 +224,17 @@ class UIA_Mozilla extends UIA_Browser {
 					this.NavigationBarElement := this.BrowserElement
 				if !this.MainPaneElement
 					this.MainPaneElement := this.BrowserElement
-				this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
-				this.ReloadButtonDescription := ""
-				this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
-				this.ReloadButtonName := this.ReloadButton.Name
+				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
+				Loop 2 {
+					try {
+						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
+						this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
+						this.ReloadButtonName := this.ReloadButton.Name
+					}
+					if (this.ReloadButtonDescription || this.ReloadButtonName)
+						break
+					Sleep 200
+				}
 				return this.MainPaneElement
 			} catch {
 				WinActivate this.BrowserId
@@ -248,7 +271,8 @@ class UIA_Mozilla extends UIA_Browser {
 		}
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
 		ControlSend "{ctrl down}{shift down}k{ctrl up}{shift up}", , this.BrowserId
-		this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"})	
+		if !this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"},5000)
+			return
 		ClipSave := ClipboardAll()
 		A_Clipboard := js
 		WinActivate this.BrowserId
@@ -264,7 +288,7 @@ class UIA_Mozilla extends UIA_Browser {
 	; Gets text from an alert-box
 	GetAlertText(closeAlert:=True, timeOut:=3000) {
 		this.GetCurrentDocumentElement()
-		local startTime := A_TickCount
+		local startTime := A_TickCount, text := ""
 		if !(alertEl := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement)))
 			return
 		
@@ -321,7 +345,7 @@ class UIA_Browser {
 		wClass := WinGetClass("ahk_id" this.BrowserId)
 		this.BrowserType := (wExe = "chrome.exe") ? "Chrome" : (wExe = "msedge.exe") ? "Edge" : InStr(wClass, "Mozilla") ? "Mozilla" : "Unknown"
 		if (this.BrowserType != "Unknown") {
-			this.base := UIA_%this.BrowserType%.Prototype
+			this.base := UIA_%(this.BrowserType)%.Prototype
 			this.__New(wTitle, customNames, maxVersion)
 		} else 
 			this.InitiateUIA(wTitle, customNames, maxVersion)
@@ -352,7 +376,9 @@ class UIA_Browser {
 	
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		this.BrowserElement.WaitElement({Type:"Document"})
+		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
+
 		; Finding the correct Toolbar ends up to be quite tricky. 
 		; In Chrome the toolbar element is located in the tree after the content element, 
 		; so if the content contains a toolbar then that will be returned. 
@@ -373,9 +399,18 @@ class UIA_Browser {
 				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
 					this.TabBarElement := this.MainPaneElement
 				this.GetCurrentReloadButton()
-				this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
-				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
-				this.ReloadButtonName := this.ReloadButton.Name
+				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
+				Loop 2 {
+					try {
+						this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
+						this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
+						this.ReloadButtonName := this.ReloadButton.Name
+					}
+					if (this.ReloadButtonDescription || this.ReloadButtonName)
+						break
+					Sleep 200
+				}
+
 				return this.MainPaneElement
 			} catch {
 				WinActivate "ahk_id " this.BrowserId
@@ -556,16 +591,19 @@ class UIA_Browser {
 	
 	; Waits the browser page to load to targetTitle, default timeOut is indefinite waiting, sleepAfter additionally sleeps for 200ms after the page has loaded. 
 	WaitPageLoad(targetTitle:="", timeOut:=-1, sleepAfter:=500, titleMatchMode:="", titleCaseSensitive:=False) {
-		local legacyPattern := "", startTime := A_TickCount, wTitle
+		local legacyPattern := "", startTime := A_TickCount, wTitle, ReloadButtonName := "", ReloadButtonDescription := "", ReloadButtonFullDescription := "" 
 		Sleep 200 ; Give some time for the Reload button to change after navigating
 		if this.ReloadButtonDescription
 			try legacyPattern := this.ReloadButton.LegacyIAccessiblePattern
 		while ((A_TickCount - startTime) < timeOut) || (timeOut = -1) {
 			if this.BrowserType = "Mozilla"
 				this.GetCurrentReloadButton()
-			if ((this.ReloadButtonName ? InStr(this.ReloadButton.Name, this.ReloadButtonName) : 1) 
-			   && (this.ReloadButtonDescription && legacyPattern ? InStr(legacyPattern.Description, this.ReloadButtonDescription) : 1)
-			   && (this.ReloadButtonFullDescription ? InStr(this.ReloadButton.FullDescription, this.ReloadButtonFullDescription) : 1)) {
+			try ReloadButtonName := this.ReloadButton.Name
+			try ReloadButtonDescription := legacyPattern.Description
+			try ReloadButtonFullDescription := this.ReloadButton.FullDescription
+			if ((this.ReloadButtonName ? InStr(ReloadButtonName, this.ReloadButtonName) : 1) 
+			   && (this.ReloadButtonDescription && legacyPattern ? InStr(ReloadButtonDescription, this.ReloadButtonDescription) : 1)
+			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)) {
 				if targetTitle {
 					wTitle := WinGetTitle(this.BrowserId)
 					if this.__CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
