@@ -6003,7 +6003,7 @@ class Viewer {
             }
             Property := -1
             try Property := UIA.Property.%LVData[1]%
-            out .= ", " LVData[1] ":" (UIA.PropertyVariantTypeBSTR.Has(Property) ? StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") : LVData[2])
+            out .= ", " LVData[1] ":" (UIA.PropertyVariantTypeBSTR.Has(Property) ? "`"" StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") "`"" : LVData[2])
         }
         ToolTip("Copied: " (A_Clipboard := SubStr(out, 3)))
         SetTimer(ToolTip, -3000)
@@ -6018,7 +6018,7 @@ class Viewer {
         Item := SubStr(Item, 1, -2)
         if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).FindElement({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
             return MsgBox("Live element not found!",,"4096")
-        if Item ~= "Value|Scroll" {
+        if Item ~= "Value|Scroll(?!Into)" {
             this.gViewer.Opt("-AlwaysOnTop")
             Ret := InputBox("Insert value", Item, "W200 H120")
             this.gViewer.Opt("+AlwaysOnTop")
