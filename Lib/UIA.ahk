@@ -5957,17 +5957,18 @@ class Viewer {
             this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0
         DetectHiddenWindows 1
         WinHide(this.gViewer)
+        try FileDelete("~UIAViewerMacro.tmp")
         try {
             shell := ComObject("WScript.Shell")
-            oExec := shell.Exec("`"" A_AhkPath "`" /force *")
-            oExec.StdIn.Write(StrReplace(this.EditMacroScript.Text, "`r"))
-            oExec.StdIn.Close(), 
+            FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), "~UIAViewerMacro.tmp", "UTF-8")
+            oExec := shell.Exec("`"" A_AhkPath "`" /force /cp65001 ~UIAViewerMacro.tmp")
             pid:=oExec.ProcessID
             if WinWait("ahk_pid " pid,, 3)
                 WinWaitClose(, , 30)
         }
-        if WinExist("ahk_pid " pid)
+        if IsSet(pid) && WinExist("ahk_pid " pid)
             WinKill
+        try FileDelete("~UIAViewerMacro.tmp")
         WinShow(this.gViewer)
         DetectHiddenWindows 0
     }
@@ -6043,11 +6044,14 @@ class Viewer {
             SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add()
         }
+        SBMain_Menu.Add("Display UIA path", (*) => (this.PathType := this.PathType = "" ? "" : "", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
         SBMain_Menu.Add("Display numeric path", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
         SBMain_Menu.Add("Display condition path", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
         SBMain_Menu.Add("Ignore Name properties in condition path", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
         if this.PathIgnoreNames
             SBMain_Menu.Check("Ignore Name properties in condition path")
+        if this.PathType = ""
+            SBMain_Menu.Check("Display UIA path")
         if this.PathType = "Numeric"
             SBMain_Menu.Check("Display numeric path")
         if this.PathType = "Condition"
