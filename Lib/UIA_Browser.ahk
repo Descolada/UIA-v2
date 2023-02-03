@@ -116,8 +116,12 @@ class UIA_Chrome extends UIA_Browser {
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
+		if !this.BrowserElement.FindElement({Type:"Document"}) {
+			WinActivate this.BrowserId
+			WinWaitActive this.BrowserId,,1
+		}
 		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
-			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
+			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			 this.URLEditElement := this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
 			try {
@@ -161,8 +165,12 @@ class UIA_Edge extends UIA_Browser {
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
 		local k, v
+		if !this.BrowserElement.FindElement({Type:"Document"}) {
+			WinActivate this.BrowserId
+			WinWaitActive this.BrowserId,,1
+		}
 		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
-			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
+			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			try {
 				if !(this.URLEditElement := this.BrowserElement.FindFirst(this.EditControlCondition)) {
@@ -373,11 +381,19 @@ class UIA_Browser {
 			UIA.%member% := Value
 		this.DefineProp(member, {Value:value})
 	}
+
+    __Item[params*] {
+        get => this.BrowserElement[params*]
+	}
 	
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
+		if !this.BrowserElement.FindElement({Type:"Document"}) {
+			WinActivate this.BrowserId
+			WinWaitActive this.BrowserId,,1
+		}
 		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
-			throw Error("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
+			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 
 		; Finding the correct Toolbar ends up to be quite tricky. 
 		; In Chrome the toolbar element is located in the tree after the content element, 
