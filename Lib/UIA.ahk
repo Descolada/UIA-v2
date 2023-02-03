@@ -386,11 +386,11 @@ static EncodePath(path) {
         Now, since there are 45 different Types, I've allocated the first 50 encoding characters
             (hopefully no more that 5 will be added in the future to UIA) to the Types.
         If the condition contains an index as well, then the start of an index is signaled by an
-            encoding character 50 to 60. 50 means index 2, because index 1 doesn't have to be encoded (it's the default value).
-            Then the next symbols will be added to the index until a character smaller than 64 is encountered.
-            Negative indices are 61 to 64, and also the next symbols will be subtracted to calculate
-            the final index.
-        Why only 10 symbols for indices 2-11, yet 3 for negative ones? No particular reason other
+            encoding character 50 to 59. 50 means index 2, because index 1 doesn't have to be encoded (it's the default value).
+            Then the next symbols will be added in base15 to calculate the final number.
+            Negative indices are 60 to 64, and also the next symbols will be subtracted in base15 
+            to calculate the final index.
+        Why only 10 symbols for indices 2-11, yet 5 for negative ones? No particular reason other
             than it seems pragmatic to include more positive integers than negative to be encoded
             with only 1 character. Currently UIAViewer doesn't even use negative indices, users
             may create them themselves.
@@ -417,26 +417,32 @@ static EncodePath(path) {
         i := cond.HasOwnProp("i") ? cond.i : cond.HasOwnProp("index") ? cond.index : 1
         if i != 0 && i != 1 {
             ; 50 = index 2
-            ; 60 = index 12 and up
-            ; 61 = index -1
-            ; 62 = index -2
-            ; 63 = index -3
-            ; 64 = index -4 and lower
-            if i > 1 && i < 12
-                out .= Base64IntToChar[48 + i] ; signals that an index will follow
-            else if i < 0 && i > -4
-                out .= Base64IntToChar[60 - i]
-            else { 
-                if i < 0 {
-                    out .= Base64IntToChar[64]
-                    i += 4, i := -i
-                } else {
-                    out .= Base64IntToChar[60]
-                    i -= 12
-                }
-                Loop i // 64
-                    out .= Base64IntToChar[64]
-                out .= Base64IntToChar[Mod(i, 64)]
+            ; 60 = index -1
+            ; 61 = index -2
+            ; 62 = index -3
+            ; 63 = index -4
+            ; 64 = index -5
+            if i > 1 {
+                i -= 2, factor := 10
+                Loop {
+                    if A_index = 1 {
+                        out .= Base64IntToChar[50 + (module := Mod(i, factor))]
+                    } else {
+                        out .= Base64IntToChar[50 + (module := Mod(i, factor*15))//factor]
+                        factor := factor * 15
+                    }
+                    i -= module
+                } Until i = 0
+            } else {
+                i := -i - 1
+                out .= Base64IntToChar[60 + (module := Mod(i, 5))]
+                i -= module, factor := 5
+                Loop {
+                    if A_index > 1 {
+                        out .= Base64IntToChar[50 + (module := Mod(i, factor*15))//factor]
+                        i -= module, factor := factor*15
+                    }
+                } Until i = 0
             }
         }
     }
@@ -453,18 +459,21 @@ static DecodePath(path) {
     out := [], calculatingIndex := 0, cond := ""
     loop parse path {
         num := Base64CharToInt[A_LoopField]
+        if calculatingIndex != 0 && num < 50
+            calculatingIndex := 0
         if num > 49 && calculatingIndex = 0 {
-            cond.DefineProp("i", {value:num < 61 ? num-48 : 60-num}) ; 50 => index 2 (index 1 would not exist) ; 60 => index -1
-            calculatingIndex := num = 60 ? 1 : num = 64 ? -1 : 0
+            cond.DefineProp("i", {value:num < 60 ? num-48 : 59-num}) ; 50 => index 2 (index 1 would not exist) ; 60 => index -1
+            calculatingIndex := num < 60 ? 1 : -1
             continue
         }
         if calculatingIndex {
-            if calculatingIndex > 0
-                cond.i += num
-            else 
-                cond.i -= num
-            if num < 64
-                calculatingIndex := 0
+            if calculatingIndex > 0 {
+                cond.i += (num-50)*10*15**(calculatingIndex-1)
+                calculatingIndex++
+            } else {
+                cond.i -= (num-50)*5*15**(-calculatingIndex-1)
+                calculatingIndex--
+            }
         } else {
             if cond
                 out.Push(cond)
@@ -1435,19 +1444,23 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                             el := ""
                     }
                 } else if param is String {
-                    try {
-                        if InStr(param, ".") || InStr(param, ",")
-                            el := el[StrSplit(StrReplace(param, ".", ","), ",")*]
-                        else if RegexMatch(param, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
-                            try el := el.FindElement({Type:m[1], i:(m.Count > 1 ? m[2] : 1)}, 2)
-                            catch
-                                try el := el.FindCachedElement({Type:m[1], i:m[2]}, 2)
-                        } else if !(param ~= ",\.+-")
-                            el := el[UIA.DecodePath(param)*]
-                        else
-                            el := ""
-                    } catch
-                        el := ""
+                    maybeEl := ""
+                    for path in StrSplit(param, "|") {
+                        try {
+                            if InStr(path, ".") || InStr(path, ",")
+                                maybeEl := el[StrSplit(StrReplace(path, ".", ","), ",")*]
+                            else if RegexMatch(path, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
+                                try maybeEl := el.FindElement({Type:m[1], i:(m.Count > 1 ? m[2] : 1)}, 2)
+                                catch
+                                    try maybeEl := el.FindCachedElement({Type:m[1], i:m[2]}, 2)
+                            } else if !(path ~= ",\.+-")
+                                maybeEl := el[UIA.DecodePath(path)*]
+                            else
+                                continue
+                            break ; no errors encountered means that match was found
+                        }
+                    }
+                    el := maybeEl
                 } else
                     TypeError("Invalid item type!", -1)
                 if !el
