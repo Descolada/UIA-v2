@@ -6342,15 +6342,28 @@ class Viewer {
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="", conditionpath := "", numpath:="") {
-        local i, t, k, v, paths := Map()
+        local info, child, type, name, k, v, paths := Map(), childInfo := [], children := Element.CachedChildren
         Element.DefineProp("Path", {value:"`"" path "`""})
         Element.DefineProp("ConditionPath", {value:conditionpath})
         Element.DefineProp("NumericPath", {value:numpath})
         this.Stored.TreeView[TWEl := this.TVUIA.Add(this.GetShortDescription(Element), parent, "Expand")] := Element
-        for k, v in Element.CachedChildren {
-            p := this.GetCompactCondition(v, &paths, &t)
-            i := paths[p], p .= i = 1 ? "}" : ", i:" i "}"
-            this.RecurseTreeView(v, TWEl, path UIA.EncodePath([{Type:v.CachedType, i:paths[t]}]), conditionpath (conditionpath?", ":"") p, numpath (numpath?",":"") k)
+        ; First count up all multiple-condition-index conditions and type-index conditions
+        ; This is to know whether the condition is the last of the matching ones, so we can use index -1
+        ; This gives an important speed difference over regular indexing
+        for child in children {
+            compactCondition := this.GetCompactCondition(child, &paths, &typeCondition := "", &type:="")
+            childInfo.Push([compactCondition, paths[compactCondition], typeCondition, paths[typeCondition], type])
+        }
+        ; Now create the final conditions and recurse the tree
+        for k, child in children {
+            info := childInfo[k], compactCondition := info[1], conditionIndex := info[2]
+            if conditionIndex > 1 && conditionIndex = paths[compactCondition]
+                conditionIndex := -1
+            compactCondition .= conditionIndex = 1 ? "}" : ", i:" conditionIndex "}"
+            typeIndex := info[4]
+            if typeIndex > 1 && typeIndex = paths[info[3]]
+                typeIndex := -1
+            this.RecurseTreeView(child, TWEl, path UIA.EncodePath([typeIndex = 1 ? {Type:info[5]} : {Type:info[5], i:typeIndex}]), conditionpath (conditionpath?", ":"") compactCondition, numpath (numpath?",":"") k)
         }
     }
     ; CompareElements sometimes fails to match elements, so this compares some properties instead
@@ -6370,31 +6383,31 @@ class Viewer {
             elDesc := "`"`"" elDesc
         return elDesc
     }
-    GetCompactCondition(Element, &pathsMap, &t := "") {
+    GetCompactCondition(Element, &pathsMap, &t := "", &type := "", &automationId := "", &className := "", &name := "") {
         local n := "", c := "", a := ""
-        t := Element.CachedType
-        t := "{T:" (t-50000)
+        type := Element.CachedType
+        t := "{T:" (type-50000)
         if !pathsMap.Has(t) {
             pathsMap[t] := 1
             return t
         }
         pathsMap[t] := pathsMap[t] + 1
-        try a := StrReplace(Element.CachedAutomationId, "`"", "```"")
+        try a := StrReplace(automationId := Element.CachedAutomationId, "`"", "```"")
         if a != "" && !IsInteger(a) { ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
             a := t ",A:`"" a "`""
             pathsMap[a] := pathsMap.Has(a) ? pathsMap[a] + 1 : 1 ; This actually shouldn't be needed, if AutomationId's are unique
         }
-        try c := StrReplace(Element.CachedClassName, "`"", "```"")
+        try c := StrReplace(className := Element.CachedClassName, "`"", "```"")
         if c != "" {
             c := t ",CN:`"" c "`""
             pathsMap[c] := pathsMap.Has(c) ? pathsMap[c] + 1 : 1
         }
-        try n := StrReplace(Element.CachedName, "`"", "```"")
+        try n := StrReplace(name := Element.CachedName, "`"", "```"")
         if !this.PathIgnoreNames && n != "" { ; Consider Name last, because it can change (eg. window title)
             n := t ",N:`"" n "`""
             pathsMap[n] := pathsMap.Has(n) ? pathsMap[n] + 1 : 1
         }
-        if a != ""  && !IsInteger(a) {
+        if a != "" && !IsInteger(a) {
             return c != "" ? (pathsMap[a] <= pathsMap[c] ? a : c) : a
         } else if c != ""
             return c
