@@ -54,6 +54,8 @@
 		Presses the New tab button.
 	GetTab(searchPhrase:="", matchMode:=3, caseSensitive:=True)
 		Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
+	TabExist(searchPhrase:="", matchMode:=3, caseSensitive:=True)
+		Checks whether a tab element with text of searchPhrase exists: if a matching tab is found then the element is returned, otherwise 0 is returned. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	GetTabs(searchPhrase:="", matchMode:=3, caseSensitive:=True)
 		Returns all tab elements with text of searchPhrase, or if empty then all tabs. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	GetAllTabNames()
@@ -165,7 +167,8 @@ class UIA_Edge extends UIA_Browser {
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
 		local k, v
-		if !this.BrowserElement.FindElement({Type:"Document"}) {
+		try this.BrowserElement.FindElement({Type:"Document"}) 
+		catch {
 			WinActivate this.BrowserId
 			WinWaitActive this.BrowserId,,1
 		}
@@ -221,7 +224,11 @@ class UIA_Mozilla extends UIA_Browser {
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		this.BrowserElement.FindElement({AutomationId:"panel", mm:2},2)
+		try this.BrowserElement.FindElement({AutomationId:"panel", mm:2},2)
+		catch {
+			WinActivate this.BrowserId
+			WinWaitActive this.BrowserId,,1
+		}
 		Loop 2 {
 			try {
 				this.TabBarElement := this.ToolbarTreeWalker.GetNextSiblingElement(this.ToolbarTreeWalker.GetFirstChildElement(this.BrowserElement))
@@ -254,8 +261,15 @@ class UIA_Mozilla extends UIA_Browser {
 
 	; Returns the current document/content element of the browser
 	GetCurrentDocumentElement() {
-		this.DocumentPanelElement := this.BrowserElement.FindElement({Type:"Custom", IsOffscreen:0},2)
-		return UIA.TreeWalkerTrue.GetFirstChildElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
+		Loop 2 {
+			try {
+				this.DocumentPanelElement := this.BrowserElement.FindElement({Type:"Custom", IsOffscreen:0},2)
+				return UIA.TreeWalkerTrue.GetFirstChildElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
+			} catch TargetError {
+				WinActivate this.BrowserId
+				WinWaitActive this.BrowserId,,1
+			}
+		}
 	}
 
 	; Presses the New tab button. 
@@ -300,8 +314,13 @@ class UIA_Mozilla extends UIA_Browser {
 		if !(alertEl := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement)))
 			return
 		
-		while (!((dialogEl := alertEl.FindElement({AutomationId:"commonDialogWindow"})) && (OKBut := dialogEl.FindFirst(this.ButtonControlCondition))) && ((A_tickCount - startTime) < timeOut))
-			Sleep 100
+		while ((A_tickCount - startTime) < timeOut) {
+			try {
+				dialogEl := alertEl.FindElement({AutomationId:"commonDialogWindow"})
+				OKBut := dialogEl.FindFirst(this.ButtonControlCondition)
+			} catch
+				Sleep 100
+		}
 		try text := dialogEl.FindFirst(this.TextControlCondition).Name
 		if closeAlert
 			try OKBut.Click()
@@ -388,7 +407,8 @@ class UIA_Browser {
 	
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		if !this.BrowserElement.FindElement({Type:"Document"}) {
+		try this.BrowserElement.FindElement({Type:"Document"}) 
+		catch {
 			WinActivate this.BrowserId
 			WinWaitActive this.BrowserId,,1
 		}
@@ -722,13 +742,19 @@ class UIA_Browser {
 	GetTab(searchPhrase:="", matchMode:=3, caseSensitive:=True) { 
 		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
 	}
+	; Checks whether a tab element with text of searchPhrase exists: if a matching tab is found then the element is returned, otherwise 0 is returned. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
+	TabExist(searchPhrase:="", matchMode:=3, caseSensitive:=True) {
+		try return this.GetTab(searchPhrase, matchMode, caseSensitive)
+		return 0
+	}
 	
 	; Selects a tab with the text of tabName. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	SelectTab(tabName, matchMode:=3, caseSensitive:=True) { 
 		local selectedTab
-		if selectedTab := this.TabBarElement.FindElement({Name:tabName, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+		try {
+			selectedTab := this.TabBarElement.FindElement({Name:tabName, Type:"TabItem", mm:matchMode, cs:caseSensitive})
 			selectedTab.Click()
-		else
+		} catch TargetError
 			throw TargetError("Tab with name " tabName " was not found (MatchMode: " matchMode ", CaseSensitive: " caseSensitive ")")
 		return selectedTab
 	}
@@ -742,9 +768,10 @@ class UIA_Browser {
 			if (tabElementOrName == "") {
 				try UIA.TreeWalkerTrue.GetLastChildElement(this.GetTab()).Click()
 			} else {
-				if (targetTab := this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSensitive}))
+				try {
+					targetTab := this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSensitive})
 					UIA.TreeWalkerTrue.GetLastChildElement().Click(targetTab)
-				else
+				} catch
 					throw TargetError("Tab with name " tabElementOrName " was not found (MatchMode: " matchMode ", CaseSensitive: " caseSensitive ")")
 			}
 		}
@@ -766,7 +793,7 @@ class UIA_Browser {
 	
 	WindowFromPoint(X, Y) { ; by SKAN and Linear Spoon
 		return DllCall( "GetAncestor", "UInt"
-			   , DllCall( "WindowFromPoint", "UInt64", X | (Y << 32))
+			   , DllCall( "WindowFromPoint", "UInt64", (X & 0xFFFFFFFF) | (Y << 32))
 			   , "UInt", 2 ) ; GA_ROOT
 	}
 
