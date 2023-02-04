@@ -39,8 +39,6 @@
       that they are either equal, or AHK array comes on top by far. The situation where it loses to the
       native one is when we need to get exactly one element from the array and won't use it more. This
       is optimized by using the native ElementArray in cases of Element[integer].
-    - FindElement doesn't throw an error if no element is found. This is because it's one of the 
-      expected results, and also to avoid too many unnecessary try...catch blocks.
 
     To-do:
     - Better error handling
@@ -401,6 +399,7 @@ static EncodePath(path) {
             "V" corresponds in Base64IntToChar to 31 which is Type Document, "E" is ScrollBar, 
             "0" is Button, "q" is 50 which is the first index number, and positive indices start with 2.
     */
+    local out, i
     static Base64IntToChar := Map(0,'0',1,'1',2,'2',3,'3',4,'4',5,'5',6,'6',7,'7',8,'8',9,'9',10,'A',11,'B',12,'C',13,'D',14,'E',15,'F',16,'G',17,'H',18,'I',19,'J',20,'K',21,'L',22,'M',23,'N',24,'O',25,'Q',26,'R',27,'S',28,'T',29,'U',30,'V',31,'W',32,'X',33,'Y',34,'Z',35,'a',36,'b',37,'c',38,'d',39,'e',40,'f',41,'g',42,'h',43,'i',44,'j',45,'k',46,'l',47,'m',48,'n',49,'o',50,'q',51,'r',52,'s',53,'t',54,'u',55,'v',56,'w',57,'x',58,'y',59,'z',60,'/',61,'?',62,'<',63,'>',64,'=')
     if !(path is Array)
         path := [path]
@@ -456,7 +455,7 @@ static EncodePath(path) {
  */
 static DecodePath(path) {
     static Base64CharToInt := Map('0',0,'1',1,'2',2,'3',3,'4',4,'5',5,'6',6,'7',7,'8',8,'9',9,'A',10,'B',11,'C',12,'D',13,'E',14,'F',15,'G',16,'H',17,'I',18,'J',19,'K',20,'L',21,'M',22,'N',23,'O',24,'Q',25,'R',26,'S',27,'T',28,'U',29,'V',30,'W',31,'X',32,'Y',33,'Z',34,'a',35,'b',36,'c',37,'d',38,'e',39,'f',40,'g',41,'h',42,'i',43,'j',44,'k',45,'l',46,'m',47,'n',48,'o',49,'q',50,'r',51,'s',52,'t',53,'u',54,'v',55,'w',56,'x',57,'y',58,'z',59,'/',60,'?',61,'<',62,'>',63,'=',64)
-    out := [], calculatingIndex := 0, cond := ""
+    local out := [], calculatingIndex := 0, cond := ""
     loop parse path {
         num := Base64CharToInt[A_LoopField]
         if calculatingIndex != 0 && num < 50
@@ -1202,6 +1201,7 @@ static SafeArrayToAHKArray(sArr, varType:=3) {
     return ret
 }
 static AHKArrayToSafeArray(arr, varType:=3) {
+    local index, value, cArr
     cArr := ComObjArray(varType, arr.Length)
     for index, value in arr
         cArr[index-1] := value
@@ -1423,7 +1423,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             for _, param in params {
                 if IsObject(param) {
                     try el := el.FindElement(param, 2)
-                    catch {
+                    catch TargetError {
+                        el := ""
+                    } catch {
                         try el := el.FindCachedElement(param, 2)
                         catch
                             el := ""
@@ -1451,6 +1453,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                                 maybeEl := el[StrSplit(StrReplace(path, ".", ","), ",")*]
                             else if RegexMatch(path, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
                                 try maybeEl := el.FindElement({Type:m[1], i:(m.Count > 1 ? m[2] : 1)}, 2)
+                                catch TargetError
+                                    maybeEl := ""
                                 catch
                                     try maybeEl := el.FindCachedElement({Type:m[1], i:m[2]}, 2)
                             } else if !(path ~= ",\.+-")
@@ -1462,7 +1466,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     }
                     el := maybeEl
                 } else
-                    TypeError("Invalid item type!", -1)
+                    throw TypeError("Invalid item type at index " _, -1)
                 if !el
                     throw IndexError("Invalid index/condition at index " _, -1)
             }
@@ -1959,25 +1963,50 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if IsSet(index)
             index := pureCondition.DeleteProp("index") || pureCondition.DeleteProp("i") || index
         scope := pureCondition.DeleteProp("scope") || scope
-        if !IsInteger(scope)
+        if !IsInteger(scope) {
             try scope := UIA.TreeScope.%scope%
+            catch
+                throw ValueError(scope " is an invalid TreeScope value", -2, "Specifially it wasn't found among UIA.TreeScope properties")
+        }
         order := pureCondition.DeleteProp("order") || order
-        if !IsInteger(order)
+        if !IsInteger(order) {
             try order := UIA.TreeTraversalOptions.%order (SubStr(order, -5) = "order" ? "" : "Order")%
+            catch
+                throw ValueError(order " is an invalid TreeTraversalOption value", -2, "Specifially it wasn't found among UIA.TreeTraversalOptions properties")
+        }
         startingElement := pureCondition.DeleteProp("startingElement") || startingElement
         if IsSet(cacheRequest)
             cacheRequest := pureCondition.DeleteProp("cacheRequest") || cacheRequest
         pureCondition.DeleteProp("timeOut")
         if scope < 1
             order := order | 2, scope := -scope
-        if !IsInteger(scope)
-            try scope := UIA.TreeScope.%scope%
         return pureCondition
     }
 
     /**
+     * Checks whether an element that matches the specified condition exists within the provided TreeScope.
+     * If no element is found, then 0 is returned.
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.
+     *     Default MatchMode is "Exact", and CaseSense "On".
+     *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
+     * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
+     * @param index Looks for the n-th element matching the condition
+     * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder. [requires Windows 10 version 1703+]
+     * @param startingElement Optional: search will start from this element instead, which must be a child/descendant of the starting element [requires Windows 10 version 1703+]
+     *     If startingElement is supplied then part of the tree will not be searched (depending on TreeTraversalOrder, either everything before this element, or everything after it will be ignored)
+     * @param cacheRequest Optional: cache request object
+     * @returns {UIA.IUIAutomationElement}
+     */
+    ElementExist(condition, scope:=4, index:=1, order:=0, startingElement:=0, cacheRequest:=0) {
+        try return this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
+        catch TargetError
+            return 0
+        return 0
+    }
+
+    /**
      * Retrieves the first child or descendant element that matches the specified condition.
-     * If no element is found, then an empty string / nothing is returned.
+     * If no element is found, then an error is thrown.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
      *     Default MatchMode is "Exact", and CaseSense "On".
      *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
@@ -1991,6 +2020,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     FindElement(condition, scope:=4, index:=1, order:=0, startingElement:=0, cacheRequest:=0) {
         local withOptions
+        if !IsObject(condition)
+            throw TypeError(Type(condition) " is an invalid FindElement condition type", -1, "Specifically FindElement conditions can only be of type Object or IUIAutomationCondition")
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest, &index)
         if !((withOptions := startingElement || order) && startingElement)
             startingElement := this
@@ -2020,7 +2051,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                         if el.ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index
                             return el
                 }
-                return ""
+                throw TargetError("An element matching the condition was not found", -1, "Specifically no element passed validation after FindAll")
             } else if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElement instead
                 return this.FindCachedElement(condition, scope, index, order, startingElement)
             condition := IUIAcondition
@@ -2032,23 +2063,56 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                                 : this.FindAllBuildCache(cacheRequest, condition, scope))
                             : (withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
                                 : this.FindAll(IUIAcondition, scope)))[index]
-                catch
-                    return ""
+                catch IndexError
+                    throw TargetError("An element matching the condition was not found", -1, "Specifically FindAll index " index " was invalid")
             }
         }
         if cacheRequest {
-            if withOptions
-                return startingElement.FindFirstWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
-            return this.FindFirstBuildCache(cacheRequest, condition, scope)
+            if withOptions {
+                try return startingElement.FindFirstWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
+                catch TargetError as err
+                    throw TargetError(err.Message, -1, err.What)
+
+            }
+            try return this.FindFirstBuildCache(cacheRequest, condition, scope)
+            catch TargetError as err
+                throw TargetError(err.Message, -1, err.What)
         }
-        if withOptions
-            return startingElement.FindFirstWithOptions(condition, order, this, scope)
-        return this.FindFirst(condition, scope)
+        if withOptions {
+            try return startingElement.FindFirstWithOptions(condition, order, this, scope)
+            catch TargetError as err
+                throw TargetError(err.Message, -1, err.What)
+        }
+        try return this.FindFirst(condition, scope)
+        catch TargetError as err
+            throw TargetError(err.Message, -1, err.What)
+    }
+
+    /**
+     * CachedElementExist can be used to find an element inside a cached tree, using only cached properties.
+     * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
+     * If no element is found, then 0 is returned.
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.
+     *     Default MatchMode is "Exact", and CaseSense "On".
+     * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
+     * @param index Looks for the n-th element matching the condition
+     * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder.
+     * @param startingElement Optional: search will start from this element instead, which must be a child/descendant of the starting element
+     *     If startingElement is supplied then part of the tree will not be searched (depending on TreeTraversalOrder, either everything before this element, or everything after it will be ignored)
+     *     Unlike FindElement, using this will most likely not have a beneficial effect on performance.
+     * @returns {UIA.IUIAutomationElement}
+     */
+    CachedElementExist(condition, scope:=4, index:=1, order:=0, startingElement:=0) {
+        try return this.FindCachedElement(condition, scope, index, order, startingElement)
+        catch TargetError
+            return 0
+        return 0
     }
 
     /**
      * FindCachedElement can be used to find an element inside a cached tree, using only cached properties.
      * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
+     * If no element is found, then an error is thrown.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
      *     Default MatchMode is "Exact", and CaseSense "On".
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
@@ -2060,6 +2124,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     FindCachedElement(condition, scope:=4, index:=1, order:=0, startingElement:=0) {
+        local out
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, , &index)
         if index < 0
             order |= 2, index := -index
@@ -2069,13 +2134,19 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if startingElement
             startingElement := UIA.RuntimeIdToString(startingElement.GetRuntimeId())
         ; First handle PostOrder
-        if order&1
-            return order&2 ? PostOrderLastToFirstRecursiveFind(this) : PostOrderFirstToLastRecursiveFind(this)
+        if order&1 {
+            if out := order&2 ? PostOrderLastToFirstRecursiveFind(this) : PostOrderFirstToLastRecursiveFind(this)
+                return out
+            throw TargetError("An element matching the condition was not found", -1)
+        }
         ; PreOrder
         if scope&1 && this.ValidateCondition(condition, true) && --index = 0
             return this
-        if scope > 2
-            return order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this)
+        if scope > 2 {
+            if out := order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this)
+                return out
+            throw TargetError("An element matching the condition was not found", -1)
+        }
         PreOrderFirstToLastRecursiveFind(el) {
             for child in el.CachedChildren {
                 if (startingElement ? (startingElement = UIA.RuntimeIdToString(child.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && child.ValidateCondition(condition, true) && --index = 0
@@ -2243,9 +2314,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         endtime := A_TickCount + timeOut
-        While ((timeOut == -1) || (A_Tickcount < endtime)) && !(el := this.FindElement(condition, scope, index, order, startingElement, cacheRequest))
+        While ((timeOut == -1) || (A_Tickcount < endtime)) {
+            try return this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
             Sleep 20
-        return el
+        }
     }
 
     /**
@@ -2262,33 +2334,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
-            if !this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
+            try this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
+            catch
                 return 1
         }
         return 0
-    }
-
-    /**
-     * Tries to get an element from a path. If no element is found, an empty string / nothing is returned.
-     * 
-     *     TryElementFromPath(path1[, path2, ...])
-     * 
-     *     Paths can be:
-     *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
-     *        to integer values, or TypeN which selects the nth occurrence of Type.
-     *        Eg. Element.ElementFromPath("3,2") => selects Elements third childs second child
-     *            Element.ElementFromPath("Button3,2") => selects Elements third child of type Button, then its second child
-     * 
-     *     2) UIA path copied from UIAViewer.
-     *        Eg. Element.ElementFromPath("bAx3")
-     * 
-     *     3) A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
-     *        Eg. Element.ElementFromPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
-     * 
-     * @returns {UIA.IUIAutomationElement}
-     */
-    TryElementFromPath(paths*) {
-        try return this[paths*]
     }
 
     /**
@@ -2311,12 +2361,37 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
 	ElementFromPath(paths*) {
-        local el
-        try el := this[paths*]
-        catch Any as err
-            throw TargetError(err.Message, -1)
-		return el
-	}
+        try return this[paths*]
+        catch IndexError as err
+            throw IndexError(StrReplace(err.Message, "at index", "at argument"), -1, err.Extra)
+    }
+
+    /**
+     * Checks whether an element exists at a path and returns the element if one is found. 
+     * If no element is found, 0 is returned.
+     * 
+     *     ElementFromPathExist(path1[, path2, ...])
+     * 
+     *     Paths can be:
+     *     1) Comma-separated numeric path that defines which path to travel down the tree. In addition
+     *        to integer values, or TypeN which selects the nth occurrence of Type.
+     *        Eg. Element.ElementFromPath("3,2") => selects Elements third childs second child
+     *            Element.ElementFromPath("Button3,2") => selects Elements third child of type Button, then its second child
+     * 
+     *     2) UIA path copied from UIAViewer.
+     *        Eg. Element.ElementFromPath("bAx3")
+     * 
+     *     3) A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.
+     *        Eg. Element.ElementFromPath({Type:"Button"}, {Type:"List"}) => finds the first Button type child of Element, then the first List type child of that element
+     * 
+     * @returns {UIA.IUIAutomationElement}
+     */
+    ElementFromPathExist(paths*) {
+        try return this[paths*]
+        catch IndexError
+            return 0
+        return 0
+    } 
 
     /**
      * Wait element to appear at a path. 
@@ -2379,17 +2454,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 if (loopFunc := (m[1] = "p") ? "GetParentElement" : (m[1] = "+") ? "GetNextSiblingElement" : (m[1] = "-") ? "GetPreviousSiblingElement" : "") {
                     Loop m[2] || 1 {
                         if !(el := PathTW.%loopFunc%(el))
-                            throw TargetError("Step with value " A_LoopField " was out of bounds (" loopFunc " failed)", -1)
+                            throw IndexError("Step with value " A_LoopField " was out of bounds (" loopFunc " failed)", -1)
                     }
 				} else
-                    throw TargetError("Invalid path value " A_LoopField " at step " A_index, -1)
+                    throw IndexError("Invalid path value " A_LoopField " at step " A_index, -1)
 			} else
-                throw TargetError("Invalid path value " A_LoopField " at step " A_index, -1)
+                throw IndexError("Invalid path value " A_LoopField " at step " A_index, -1)
 		}
 		return el
-    }
-    TryWalkTree(searchPath, filterCondition?) {
-        try return this.WalkTree(searchPath, filterCondition?)
     }
 
     ; Gets all property values of this element and returns an object where Object.PropertyName = PropertyValue
@@ -2409,7 +2481,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         return infos
     }
 
-    ; Checks whether this element matches the condition
+    ; Internal method: checks whether this element matches the condition
     ValidateCondition(cond, cached:=False) {
         local mm := 3, cs := 1, notCond := 0, k, v, result
         switch Type(cond) {
@@ -2428,6 +2500,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                         return true
                 }
                 return false
+            default:
+                throw ValueError("Condition of type " Type(cond) " is an invalid ValidateCondition condition", -1, "Specifically the condition can be an Object or Array")
         }
         for k, v in cond {
             if IsObject(v) { 
@@ -2496,6 +2570,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             condition := UIA.CreateCondition(condition)
         if (ComCall(5, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
+        throw TargetError("An element matching the condition was not found", -1)
     }
 
     /**
@@ -2521,6 +2596,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             condition := UIA.CreateCondition(condition)
         if (ComCall(7, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", condition, "ptr", cacheRequest, "ptr*", &found := 0), found) 
             return UIA.IUIAutomationElement(found)
+        throw TargetError("An element matching the condition was not found", -1)
     }
 
     ; Returns all UI Automation elements that satisfy the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
@@ -2608,19 +2684,21 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 name := UIA.Pattern[patternId]
             else
                 patternId := UIA.Pattern.%(name := StrReplace(patternId, "Pattern"))%
-            
-            ComCall(16, this, "int", patternId, "ptr*", &patternObject := 0)
-            return UIA.IUIAutomation%RegExReplace(name, "\d+$")%Pattern(patternObject)
         } catch
-            Throw Error("Failed to get pattern `"" name "`n!", -1)
+            Throw TargetError("Failed to find pattern `"" name "`" among UIA.Pattern properties/values", -1)
+        ComCall(16, this, "int", patternId, "ptr*", &patternObject := 0)
+        return UIA.IUIAutomation%RegExReplace(name, "\d+$")%Pattern(patternObject)
     }
 
     ; Retrieves from the cache the IUnknown interface of the specified control pattern of this UI Automation element.
     GetCachedPattern(patternId) {
-        if IsInteger(patternId)
-            name := UIA.Pattern[patternId]
-        else
-            patternId := UIA.Pattern.%(name := StrReplace(patternId, "Pattern"))%
+        try {
+            if IsInteger(patternId)
+                name := UIA.Pattern[patternId]
+            else
+               patternId := UIA.Pattern.%(name := StrReplace(patternId, "Pattern"))%
+        } catch
+            Throw TargetError("Failed to find pattern `"" name "`" among UIA.Pattern properties/values", -1)
         ComCall(17, this, "int", patternId, "ptr*", &patternObject := 0)
         return UIA.IUIAutomation%RegExReplace(name, "\d+$")%Pattern(patternObject)
     }
@@ -3317,6 +3395,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             return this.FindFirstWithOptionsBuildCache(cacheRequest, condition, traversalOptions, root, scope)
         if (ComCall(110, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
+        throw TargetError("An element matching the condition was not found", -1)
     }
     ; FindAll with additional parameters
     ; This gets called when FindAll or FindElements is used with traversalOptions or startingElement arguments
@@ -3333,6 +3412,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     FindFirstWithOptionsBuildCache(cacheRequest, condition, traversalOptions:=0, root:=0, scope := 4) {
         if (ComCall(112, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
+        throw TargetError("An element matching the condition was not found", -1)
     }
     FindAllWithOptionsBuildCache(cacheRequest, condition, traversalOptions:=0, root:=0, scope := 4) {
         if (ComCall(113, this, "int", IsInteger(scope) ? scope : UIA.TreeScope.%scope%, "ptr", InStr(Type(condition), "Condition") ? condition : UIA.CreateCondition(condition), "ptr", cacheRequest, "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
@@ -3518,7 +3598,7 @@ class IUIAutomationArray extends UIA.IUIAutomationBase {
                 else
                     return this.GetElement(this.Length+index)
             } catch
-                throw ValueError("Index " index " out of bounds", -2)
+                throw IndexError("Index " index " out of bounds", -2)
         }
     }
     __Enum(varCount) {
@@ -5990,10 +6070,10 @@ class Viewer {
     }
     ; Handles right-clicking a listview (copies to clipboard)
     LV_CopyText(GuiCtrlObj, Info, *) {
+        local LVData, out := "", Property
         LVData := Info > GuiCtrlObj.GetCount()
             ? ListViewGetContent("", GuiCtrlObj)
             : ListViewGetContent("Selected", GuiCtrlObj)
-        out := ""
         for LVData in StrSplit(LVData, "`n") {
             LVData := StrSplit(LVData, "`t",,2)
             switch LVData[1], 0 {
@@ -6044,18 +6124,18 @@ class Viewer {
             SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add()
         }
-        SBMain_Menu.Add("Display UIA path", (*) => (this.PathType := this.PathType = "" ? "" : "", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
-        SBMain_Menu.Add("Display numeric path", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
-        SBMain_Menu.Add("Display condition path", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display UIA path (relatively reliable, shortest)", (*) => (this.PathType := this.PathType = "" ? "" : "", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display numeric path (least reliable, short)", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display condition path (most reliable, longest)", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
         SBMain_Menu.Add("Ignore Name properties in condition path", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
         if this.PathIgnoreNames
             SBMain_Menu.Check("Ignore Name properties in condition path")
         if this.PathType = ""
-            SBMain_Menu.Check("Display UIA path")
+            SBMain_Menu.Check("Display UIA path (relatively reliable, shortest)")
         if this.PathType = "Numeric"
-            SBMain_Menu.Check("Display numeric path")
+            SBMain_Menu.Check("Display numeric path (least reliable, short)")
         if this.PathType = "Condition"
-            SBMain_Menu.Check("Display condition path")
+            SBMain_Menu.Check("Display condition path (most reliable, longest)")
         SBMain_Menu.Show()
     }
     ; Stops capturing elements under mouse, unhooks CaptureCallback
