@@ -2006,7 +2006,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Retrieves the first child or descendant element that matches the specified condition.
-     * If no element is found, then an error is thrown.
+     * If no element is found, then TargetError is thrown.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
      *     Default MatchMode is "Exact", and CaseSense "On".
      *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
@@ -2112,7 +2112,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * FindCachedElement can be used to find an element inside a cached tree, using only cached properties.
      * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
-     * If no element is found, then an error is thrown.
+     * If no element is found, then a TargetError is thrown.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
      *     Default MatchMode is "Exact", and CaseSense "On".
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
@@ -2309,7 +2309,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
      * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
      * @param cacheRequest Optional: cache request object
-     * @returns {UIA.IUIAutomationElement} Found element if successful, empty string if timeout happens
+     * @returns {UIA.IUIAutomationElement} Found element if successful, 0 if timeout happens
      */
     WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
@@ -2318,6 +2318,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             try return this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
             Sleep 20
         }
+        return 0
     }
 
     /**
@@ -2342,7 +2343,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     /**
-     * Tries to get an element from a path. If no element is found, an error is thrown.
+     * Tries to get an element from a path. If no element is found, an IndexError is thrown.
      * 
      *     ElementFromPath(path1[, path2, ...])
      * 
@@ -6023,7 +6024,7 @@ class Viewer {
         winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? match[] "El" : "winEl"
         winElText := winElVariable " := UIA.ElementFromHandle(`"" WinGetTitle(this.Stored.mwId) " ahk_exe " processName "`")"
         if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
-            this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText "`n"
+            this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText
         else
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ")
         winElVariable := winElVariable (SubStr(this.SBMain.Text, 9) ? ".ElementFromPath(" SubStr(this.SBMain.Text, 9) ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
@@ -6119,7 +6120,7 @@ class Viewer {
     SBMain_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
         SBMain_Menu := Menu()
         if InStr(this.SBMain.Text, "Path:") {
-            SBMain_Menu.Add("Copy path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.Path)), SetTimer(ToolTip, -3000)))
+            SBMain_Menu.Add("Copy UIA path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.Path)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add("Copy condition path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.ConditionPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add()
@@ -6219,8 +6220,8 @@ class Viewer {
             prop := ""
         }
         this.DDLMacroAction.Delete()
-        this.DDLMacroAction.Add(['Click()','Click("left")','ControlClick()', 'SetFocus()','Highlight()', 'Dump()','DumpAll()'])
-        this.DDLMacroAction.Choose(5)
+        this.DDLMacroAction.Add(['Click()','Click("left")','ControlClick()', 'SetFocus()', 'ShowContextMenu()', 'Highlight()', 'Dump()','DumpAll()'])
+        this.DDLMacroAction.Choose(6)
         for pattern, value in UIA.Property.OwnProps() {
             if RegExMatch(pattern, "Is([\w]+)Pattern(\d?)Available", &match:=0) && Element.GetCachedPropertyValue(value) {
                 parent := this.TVPatterns.Add(match[1] (match.Count > 1 ? match[2] : ""))
