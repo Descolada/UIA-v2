@@ -14,7 +14,7 @@ listEl := explorerEl.FindElement({Type:"List"})
 MsgBox "GridPattern properties: "
 	. "`nCurrentRowCount: " listEl.RowCount
 	. "`nCurrentColumnCount: " listEl.ColumnCount
-
+Sleep 500
 MsgBox "Getting grid item from row 4, column 1 (0-based indexing)"
 editEl := listEl.GetItem(3,0).Highlight()
 MsgBox "Got this element: `n" editEl.Dump()

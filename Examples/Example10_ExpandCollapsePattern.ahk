@@ -15,7 +15,7 @@ CDriveEl := explorerEl.FindElement({Type:"TreeItem", Name:CDriveName, matchmode:
 Sleep 500
 MsgBox "ExpandCollapsePattern properties: "
 	. "`nCurrentExpandCollapseState: " (state := CDriveEl.ExpandCollapseState) " (" UIA.ExpandCollapseState[state] ")"
-
+Sleep 500
 MsgBox "Press OK to expand drive C: element"
 CDriveEl.Expand()
 Sleep 500
