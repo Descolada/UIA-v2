@@ -118,7 +118,8 @@ class UIA_Chrome extends UIA_Browser {
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		if !this.BrowserElement.FindElement({Type:"Document"}) {
+		try this.BrowserElement.FindElement({Type:"Document"}) 
+		catch {
 			WinActivate this.BrowserId
 			WinWaitActive this.BrowserId,,1
 		}
@@ -379,17 +380,31 @@ class UIA_Browser {
 	}
 	
 	__Get(member, params) {
-		if this.HasOwnProp("BrowserElement")
+		if this.HasOwnProp("BrowserElement") {
 			try return this.BrowserElement.%member%
+			catch PropertyError {
+			} catch Any as err
+				throw %Type(err)%(err.Message, -1, err.Extra)
+		}
 		try return UIA.%member%
-		throw Error("This class does not contain property `"" member "`"", -1)
+		catch PropertyError
+			throw PropertyError("This class does not contain property `"" member "`"", -1)
+		catch Any as err
+			throw %Type(err)%(err.Message, -1, err.Extra)
 	}
 	
 	__Call(member, params) {
-		if this.HasOwnProp("BrowserElement")
+		if this.HasOwnProp("BrowserElement") {
 			try return this.BrowserElement.%member%(params*)
+			catch MethodError {
+			} catch Any as err
+				throw %Type(err)%(err.Message, -1, err.Extra)
+		}
 		try return UIA.%member%(params*)
-		throw Error("This class does not contain method `"" member "`"", -1)
+		catch MethodError
+			throw MethodError("This class does not contain method `"" member "`"", -1)
+		catch Any as err
+			throw %Type(err)%(err.Message, -1, err.Extra)
 	}
 
 	__Set(member, params, value) {
