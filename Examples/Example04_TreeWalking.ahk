@@ -13,8 +13,8 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
     
 /*
     With ElementFromPath(path1[, path2, path3...]), we need to supply a comma-separated path that defines the route of tree traversal.
-    This can be either integers (integer n chooses nth child), TypeN (chooses Nth element of Type),
-    or conditions.
+    This can be either an UIA path from UIAViewer, comma-separated integers (integer n chooses nth child), 
+        or TypeN (chooses Nth element of Type), or conditions.
 
     For traversing the tree in any direction we can use WalkTree(path, filterCondition?)
         n: gets the nth child
@@ -26,12 +26,15 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
 
 ; UIA path for the "Edit" MenuItem:
 if VerCompare(A_OSVersion, ">=10.0.22000") ; Windows 11
+    npEl["YABq"].Highlight()
+else
+    npEl["ABq"].Highlight()
+
+; Condition path for the "Edit" MenuItem
+if VerCompare(A_OSVersion, ">=10.0.22000") ; Windows 11
     npEl[{T:33,CN:"Windows.UI.Input.InputSite.WindowClass"}, {T:10,A:"MenuBar"}, {T:11,CN:"Microsoft.UI.Xaml.Controls.MenuBarItem", i:2}].Highlight()
 else
-    npEl[{T:10,A:"MenuBar"}, {T:11,N:"Edit"}].Highlight()
-
-; Equivalent:
-; npEl.ElementFromPath({T:10,A:"MenuBar"}, {T:11,N:"Edit"}).Highlight()
+    npEl[{T:10,A:"MenuBar"}, {T:11,N:"Edit"}].Highlight() ; Equivalent: npEl.ElementFromPath({T:10,A:"MenuBar"}, {T:11,N:"Edit"}).Highlight()
 
 ; This should also get us to the "Edit" MenuItem in Windows 10, but to the Minimize button in Windows 11
 editMenuItem := npEl.ElementFromPath("4,2").Highlight()
