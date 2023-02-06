@@ -3,9 +3,8 @@
 	UIA_Browser implements some methods to help automate browsers with UIAutomation framework.
 
 	Initiate new instance of UIA_Browser with
-		cUIA := UIA_Browser(wTitle="", customNames="")
+		cUIA := UIA_Browser(wTitle="")
 			wTitle: the title of the browser
-			customNames may be used to implement language-specific elements
 		Example: cUIA := UIA_Browser("ahk_exe chrome.exe")
 	
 	Instances for specific browsers may be initiated with UIA_Chrome, UIA_Edge, UIA_Mozilla (arguments are the same as for UIA_Browser).
@@ -112,9 +111,9 @@
 */
 
 class UIA_Chrome extends UIA_Browser {
-	__New(wTitle:="A", customNames:="", maxVersion:="") {
+	__New(wTitle:="") {
 		this.BrowserType := "Chrome"
-		this.InitiateUIA(wTitle, customNames, maxVersion)
+		this.InitiateUIA(wTitle)
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
@@ -160,9 +159,9 @@ class UIA_Chrome extends UIA_Browser {
 }
 
 class UIA_Edge extends UIA_Browser {
-	__New(wTitle:="A", customNames:="", maxVersion:="") {
+	__New(wTitle:="") {
 		this.BrowserType := "Edge"
-		this.InitiateUIA(wTitle, customNames, maxVersion)
+		this.InitiateUIA(wTitle)
 	}
 
 	; Refreshes UIA_Browser.MainPaneElement and returns it
@@ -218,10 +217,10 @@ class UIA_Edge extends UIA_Browser {
 }
 
 class UIA_Mozilla extends UIA_Browser {
-	__New(wTitle:="A", customNames:="", maxVersion:="", javascriptExecutionMethod:="Console") {
+	__New(wTitle:="", javascriptExecutionMethod:="Console") {
 		this.JavascriptExecutionMethod := javascriptExecutionMethod
 		this.BrowserType := "Mozilla"
-		this.InitiateUIA(wTitle, customNames, maxVersion)
+		this.InitiateUIA(wTitle)
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
@@ -349,11 +348,10 @@ class UIA_Mozilla extends UIA_Browser {
 }
 
 class UIA_Browser {
-	InitiateUIA(wTitle:="", customNames:="", maxVersion:="") {
+	InitiateUIA(wTitle:="") {
 		this.BrowserId := WinExist(wTitle)
 		if !this.BrowserId
 			throw TargetError("UIA_Browser: failed to find the browser!", -1)
-		this.CustomNames := (customNames == "") ? {} : customNames
 		this.TextControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Text)
 		this.DocumentControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Document)
 		this.ButtonControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Button)
@@ -364,8 +362,8 @@ class UIA_Browser {
 		this.BrowserElement := UIA.ElementFromHandle(this.BrowserId)
 		this.GetCurrentMainPaneElement()
 	}
-	; Initiates UIA and hooks to the browser window specified with wTitle. customNames can be an object that defines custom CurrentName values for locale-specific elements (such as the name of the URL bar): {URLEditName:"My URL Edit name", TabBarName:"Tab bar name", HomeButtonName:"Home button name", StopButtonName:"Stop button", NewTabButtonName:"New tab button name"}. maxVersion specifies the highest UIA version that will be used (default is up to version 7).
-	__New(wTitle:="", customNames:="", maxVersion:="") { 
+	; Initiates UIA and hooks to the browser window specified with wTitle. 
+	__New(wTitle:="") { 
 		this.BrowserId := WinExist(wTitle)
 		if !this.BrowserId
 			throw TargetError("UIA_Browser: failed to find the browser!", -1)
@@ -374,9 +372,9 @@ class UIA_Browser {
 		this.BrowserType := (wExe = "chrome.exe") ? "Chrome" : (wExe = "msedge.exe") ? "Edge" : InStr(wClass, "Mozilla") ? "Mozilla" : "Unknown"
 		if (this.BrowserType != "Unknown") {
 			this.base := UIA_%(this.BrowserType)%.Prototype
-			this.__New(wTitle, customNames, maxVersion)
+			this.__New(wTitle)
 		} else 
-			this.InitiateUIA(wTitle, customNames, maxVersion)
+			this.InitiateUIA(wTitle)
 	}
 	
 	__Get(member, params) {
