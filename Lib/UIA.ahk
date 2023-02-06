@@ -1448,7 +1448,7 @@ class TypeValidation {
                 throw ValueError("UIA.Property does not contain constant `"" arg "`"", -2)
             return arg is Integer ? arg : Integer(arg)
         } else if arg is String {
-            try return Integer(UIA.Property.%arg%)
+            try return Integer(UIA.Property.%StrReplace(arg, "Cached")%)
             throw ValueError("UIA.Property does not contain value for `"" arg "`"", -2)
         }
         throw TypeError("Property requires parameter with type Integer or String, but received " Type(arg), -2)
@@ -2273,7 +2273,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         ; PreOrder
         if scope&1 && this.ValidateCondition(condition, true) && --index = 0
             return this
-        if scope > 2 {
+        if scope > 1 {
             if out := order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this)
                 return out
             throw TargetError("An element matching the condition was not found", -1)
@@ -2389,7 +2389,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         ; PreOrder
         if scope&1 && this.ValidateCondition(condition, true)
             foundElements.Push(this)
-        if scope > 2
+        if scope > 1
             return (order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this), foundElements)
         PreOrderFirstToLastRecursiveFind(el) {
             for child in el.CachedChildren {
@@ -2617,7 +2617,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Internal method: checks whether this element matches the condition
     ValidateCondition(cond, cached:=False) {
-        local mm := 3, cs := 1, notCond := 0, k, v, result
+        local mm := 3, cs := 1, notCond := 0, k, v, result, i, val
         switch Type(cond) {
             case "Object":
                 mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : 3
@@ -2638,17 +2638,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 throw ValueError("Condition of type " Type(cond) " is an invalid ValidateCondition condition", -1, "The condition can be an Object or Array")
         }
         for k, v in cond {
-            if IsObject(v) { 
-                if (k = "not" ? this.ValidateCondition(v, cached) : !this.ValidateCondition(v, cached))
-                    return False
+            try k := UIA.TypeValidation.Property(k)
+            if !(IsInteger(k) && k >= 10000) {
+                if IsObject(v) { 
+                    if (k = "not" ? this.ValidateCondition(v, cached) : !this.ValidateCondition(v, cached))
+                        return False
+                }
                 continue
-            }
-            try k := IsInteger(k) ? Integer(k) : UIA.Property.%k%
-            if !(IsSet(k) && IsInteger(k) && k >= 10000) {
-                if cached && InStr(k, "Cached") && UIA.Property.HasOwnProp(k := StrReplace(k, "Cached"))
-                    k := UIA.Property.%k%
-                else
-                    continue
             }
             if k = 30003 {
                 if !IsInteger(v) {
@@ -2660,15 +2656,35 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             catch { ; If caching is used, should this throw an error to notify the user of a missing cache property?
                 result := 0
             } else {
-                switch mm, False {
-                    case "RegEx":
-                        result := RegExMatch(currentValue, v)
-                    case 1:
-                        result := ((cs && SubStr(currentValue, 1, StrLen(v)) == v) || (!cs && SubStr(currentValue, 1, StrLen(v)) = v))
-                    case 2:
-                        result := InStr(currentValue, v, cs)
+                switch UIA.PropertyVariantType[k] {
+                    case 8:
+                        switch mm, False {
+                            case "RegEx":
+                                result := RegExMatch(currentValue, v)
+                            case 1:
+                                result := ((cs && SubStr(currentValue, 1, StrLen(v)) == v) || (!cs && SubStr(currentValue, 1, StrLen(v)) = v))
+                            case 2:
+                                result := InStr(currentValue, v, cs)
+                            default:
+                                result := (cs ? currentValue == v : currentValue = v)
+                        }
+                    case 3,5,11:
+                        result := currentValue == v
                     default:
-                        result := (cs ? currentValue == v : currentValue = v)
+                        if Type(v) = "Object"
+                            v := v.OwnProps(), currentValue := currentValue is Array ? currentValue : currentValue.OwnProps()
+                        if not v is Array
+                            throw ValueError("Invalid PropertyId " k, -1)
+                        for i, val in v {
+                            result := 1
+                            try {
+                                if currentValue[i] == val
+                                    continue
+                            } catch {
+                                result := 0
+                                break
+                            }
+                        }
                 }
             }
             if notCond ? result : !result
