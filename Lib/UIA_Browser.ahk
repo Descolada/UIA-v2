@@ -318,6 +318,7 @@ class UIA_Mozilla extends UIA_Browser {
 			try {
 				dialogEl := alertEl.FindElement({AutomationId:"commonDialogWindow"})
 				OKBut := dialogEl.FindFirst(this.ButtonControlCondition)
+				break
 			} catch
 				Sleep 100
 		}
@@ -565,12 +566,17 @@ class UIA_Browser {
 	
 	; Gets text from an alert-box created with for example javascript:alert('message')
 	GetAlertText(closeAlert:=True, timeOut:=3000) {
-		local startTime := A_TickCount, text
+		local startTime := A_TickCount, text := ""
 		if !this.HasOwnProp("DialogTreeWalker")
 			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		startTime := A_TickCount
-		while (!(IsObject(dialogEl := this.DialogTreeWalker.GetLastChildElement(this.BrowserElement)) && IsObject(OKBut := dialogEl.FindFirst(this.ButtonControlCondition))) && ((A_tickCount - startTime) < timeOut))
+		while ((A_tickCount - startTime) < timeOut) {
+			try {
+				if IsObject(dialogEl := this.DialogTreeWalker.GetLastChildElement(this.BrowserElement)) && IsObject(OKBut := dialogEl.FindFirst(this.ButtonControlCondition))
+					break
+			}
 			Sleep 100
+		}
 		try
 			text := this.BrowserType = "Edge" ? dialogEl.FindFirstWithOptions(this.TextControlCondition, 2, dialogEl).Name : dialogEl.FindFirst(this.TextControlCondition).Name
 		if closeAlert {
