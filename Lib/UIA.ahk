@@ -838,18 +838,25 @@ static CreateTreeWalker(pCondition) {
  * Creates a cache request. After obtaining the IUIAutomationCacheRequest interface, use its methods to specify properties and control patterns to be cached when a UI Automation element is obtained.
  * @param properties Optional: an array containing properties that will be added to the CacheRequest
  * @param patterns Optional: an array containing patterns that will be added to the CacheRequest
- * @param scope Optional: set the TreeScope for the CacheRequest (one of UIA.TreeScope values)
- * @param mode Optional: set the AutomationElementMode for the CacheRequest (one of UIA.AutomationElementMode values)
- * @param filter Optional: a condition for caching elements
+ * @param scope Optional: set the TreeScope for the CacheRequest (one of UIA.TreeScope values). Default is UIA.TreeScope.Descendants
+ * @param mode Optional: set the AutomationElementMode for the CacheRequest (one of UIA.AutomationElementMode values). Default is Full.
+ * @param filter Optional: a condition for caching elements. Default is ControlView.
  */
 static CreateCacheRequest(properties?, patterns?, scope?, mode?, filter?) {
 	local cacheRequest, v
     if cacheRequest := (ComCall(20, this, "ptr*", &cacheRequest := 0), cacheRequest?UIA.IUIAutomationCacheRequest(cacheRequest):"") {
         if IsSet(properties) {
-            for v in properties
-                cacheRequest.AddProperty(v)
+            if properties is Array && properties[1] is String {
+                for v in properties
+                    cacheRequest.AddProperty(v)
+            } else if IsObject(properties)
+                cacheRequest.AddPropertiesFromCondition(properties)
+            else
+                throw TypeError("Expected properties argument of type Array or Object, but got " Type(properties), -1)
         }
         if IsSet(patterns) {
+            if not patterns is Array
+                throw TypeError("Expected patterns argument of type Array, but got " Type(properties), -1)
             for v in patterns
                 cacheRequest.AddPattern(v)
         }
@@ -1385,7 +1392,7 @@ class TypeValidation {
                 return val is Integer ? val : Integer(val)
             }
             if val is String {
-                try return Integer(UIA.%method%.%val%)
+                try return UIA.%method%.%val%
                 throw ValueError("UIA." method " does not contain value for `"" val "`"", -2)
             }
             throw TypeError(method " requires parameter with type Integer or String, but received " Type(val), -2)
@@ -1436,7 +1443,7 @@ class TypeValidation {
                 throw ValueError("UIA.TreeScope does not contain constant `"" arg "`"", -2)
             return arg is Integer ? arg : Integer(arg)
         } else if arg is String {
-            try return Integer(UIA.TreeScope.%arg%)
+            try return UIA.TreeScope.%arg%
             throw ValueError("UIA.TreeScope does not contain value for `"" arg "`"", -2)
         }
         throw TypeError("TreeScope requires parameter with type Integer or String, but received " Type(arg), -2)
@@ -1448,7 +1455,7 @@ class TypeValidation {
                 throw ValueError("UIA.Property does not contain constant `"" arg "`"", -2)
             return arg is Integer ? arg : Integer(arg)
         } else if arg is String {
-            try return Integer(UIA.Property.%StrReplace(arg, "Cached")%)
+            try return UIA.Property.%RegexReplace(arg, "^(Cached|Current)",,,1)%
             throw ValueError("UIA.Property does not contain value for `"" arg "`"", -2)
         }
         throw TypeError("Property requires parameter with type Integer or String, but received " Type(arg), -2)
@@ -1460,7 +1467,7 @@ class TypeValidation {
                 throw ValueError("UIA.Pattern does not contain constant `"" arg "`"", -2)
             return arg is Integer ? arg : Integer(arg)
         } else if arg is String {
-            try return Integer(UIA.Pattern.%StrReplace(arg, "Pattern")%)
+            try return UIA.Pattern.%StrReplace(arg, "Pattern")%
             throw ValueError("UIA.Pattern does not contain value for `"" arg "`"", -2)
         }
         throw TypeError("Pattern requires parameter with type Integer or String, but received " Type(arg), -2)
@@ -1472,7 +1479,8 @@ class TypeValidation {
                 throw ValueError("UIA.TreeTraversalOptions does not contain constant `"" arg "`"", -2)
             return arg is Integer ? arg : Integer(arg)
         } else if arg is String {
-            try return Integer(UIA.TreeTraversalOptions.%arg%)
+            try return UIA.TreeTraversalOptions.%arg%
+            try return UIA.TreeTraversalOptions.%arg "Order"%
             throw ValueError("UIA.TreeTraversalOptions does not contain value for `"" arg "`"", -2)
         }
         throw TypeError("Invalid type provided for UIA.TreeTraversalOptions", -2, "Allowed types are Integer and String, but was provided type " Type(arg))
@@ -1677,6 +1685,25 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 			return (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
 		}
 	}
+    GetCachedChildren(scope:=2) {
+        local children
+        if scope&4 {
+            children := []
+            AppendChildren(this)
+        } else if scope&2 {
+            children := this.CachedChildren
+        }
+        if scope&1
+            children.Push(this)
+        return children
+        AppendChildren(el) {
+            subchildren := el.CachedChildren
+            for child in subchildren {
+                children.Push(child)
+                AppendChildren(child)
+            }
+        }
+    }
     ; Returns the parent of the element
     Parent => UIA.TreeWalkerTrue.GetParentElement(this)
     ; Retrieves from the cache the parent of this UI Automation element.
@@ -2153,10 +2180,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         local withOptions
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest, &index)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
-        if !((withOptions := startingElement || order) && startingElement)
+        if index < 0 ; Convert negative index to LastToFirst order
+            index := -index, order := order | 2
+        withOptions := order && UIA.IsIUIAutomationElement7Available
+        if withOptions && !startingElement ; If FindFirstWithOptions is used but startingElement isn't set, start from this element.
             startingElement := this
-        if index = -1 && UIA.IsIUIAutomationElement7Available
-            index := 1, order := order | 2, withOptions := True
         if !InStr(Type(condition), "Condition") {
             /*
                 If MatchMode is 1:
@@ -2171,21 +2199,20 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                         ComCall(113, startingElement, "int", scope, "ptr", IUIAcondition, "ptr", cacheRequest, "int", order, "ptr", this, "ptr*", &found := 0) ; FindAllWithOptionsBuildCache
                     else 
                         ComCall(8, this, "int", scope, "ptr", IUIAcondition, "ptr", cacheRequest, "ptr*", &found := 0) ; FindAllBuildCache
+                    unfilteredEls := found ? UIA.IUIAutomationElementArray(found).ToArray() : []
                 } else {
-                    if withOptions
-                        ComCall(111, startingElement, "int", scope, "ptr", IUIAcondition, "int", order, "ptr", this, "ptr*", &found := 0) ; FindAllWithOptions
-                    else
-                        ComCall(6, this, "int", scope, "ptr", IUIAcondition, "ptr*", &found := 0) ; FindAll
+                    ; If no cacheRequest was specified, then speed-optimize the search by caching
+                    ; the required properties, and searching through cached elements.
+                    cacheRequest := UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)
+                    unfilteredEls := this.BuildUpdatedCache(cacheRequest).GetCachedChildren(scope)
                 }
-                unfilteredEls := found ? UIA.IUIAutomationElementArray(found).ToArray() : []
-                if index < 0 {
-                    index := -index
+                if order&2 && !withOptions {
                     Loop (len := unfilteredEls.Length)
-                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index
+                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, 1) && ++counter = index
                             return unfilteredEls[len-A_Index+1]
                 } else {
                     for el in unfilteredEls
-                        if el.ValidateCondition(condition, cacheRequest ? 1 : 0) && ++counter = index
+                        if el.ValidateCondition(condition, 1) && ++counter = index
                             return el
                 }
                 throw TargetError("An element matching the condition was not found", -1, "No element passed validation after FindAll")
@@ -2194,10 +2221,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             condition := IUIAcondition
             ; Were any conditions encountered where we need to filter conditions?
             if index != 1 {
-                try return (cacheRequest ? (withOptions ? startingElement.FindAllWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
-                                : this.FindAllBuildCache(cacheRequest, condition, scope))
-                            : (withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
-                                : this.FindAll(IUIAcondition, scope)))[index]
+                try {
+                    unfilteredEls := (cacheRequest ? (withOptions ? startingElement.FindAllWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
+                        : this.FindAllBuildCache(cacheRequest, condition, scope))
+                        : (withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
+                        : this.FindAll(IUIAcondition, scope)))
+                    return unfilteredEls[order&2 && !withOptions ? unfilteredEls.Length + 1 - index : index]
+                } 
                 catch IndexError
                     throw TargetError("An element matching the condition was not found", -1, "FindAll index " index " was invalid")
             }
@@ -2334,13 +2364,28 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindElements(condition, scope := 4, order:=0, startingElement:=0, cacheRequest:=0) {
+        local withOptions := order && UIA.IsIUIAutomationElement7Available
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
-        if (withOptions := startingElement || order) && !startingElement
+        if withOptions && !startingElement ; If FindAllWithOptions is used but startingElement isn't set, start from this element.
             startingElement := this
         if !InStr(Type(condition), "Condition") {
-            IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=False), filteredEls := []
-            if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElements instead
+            IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=False), unfilteredEls := [], filteredEls := []
+            if nonUIAEncountered = 1 && !cacheRequest {
+                cacheRequest := UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)
+                unfilteredEls := this.BuildUpdatedCache(cacheRequest).GetCachedChildren(scope)
+                if order&2 && !withOptions {
+                    Loop (len := unfilteredEls.Length)
+                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, 1)
+                            filteredEls.Push(unfilteredEls[len-A_Index+1])
+                } else {
+                    for el in unfilteredEls {
+                        if el.ValidateCondition(condition, 1)
+                            filteredEls.Push(el)
+                    }
+                }
+                return filteredEls
+            } else if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElements instead
                 return this.FindCachedElements(condition, scope, order, startingElement)
             unfilteredCondition := condition, condition := IUIAcondition
         }
@@ -2357,9 +2402,15 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         found := found ? UIA.IUIAutomationElementArray(found).ToArray() : []
         if nonUIAEncountered = 1 {
-            for el in found {
-                if el.ValidateCondition(unfilteredCondition, cacheRequest ? 1 : 0)
-                    filteredEls.Push(el)
+            filteredEls := []
+            if order & 2 && !withOptions {
+                Loop (len := found.Length)
+                    if found[len-A_Index+1].ValidateCondition(unfilteredCondition, cacheRequest ? 1 : 0)
+                        filteredEls.Push(found[len-A_Index+1])
+            } else {
+                for el in found
+                    if el.ValidateCondition(unfilteredCondition, cacheRequest ? 1 : 0)
+                        filteredEls.Push(el)
             }
             found := filteredEls
         }
@@ -2658,16 +2709,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             } else {
                 switch UIA.PropertyVariantType[k] {
                     case 8:
-                        switch mm, False {
-                            case "RegEx":
-                                result := RegExMatch(currentValue, v)
-                            case 1:
-                                result := ((cs && SubStr(currentValue, 1, StrLen(v)) == v) || (!cs && SubStr(currentValue, 1, StrLen(v)) = v))
-                            case 2:
-                                result := InStr(currentValue, v, cs)
-                            default:
-                                result := (cs ? currentValue == v : currentValue = v)
-                        }
+                        result := CompareStrings(currentValue, v, mm, cs)
                     case 3,5,11:
                         result := currentValue == v
                     default:
@@ -2675,8 +2717,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                             v := v.OwnProps(), currentValue := currentValue is Array ? currentValue : currentValue.OwnProps()
                         if not v is Array
                             throw ValueError("Invalid PropertyId " k, -1)
+                        result := 1
                         for i, val in v {
-                            result := 1
                             try {
                                 if currentValue[i] == val
                                     continue
@@ -2691,6 +2733,21 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 return False
         }
         return True
+
+        CompareStrings(str1, str2, matchmode, casesense) {
+            if not str1 is String
+                str1 := String(str1)
+            if not str2 is String
+                str2 := String(str2)
+            if matchmode = "RegEx"
+                return RegExMatch(str1, str2)
+            else if matchmode = 1
+                return ((casesense && SubStr(str1, 1, StrLen(str2)) == str2) || (!casesense && SubStr(str1, 1, StrLen(str2)) = str2))
+            else if matchmode = 2
+                return InStr(str1, str2, casesense)
+            else
+                return (casesense ? str1 == str2 : str1 = str2)
+        }
     }
 
     ; Sets the keyboard focus to this UI Automation element.
@@ -4040,6 +4097,21 @@ class IUIAutomationCacheRequest extends UIA.IUIAutomationBase {
 			return (ComCall(10, this, "int*", &mode := 0), mode)
 		}
         set => ComCall(11, this, "int", UIA.TypeValidation.AutomationElementMode(Value))
+    }
+
+    ; Extracts all properties from an object condition and adds them to the CacheRequest
+    AddPropertiesFromCondition(condition) {
+        local value, prop
+        if Type(condition) = "Object"
+            condition := condition.OwnProps()
+        for prop, value in condition {
+            try prop := UIA.TypeValidation.Property(prop)
+            if !(IsInteger(prop) && prop > 10000) {
+                if IsObject(value)
+                    this.AddPropertiesFromCondition(value)
+            } else 
+                this.AddProperty(prop)
+        }
     }
 }
 
