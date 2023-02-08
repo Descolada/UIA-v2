@@ -577,7 +577,7 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
                     nonUIAEncountered := True, sanitizeMM := True
             } else { ; If creating a "pure" UIA condition, allow only Exact and Substring matchmodes
                 if !((mm = 3) || (mm = 2))
-                    throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions. MatchMode 1 and RegEx are allowed with FindFirst, FindAll, and TreeWalking methods.")
+                    throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions.", -1, "MatchMode 1 and RegEx are allowed with FindElement, FindElements, and ElementFromPath methods.")
             }
             flags := ((mm = 3 ? 0 : 2) | (!cs)) || obj.DeleteProp("flags") || 0
             count := ObjOwnPropCount(obj), obj := obj.OwnProps()
@@ -2191,6 +2191,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     Use MatchMode 2, but then return all the results and filter using the condition
                 If MatchMode is RegEx:
                     Find all !"" elements, then filter using the condition
+                If either of these is encountered, nonUIAEncountered is set to 1. 
+                If a CachedProperty is encountered, nonUIAEncountered is set to 2 and a cached search is used instead.
             */
             IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=0), counter := 0
             if nonUIAEncountered = 1 { ; Some conditions need validating: MatchMode 1 or RegEx was used
@@ -2203,6 +2205,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 } else {
                     ; If no cacheRequest was specified, then speed-optimize the search by caching
                     ; the required properties, and searching through cached elements.
+                    ; And although it looks like if adding an exception for a set startingElement
+                    ; and using FindAllWithOptions from startingElement should give a speed improvement,
+                    ; it actually doesn't  affect the search speed significantly, probably because 
+                    ; the cache search is just so much faster.
                     cacheRequest := UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)
                     unfilteredEls := this.BuildUpdatedCache(cacheRequest).GetCachedChildren(scope)
                 }
