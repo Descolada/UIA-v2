@@ -11,6 +11,9 @@ cacheRequest := UIA.CreateCacheRequest(["Type", "Name", "Value"],, "Subtree")
     cacheRequest.AddProperty("Type") 
     cacheRequest.AddProperty("Name")
     cacheRequest.AddProperty("Value")
+
+    ; Or like this:
+    cacheRequest := UIA.CreateCacheRequest({properties:["Type", "Name", "Value"], scope:"Subtree"})
 */
 
 Run "notepad.exe"
