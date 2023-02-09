@@ -606,6 +606,11 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
                         catch {
                             if InStr(v, "Cached")
                                 return nonUIAEncountered := 2
+                            else if RegExMatch(v, "\d{5}", &match:="") {
+                                try v := UIA.Type[Integer(match[])]
+                                catch 
+                                    throw ValueError("Type '" v '" in a non-existant type!', -1)
+                            }
                             throw ValueError("Type '" v '" in a non-existant type!', -1)
                         }
                     }
@@ -846,12 +851,24 @@ static CreateCacheRequest(properties?, patterns?, scope?, mode?, filter?) {
 	local cacheRequest, v
     if cacheRequest := (ComCall(20, this, "ptr*", &cacheRequest := 0), cacheRequest?UIA.IUIAutomationCacheRequest(cacheRequest):"") {
         if IsSet(properties) {
+            if Type(properties) = "Object" {
+                if properties.HasOwnProp("filter")
+                    filter := properties.DeleteProp("filter")
+                if properties.HasOwnProp("mode")
+                    mode := properties.DeleteProp("mode")
+                if properties.HasOwnProp("scope")
+                    scope := properties.DeleteProp("scope")
+                if properties.HasOwnProp("patterns")
+                    patterns := properties.DeleteProp("patterns")
+                if properties.HasOwnProp("properties")
+                    properties := properties.DeleteProp("properties")
+            }
             if properties is Array && properties[1] is String {
                 for v in properties
                     cacheRequest.AddProperty(v)
-            } else if IsObject(properties)
+            } else if IsObject(properties) {
                 cacheRequest.AddPropertiesFromCondition(properties)
-            else
+            } else
                 throw TypeError("Expected properties argument of type Array or Object, but got " Type(properties), -1)
         }
         if IsSet(patterns) {
@@ -1629,12 +1646,17 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             return this.GetPropertyValue(UIA.Property.%NewName%)
         else {
             for pName, pVal in UIA.Pattern.OwnProps()
-                if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") { ; Skip LegacyIAccessible to avoid name collisions (eg Select)
-                    if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : ""
-                        return this.%pName%Pattern.%tryName%
+                if IsInteger(pVal) && IsAlnum(pName) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") { ; Skip LegacyIAccessible to avoid name collisions (eg Select)
+                    if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : "" {
+                        try return this.%pName%Pattern.%tryName%
+                        catch Any as err {
+                            if this.Is%pName%PatternAvailable
+                                throw %Type(err)%(err.Message, -1, err.Extra)
+                        }
+                    }
                 }
             ; Since LegacyIAccessible was skipped, then try LegacyIAccessible also
-            if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : ""
+            if (tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : "") && this.IsLegacyIAccessiblePatternAvailable
                 return this.LegacyIAccessiblePattern.%tryName%
             throw PropertyError("Property " Name " not found in " this.__Class " Class.",-1,Name)
         }
@@ -1645,12 +1667,17 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if this.base.HasOwnProp(NewName)
             return this.%NewName% := Value
         for pName, pVal in UIA.Pattern.OwnProps()
-            if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && pName != "LegacyIAccessible" {
-                if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : ""
-                    return this.%pName%Pattern.%tryName% := Value
+            if IsInteger(pVal) && IsAlnum(pName) && UIA.HasProp("IUIAutomation" pName "Pattern") && pName != "LegacyIAccessible" {
+                if tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomation%pName%Pattern.Prototype.HasProp(Name) ? Name : "" {
+                    try return this.%pName%Pattern.%tryName% := Value
+                    catch Any as err {
+                        if this.Is%pName%PatternAvailable
+                            throw %Type(err)%(err.Message, -1, err.Extra)
+                    }
+                }
             }
             ; Since LegacyIAccessible was skipped, then try LegacyIAccessible also
-        if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : ""
+        if (tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(NewName) ? NewName : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasProp(Name) ? Name : "") && this.IsLegacyIAccessiblePatternAvailable
             return this.LegacyIAccessiblePattern.%tryName% := Value
         throw PropertyError("This class does not support adding properties")
     }
@@ -1664,12 +1691,16 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if this.base.HasOwnProp(NewName := StrReplace(Name, "Current",,,,1))
             return this.%NewName%(Params*)
         for pName, pVal in UIA.Pattern.OwnProps()
-            if IsInteger(pVal) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") {
+            if IsInteger(pVal) && IsAlpha(pName) && UIA.HasProp("IUIAutomation" pName "Pattern") && (pName != "LegacyIAccessible") {
                 if (tryName := UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomation%pName%Pattern.Prototype.HasMethod(NewName) ? NewName : "") {
-                    return this.%pName%Pattern.%tryName%(Params*)
+                    try return this.%pName%Pattern.%tryName%(Params*)
+                    catch Any as err {
+                        if this.Is%pName%PatternAvailable
+                            throw %Type(err)%(err.Message, -1, err.Extra)
+                    }
                 }
             }
-            if tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(NewName) ? NewName : ""
+            if (tryName := UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(Name) ? Name : UIA.IUIAutomationLegacyIAccessiblePattern.Prototype.HasMethod(NewName) ? NewName : "") && this.IsLegacyIAccessiblePatternAvailable
                 return this.LegacyIAccessiblePattern.%tryName%(Params*)
         throw MethodError("Method " Name " not found in " this.__Class " Class.",-1,Name)
     }
@@ -2145,8 +2176,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Checks whether an element that matches the specified condition exists within the provided TreeScope.
      * If no element is found, then 0 is returned.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
-     *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
+     *     See a more detailed explanation under FindElement condition argument.  
+     *     Default MatchMode is "Exact", and CaseSense "On".  
+     *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).  
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder. [requires Windows 10 version 1703+]
@@ -2165,9 +2197,19 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Retrieves the first child or descendant element that matches the specified condition.
      * If no element is found, then TargetError is thrown.
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
-     *     Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
+     * @param condition The condition to filter with. 
+     * 
+     * * A single property condition consists of an object where the key is the property name, and value is the property value: `{Name:"Test"}` => Name property must match "Test" exactly  
+     * * Everything inside {} is an "and" condition: `{Type:"Button", Name:"Something"}` => Name must match "Something" AND Type must be Button  
+     * * Everything inside [] is an "or" condition: `[{Name:"Test"}, {Name:"Something"}]` => Name must match "Test" OR Name must match "Something"  
+     * * Object key "not" creates a not condition: `{not:{Type:"Button"}}` => everything except Type Button  
+     *   
+     * * MatchMode key (short form: mm) can be one of UIA.MatchMode values: "StartsWith", "SubString", "Exact", "RegEx". Default MatchMode is "Exact".  
+     * MatchMode applies to all string-type conditions (except Type), multiple different MatchModes are allowed if used in separate sub-conditions.  
+     * Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).  
+     * * CaseSense key (short form: cs) defines case-sense: "On"/True or "Off"/False. Default is "On".
+     *     
+     * * The condition object additionally supports named parameters: {Type:"Button", index:-1} => last element with Type Button
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder. [requires Windows 10 version 1703+]
@@ -2259,8 +2301,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * CachedElementExist can be used to find an element inside a cached tree, using only cached properties.
      * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
      * If no element is found, then 0 is returned.
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.  
+     * Default MatchMode is "Exact", and CaseSense "On".  
+     * See a more detailed explanation under FindElement condition argument.  
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder.
@@ -2280,8 +2323,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * FindCachedElement can be used to find an element inside a cached tree, using only cached properties.
      * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
      * If no element is found, then a TargetError is thrown.
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.  
+     * Default MatchMode is "Exact", and CaseSense "On".  
+     * See a more detailed explanation under FindElement condition argument.  
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder.
@@ -2361,8 +2405,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Returns all UI Automation elements that satisfy the specified condition.
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.  
+     * Default MatchMode is "Exact", and CaseSense "On".  
+     * See a more detailed explanation under FindElement condition argument.  
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder. [requires Windows 10 version 1703+]
      * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
@@ -2426,8 +2471,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Returns all UI Automation elements that satisfy the specified condition inside a cached tree, checking only cached properties.
      * This is not a UIA native method: make sure the cached tree is reasonably small, otherwise the performance will suffer.
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
-     *     Default MatchMode is "Exact", and CaseSense "On".
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.  
+     * Default MatchMode is "Exact", and CaseSense "On".  
+     * See a more detailed explanation under FindElement condition argument.  
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder.
      * @param startingElement Optional: element with which to begin the search
@@ -2492,6 +2538,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     /**
      * Wait element to exist.
      * @param condition The condition to filter with. The condition object additionally supports named parameters.
+     * See a more detailed explanation under FindElement condition argument.  
      * @param timeOut Waiting time for element to appear in ms. Default: indefinite wait
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
@@ -2513,7 +2560,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Wait element to not exist (disappear).
-     * @param condition The condition to filter with. The condition object additionally supports named parameters.
+     * @param condition The condition to filter with. The condition object additionally supports named parameters.  
+     * See a more detailed explanation under FindElement condition argument.  
      * @param timeout Waiting time for element to disappear. Default: indefinite wait
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
