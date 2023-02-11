@@ -22,11 +22,11 @@ explorerEl := UIA.ElementFromHandle("A")
 if !explorerEl
     ExitApp
 listEl := explorerEl.FindElement({Type:"List"})
-if !listItem := explorerEl.FindElement({Name:"System32", Type:"ListItem"}) {
+if !listItem := explorerEl.ElementExist({Name:"System32", Type:"ListItem"}) {
     if "OK" != MsgBox("Press OK to scroll until 'System32' is in view and then select it.")
         ExitApp
     Loop {
-        if listItem := explorerEl.FindElement({Name:"System32", Type:"ListItem"}) {
+        if listItem := explorerEl.ElementExist({Name:"System32", Type:"ListItem"}) {
             listItem.AddToSelection()
             break
         }
