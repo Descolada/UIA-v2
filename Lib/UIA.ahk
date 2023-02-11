@@ -522,6 +522,11 @@ static Filter(elementArray, function) {
 }
 
 /**
+ * Clears all highlights created by Element.Highlight
+ */
+static ClearAllHighlights() => UIA.IUIAutomationElement.Prototype.Highlight("clearall")
+
+/**
  * Create a property condition from an AHK object
  * @param condition Object or Array that contains property conditions.  
  * * A single property condition consists of an object where the key is the property name, and value is the property value:  
@@ -1601,11 +1606,6 @@ class IUIAutomationBase {
     Microsoft documentation: https://docs.microsoft.com/en-us/windows/win32/api/uiautomationclient/nn-uiautomationclient-iuiautomationelement
 */
 class IUIAutomationElement extends UIA.IUIAutomationBase {
-    __New(params*) {
-        this.DefineProp("HighlightGui", {Value:[]})
-        super.__New(params*)
-    }
-
     /**
      * Enables array-like use of UIA elements to access child elements.
      * If value is an integer then the nth corresponding child will be returned.
@@ -2184,10 +2184,21 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     Highlight(showTime:=unset, color:="Red", d:=2) {
         local _, r, i, loc, x1, y1, w1, h1
-        if (!IsSet(showTime) && this.HighlightGui.Length) || (IsSet(showTime) && showTime = "clear") {
-                for _, r in this.HighlightGui
+        static Guis := Map()
+        if IsSet(showTime) && showTime = "clearall" {
+            for key, prop in Guis {
+                for r in prop
                     r.Destroy()
-                this.HighlightGui := []
+            }
+            Guis := Map()
+            return this
+        }
+        if !Guis.Has(this.ptr)
+            Guis[this.ptr] := []
+        if (!IsSet(showTime) && Guis[this.ptr].Length) || (IsSet(showTime) && showTime = "clear") {
+                for r in Guis[this.ptr]
+                    r.Destroy()
+                Guis.Delete(this.ptr)
                 return this
         } else if !IsSet(showTime)
             showTime := 2000
@@ -2197,7 +2208,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             if !IsSet(loc) || !IsObject(loc)
                 return this
         Loop 4 {
-            this.HighlightGui.Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
+            Guis[this.ptr].Push(Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000"))
         }
         Loop 4 {
             i:=A_Index
@@ -2205,8 +2216,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             , y1:=(i=3 ? loc.b : loc.t-d)
             , w1:=(i=1 or i=3 ? (loc.r-loc.l)+2*d : d)
             , h1:=(i=2 or i=4 ? (loc.b-loc.t)+2*d : d)
-            this.HighlightGui[i].BackColor := color
-            this.HighlightGui[i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
+            Guis[this.ptr][i].BackColor := color
+            Guis[this.ptr][i].Show("NA x" . x1 . " y" . y1 . " w" . w1 . " h" . h1)
         }
         if showTime > 0 {
             Sleep(showTime)
