@@ -1652,8 +1652,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                                 el := ""
                         }
                     } catch {
-                        try el := el.CachedChildren[param < 0 ? arr.Length+param+1 : param]
-                        catch
+                        try {
+                            arr := el.CachedChildren
+                            el := arr[param < 0 ? arr.Length+param+1 : param]
+                        } catch
                             el := ""
                     }
                 } else if param is String {
@@ -2707,6 +2709,62 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     /**
+     * Tries to get a cached element from a path. If no element is found, an IndexError is thrown.  
+     * This method uses only cached elements and cached properties to perform the search.  
+     * `CachedElementFromPath(path1[, path2, ...])`  
+     * 
+     * Paths can be:
+     * 1. Comma-separated numeric path that defines which path to travel down the tree. In addition
+     *     to integer values, or TypeN which selects the nth occurrence of Type.  
+     *     Eg. `Element.ElementFromPath("3,2")` => selects Elements third childs second child  
+     *         `Element.ElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
+     *
+     * 2. UIA path copied from UIAViewer.  
+     *     Eg. `Element.ElementFromPath("bAx3")`
+     *
+     * 3. A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.  
+     *        Eg. `Element.ElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
+     *
+     * @returns {UIA.IUIAutomationElement}
+     */
+    CachedElementFromPath(paths*) {
+        local el := this, _, path, subpath
+        for _, path in paths {
+            if IsObject(path) {
+                try el := el.FindCachedElement(path, 2)
+                catch
+                    el := ""
+            } else if IsInteger(path) {
+                try {
+                    arr := el.CachedChildren
+                    el := arr[path < 0 ? arr.Length+path+1 : path]
+                } catch
+                    el := ""
+            } else if path is String {
+                maybeEl := ""
+                for subpath in StrSplit(path, "|") {
+                    try {
+                        if InStr(subpath, ".") || InStr(subpath, ",")
+                            maybeEl := el.CachedElementFromPath(StrSplit(StrReplace(subpath, ".", ","), ",")*)
+                        else if RegexMatch(subpath, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
+                            try maybeEl := el.FindCachedElement({Type:m[1], i:m[2]}, 2)
+                        } else if !(subpath ~= ",\.+-")
+                            maybeEl := el.CachedElementFromPath(UIA.DecodePath(subpath)*)
+                        else
+                            continue
+                        break ; no errors encountered means that match was found
+                    }
+                }
+                el := maybeEl
+            } else
+                throw TypeError("Invalid item type at index " _, -1)
+            if !el
+                throw IndexError("Invalid index/condition at index " _, -1)
+        }
+        return el
+    }
+
+    /**
      * Checks whether an element exists at a path and returns the element if one is found.
      * If no element is found, 0 is returned.
      * `ElementFromPathExist(path1[, path2, ...])`
@@ -2727,6 +2785,23 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     ElementFromPathExist(paths*) {
         try return this[paths*]
+        catch IndexError
+            return 0
+        return 0
+    }
+
+    /**
+     * Checks whether a cached element exists at a path and returns the cached element if one is found.  
+     * This method uses only cached elements and cached properties to perform the search.  
+     * If no element is found, 0 is returned.
+     * 
+     * @param paths Either an UIA path, numeric path, or condition path.  
+     * See longer explanation under CachedElementFromPath
+     * 
+     * @returns {UIA.IUIAutomationElement}
+     */
+    CachedElementFromPathExist(paths*) {
+        try return this.CachedElementFromPath(paths*)
         catch IndexError
             return 0
         return 0
