@@ -2050,6 +2050,70 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     DumpAll(delimiter:=" ", maxDepth:=-1) => this.Dump(5, delimiter, maxDepth)
 
     /**
+     * Returns an UIA path leading to the target element.  
+     * This path consists of Type and index information.
+     * @param targetEl The element the path will lead to from this element
+     * @param cached Whether this element contains a cached tree that should be used for the search.
+     * Since UIA path requires Type information, the Type should be cached in the tree.
+     * @returns {String}
+     */
+    GetUIAPath(targetEl, cached := False) => UIA.EncodePath(this.GetConditionPath(targetEl, cached))
+    /**
+     * Returns an array of conditions consisting of Type and index information, defining the path leading to the target element.
+     * @param targetEl The element the path will lead to from this element
+     * @param cached Whether this element contains a cached tree that should be used for the search.
+     * Since the condition path requires Type information, the Type should be cached in the tree.
+     * @returns {Array}
+     */
+    GetConditionPath(targetEl, cached := False) {
+        cachedThis := cached ? this : this.BuildUpdatedCache(UIA.CreateCacheRequest(["Type"],,5))
+        numPath := cachedThis.GetNumericPath(targetEl, true)
+        conditionPath := []
+        Loop numPath.Length {
+            children := cachedThis.CachedChildren, targetIndex := numPath[A_index], sameTypeCount := 0, targetTypeIndex := 0
+            targetType := children[targetIndex].CachedType
+            for i, child in children {
+                if child.CachedType == targetType
+                    sameTypeCount++
+                if i == targetIndex
+                    targetTypeIndex := sameTypeCount
+            }
+            if targetTypeIndex = 1
+                conditionPath.Push({Type:targetType})
+            else if targetTypeIndex = sameTypeCount
+                conditionPath.Push({Type:targetType, i:-1})
+            else
+                conditionPath.Push({Type:targetType, i:targetTypeIndex})
+            cachedThis := children[targetIndex]
+        }
+        return conditionPath
+    }
+    /**
+     * Returns an array of integers defining the numeric path leading to the target element.
+     * @param targetEl The element the path will lead to from this element
+     * @param cached Whether this element contains a cached tree that should be used for the search
+     * @returns {Array}
+     */
+    GetNumericPath(targetEl, cached := False) {
+        cachedThis := cached ? this : this.BuildUpdatedCache(cacheRequest := UIA.CreateCacheRequest(["Type"],,5))
+        if found := FindTarget(cachedThis)
+            return found
+        throw TargetError("No matching target element found", -1)
+
+        FindTarget(el, path:=[]) {
+            local i, child
+            for i, child in el.CachedChildren {
+                path.Push(i)
+                if UIA.CompareElements(child, targetEl)
+                    return path
+                if found := FindTarget(child, path)
+                    return found
+                path.Pop()
+            }
+        }
+    }
+
+    /**
      * @param relativeTo CoordMode to be used: client, window or screen. Default is A_CoordModeMouse
      * @returns {x:x coordinate, y:y coordinate, w:width, h:height}
      */
