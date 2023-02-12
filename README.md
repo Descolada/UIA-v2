@@ -7,6 +7,8 @@ Additionally there is UIA_Browser.ahk, which contains helper functions for brows
 
 ## For more information and tutorials, [check out the Wiki](https://github.com/Descolada/UIA-v2/wiki).
 
+### For instructional videos, check out [Joe the Automator](https://www.the-automator.com/automate-any-program-with-ui-automation/) and [Axlefublr](https://www.youtube.com/watch?v=o2E6sRxFoB0)
+
 Multiple examples are included in the Examples folder.
 
 If you have questions or issues, either post it in the [AutoHotkey forums' main thread](https://www.autohotkey.com/boards/viewtopic.php?f=6&t=104999) or create a [new issue](https://github.com/Descolada/UIA-v2/issues).
