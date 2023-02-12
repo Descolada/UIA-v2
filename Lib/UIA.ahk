@@ -2185,10 +2185,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 }
             }
             if (this.GetPropertyValue(UIA.Property.IsExpandCollapsePatternAvailable)) {
-                if ((expandState := (pattern := this.ExpandCollapsePattern).ExpandCollapseState) == 0)
-                    pattern.Expand()
-                Else
-                    pattern.Collapse()
+                if ((expandState := (pattern := this.ExpandCollapsePattern).ExpandCollapseState) == 0) {
+                    try pattern.Expand() ; Sometimes throws UIA_E_INVALIDOPERATION 0x80131509
+                } else {
+                    try pattern.Collapse()
+                }
                 if (pattern.ExpandCollapseState != expandState) {
                     Sleep sleepTime
                     return 1
@@ -6735,10 +6736,8 @@ class Viewer {
         WinHide(this.gViewer)
         try FileDelete("~UIAViewerMacro.tmp")
         try {
-            shell := ComObject("WScript.Shell")
-            FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), "~UIAViewerMacro.tmp", "UTF-8")
-            oExec := shell.Exec("`"" A_AhkPath "`" /force /cp65001 ~UIAViewerMacro.tmp")
-            pid:=oExec.ProcessID
+            FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), "~UIAViewerMacro.tmp", "UTF-8") 
+            Run(A_AhkPath " /force /cp65001 " A_ScriptDir "\~UIAViewerMacro.tmp",,,&pid)
             if WinWait("ahk_pid " pid,, 3)
                 WinWaitClose(, , 30)
         }
