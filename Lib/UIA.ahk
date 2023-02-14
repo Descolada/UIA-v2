@@ -424,10 +424,8 @@ static EncodePath(path) {
         t := cond.HasOwnProp("T") ? cond.t : cond.HasOwnProp("Type") ? cond.Type : cond.HasOwnProp("ControlType") ? cond.ControlType : -1
         if t = -1
             throw ValueError("Encodable path requires a Type", -1)
-        if !IsInteger(t)
-            t := UIA.Type.%t%
-        if t >= 50000
-            t -= 50000
+        if !(IsInteger(t) && t < 50)
+            t := UIA.TypeValidation.Type(t) - 50000
         out .= Base64IntToChar[t]
         i := cond.HasOwnProp("i") ? cond.i : cond.HasOwnProp("index") ? cond.index : 1
         if i != 0 && i != 1 {
@@ -594,7 +592,7 @@ static __CreateRawCondition(condition) {
 }
 
 static __ConditionBuilder(obj, &nonUIAEncountered?) {
-    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, value, match
+    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, j, val, match
     sanitizeMM := False
     switch Type(obj) {
         case "Object":
@@ -632,8 +630,17 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
                 case "Array":
                     if (UIA.PropertyVariantType[k] & 0x2000)
                         v := UIA.AHKArrayToSafeArray(v, UIA.PropertyVariantType[k] & ~0x2000)
-                    else
-                        throw ValueError("Invalid condition: propertyId " k " does not support Array type values", -2)
+                    else if !(sanitizeMM && UIA.PropertyVariantTypeBSTR.Has(k)) || mm = 1 {
+                        ; Creating an "or" condition with same matchmode and casesense
+                        if !v.Length
+                            throw ValueError("Invalid condition: `"or`" condition cannot be empty", -2)
+                        orArr := ComObjArray(0xd, v.Length)
+                        for j, val in v
+                            orArr[j-1] := (mm = 1 ? UIA.CreateCondition(k, val, !cs | 2) : UIA.CreateCondition(k, val, flags))[]
+                        t := UIA.CreateOrConditionFromArray(orArr)
+                        arr[i++] := t[]
+                        continue
+                    }
                 case "String":
                     if k = 30000
                         v := UIA.RuntimeIdFromString(v)
@@ -1547,6 +1554,24 @@ class TypeValidation {
         }
         throw TypeError("TreeScope requires parameter with type Integer or String, but received " Type(arg), -2)
     }
+    static Type(arg) {
+        if IsInteger(arg) {
+            if arg < 50 && arg >= 0
+                return arg + 50000
+            if arg < 50000 || arg > 50050
+                throw ValueError("UIA.Type does not contain constant `"" arg "`"", -2)
+            return arg is Integer ? arg : Integer(arg)
+        } else if arg is String {
+            try return UIA.Type.%arg%
+            try {
+                local match
+                RegExMatch(arg, "\d{5}", &match:="") && Integer(match[]) >= 50000
+                return Integer(match[])
+            }
+            throw ValueError("UIA.Type does not contain value for `"" arg "`"", -2)
+        }
+        throw TypeError("UIA.Type requires parameter with type Integer or String, but received " Type(arg), -2)
+    }
     static Property(arg) {
         if IsInteger(arg) {
             try UIA.Property[arg]
@@ -2066,6 +2091,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Array}
      */
     GetConditionPath(targetEl, cached := False) {
+        local i, child, cachedThis, numPath, conditionPath, children, targetType, targetIndex, sameTypeCount, targetTypeIndex
         cachedThis := cached ? this : this.BuildUpdatedCache(UIA.CreateCacheRequest(["Type"],,5))
         numPath := cachedThis.GetNumericPath(targetEl, true)
         conditionPath := []
@@ -3094,20 +3120,30 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 }
                 continue
             }
-            if k = 30003 {
-                if !IsInteger(v) {
-                    try v := UIA.Type.%v%
-                } else if v < 50000
-                    v += 50000
-            }
+            if k = 30003 
+                v := UIA.TypeValidation.Type(v)
             try currentValue := this.Get%cached ? "Cached" : ""%PropertyValue(k)
             catch { ; If caching is used, should this throw an error to notify the user of a missing cache property?
                 result := 0
             } else {
                 switch UIA.PropertyVariantType[k] {
                     case 8:
-                        result := CompareStrings(currentValue, v, mm, cs)
+                        if v is Array {
+                            for val in v {
+                                if (result := CompareStrings(currentValue, val, mm, cs))
+                                    break
+                            }
+                        } else 
+                            result := CompareStrings(currentValue, v, mm, cs)
                     case 3,5,11:
+                        if v is Array {
+                            for val in v {
+                                if k = 30003
+                                    val := UIA.TypeValidation.Type(val)
+                                if (result := currentValue == val)
+                                    break
+                            }
+                        } else 
                         result := currentValue == v
                     default:
                         if Type(v) = "Object"
