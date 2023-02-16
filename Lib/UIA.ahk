@@ -2408,14 +2408,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     FindElement(condition, scope:=4, index:=1, order:=0, startingElement:=0, cacheRequest:=0) {
-        local withOptions
+        local withOptions := 0
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest, &index)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
         if index < 0 ; Convert negative index to LastToFirst order
             index := -index, order := order | 2
-        withOptions := order && UIA.IsIUIAutomationElement7Available
-        if withOptions && !startingElement ; If FindFirstWithOptions is used but startingElement isn't set, start from this element.
-            startingElement := this
+        withOptions := order || startingElement
+        if withOptions && !UIA.IsIUIAutomationElement7Available && InStr(Type(condition), "Condition")
+            throw ValueError("If using order or startingElement arguments in Windows <10.0.15063, then condition cannot be IUIAutomationCondition", -1)
         if !InStr(Type(condition), "Condition") {
             /*
                 If MatchMode is 1:
@@ -2427,47 +2427,46 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             */
             IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=0), counter := 0
             if nonUIAEncountered = 1 { ; Some conditions need validating: MatchMode 1 or RegEx was used
-                if cacheRequest {
-                    if withOptions
-                        ComCall(113, startingElement, "int", scope, "ptr", IUIAcondition, "ptr", cacheRequest, "int", order, "ptr", this, "ptr*", &found := 0) ; FindAllWithOptionsBuildCache
-                    else
-                        ComCall(8, this, "int", scope, "ptr", IUIAcondition, "ptr", cacheRequest, "ptr*", &found := 0) ; FindAllBuildCache
-                    unfilteredEls := found ? UIA.IUIAutomationElementArray(found).ToArray() : []
-                } else {
-                    ; If no cacheRequest was specified, then speed-optimize the search by caching
-                    ; the required properties, and searching through cached elements.
-                    ; And although it looks like if adding an exception for a set startingElement
-                    ; and using FindAllWithOptions from startingElement should give a speed improvement,
-                    ; it actually doesn't  affect the search speed significantly, probably because
-                    ; the cache search is just so much faster.
-                    cacheRequest := UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)
-                    unfilteredEls := this.BuildUpdatedCache(cacheRequest).GetCachedChildren(scope)
-                }
-                if order&2 && !withOptions {
-                    Loop (len := unfilteredEls.Length)
-                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, 1) && ++counter = index
-                            return unfilteredEls[len-A_Index+1]
-                } else {
-                    for el in unfilteredEls
-                        if el.ValidateCondition(condition, 1) && ++counter = index
-                            return el
-                }
-                throw TargetError("An element matching the condition was not found", -1, "No element passed validation after FindAll")
+                ; If no cacheRequest was specified, then speed-optimize the search by caching
+                ; the required properties, and searching through cached elements.
+                ; And although it looks like if adding an exception for a set startingElement
+                ; and using FindAllWithOptions from startingElement should give a speed improvement,
+                ; it actually doesn't  affect the search speed significantly, probably because
+                ; the cache search is just so much faster.
+                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition))
+                found := cache.FindCachedElement(condition, scope, index, order, startingElement)
+                return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
             } else if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElement instead
                 return this.FindCachedElement(condition, scope, index, order, startingElement)
-            condition := IUIAcondition
-            ; Were any conditions encountered where we need to filter conditions?
-            if index != 1 {
-                try {
-                    unfilteredEls := (cacheRequest ? (withOptions ? startingElement.FindAllWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
-                        : this.FindAllBuildCache(cacheRequest, condition, scope))
-                        : (withOptions ? startingElement.FindAllWithOptions(IUIAcondition, order, this, scope)
-                        : this.FindAll(IUIAcondition, scope)))
-                    return unfilteredEls[order&2 && !withOptions ? unfilteredEls.Length + 1 - index : index]
+
+            ; If the user is running an older Windows, but is trying to use FindFirstWithOptions arguments
+            ; then either use cached elements, or in the case of index 1 and PreOrder, use TreeWalker
+            if withOptions && !UIA.IsIUIAutomationElement7Available {
+                if index = 1 && order = 2 { ; Special case for index -1, PreOrder, and older Windows version
+                    if scope & 1 
+                        try return cacheRequest ? this.FindFirstBuildCache(cacheRequest, IUIAcondition, 1) : this.FindFirst(IUIAcondition, 1)
+                    if scope > 1
+                        return cacheRequest ? UIA.CreateTreeWalker(IUIAcondition).GetLastChildElementBuildCache(cacheRequest, this) : UIA.CreateTreeWalker(IUIAcondition).GetLastChildElement(this)
+                    else
+                        throw TargetError("An element matching the condition was not found", -1)
                 }
-                catch IndexError
-                    throw TargetError("An element matching the condition was not found", -1, "FindAll index " index " was invalid")
+                found := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)).FindCachedElement(condition, scope, index, order, startingElement)
+                return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
             }
+            condition := IUIAcondition
+        }
+        if !startingElement ; If FindFirstWithOptions is used but startingElement isn't set, start from this element.
+            startingElement := this
+        ; Use FindAll instead if index > 1
+        if index != 1 {
+            try {
+                unfilteredEls := (cacheRequest ? (withOptions ? startingElement.FindAllWithOptionsBuildCache(cacheRequest, condition, order, this, scope)
+                    : this.FindAllBuildCache(cacheRequest, condition, scope))
+                    : (withOptions ? startingElement.FindAllWithOptions(condition, order, this, scope)
+                    : this.FindAll(condition, scope)))
+                return unfilteredEls[order&2 && !withOptions ? unfilteredEls.Length + 1 - index : index]
+            } catch IndexError
+                throw TargetError("An element matching the condition was not found", -1, "FindAll index " index " was invalid")
         }
         if cacheRequest {
             if withOptions
@@ -2607,31 +2606,29 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindElements(condition, scope := 4, order:=0, startingElement:=0, cacheRequest:=0) {
-        local withOptions := order && UIA.IsIUIAutomationElement7Available
+        local withOptions
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
-        if withOptions && !startingElement ; If FindAllWithOptions is used but startingElement isn't set, start from this element.
-            startingElement := this
+        withOptions := order || startingElement
+        if withOptions && !UIA.IsIUIAutomationElement7Available && InStr(Type(condition), "Condition")
+            throw ValueError("If using order or startingElement arguments in Windows <10.0.15063, then condition cannot be IUIAutomationCondition", -1)
         if !InStr(Type(condition), "Condition") {
             IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=False), unfilteredEls := [], filteredEls := []
-            if nonUIAEncountered = 1 && !cacheRequest {
-                cacheRequest := UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)
-                unfilteredEls := this.BuildUpdatedCache(cacheRequest).GetCachedChildren(scope)
-                if order&2 && !withOptions {
-                    Loop (len := unfilteredEls.Length)
-                        if unfilteredEls[len-A_Index+1].ValidateCondition(condition, 1)
-                            filteredEls.Push(unfilteredEls[len-A_Index+1])
-                } else {
-                    for el in unfilteredEls {
-                        if el.ValidateCondition(condition, 1)
-                            filteredEls.Push(el)
-                    }
-                }
-                return filteredEls
-            } else if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElements instead
+            if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElements instead
                 return this.FindCachedElements(condition, scope, order, startingElement)
+            else if nonUIAEncountered = 1 || (withOptions && !UIA.IsIUIAutomationElement7Available) {
+                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition))
+                found := cache.FindCachedElements(condition, scope, order, startingElement)
+                if cacheRequest {
+                    Loop found.Length
+                        found[A_Index] := found[A_Index].BuildUpdatedCache(cacheRequest)
+                }
+                return found
+            }
             unfilteredCondition := condition, condition := IUIAcondition
         }
+        if !startingElement ; If FindFirstWithOptions is used but startingElement isn't set, start from this element.
+            startingElement := this
         if cacheRequest {
             if withOptions
                 ComCall(113, startingElement, "int", scope, "ptr", condition, "ptr", cacheRequest, "int", order, "ptr", this, "ptr*", &found := 0) ; FindAllWithOptionsBuildCache
@@ -2643,21 +2640,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             else
                 ComCall(6, this, "int", scope, "ptr", condition, "ptr*", &found := 0) ; FindAll
         }
-        found := found ? UIA.IUIAutomationElementArray(found).ToArray() : []
-        if nonUIAEncountered = 1 {
-            filteredEls := []
-            if order & 2 && !withOptions {
-                Loop (len := found.Length)
-                    if found[len-A_Index+1].ValidateCondition(unfilteredCondition, cacheRequest ? 1 : 0)
-                        filteredEls.Push(found[len-A_Index+1])
-            } else {
-                for el in found
-                    if el.ValidateCondition(unfilteredCondition, cacheRequest ? 1 : 0)
-                        filteredEls.Push(el)
-            }
-            found := filteredEls
-        }
-        return found
+        return found ? UIA.IUIAutomationElementArray(found).ToArray() : []
     }
 
     /**
