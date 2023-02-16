@@ -66,9 +66,9 @@ static __New() {
         IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}"
     }
     global IUIAutomationMaxVersion
-    DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
+    A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "uint", 0, "ptr*", &screenreader:=0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
     if !screenreader
-        DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
+        A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "uint", 0, "ptr*", &screenreader:=0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
     this.IUIAutomationVersion := IUIAutomationMaxVersion+1, this.ptr := 0
     while (--this.IUIAutomationVersion > 1) {
         if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
@@ -828,7 +828,6 @@ static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
     if !IsSet(cacheRequest) {
         cacheRequest := UIA.CreateCacheRequest()
         cacheRequest.TreeScope := 5
-        cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
     }
     cacheRequest.AddProperty("BoundingRectangle")
     if !(IsSet(x) && IsSet(y))
@@ -2006,7 +2005,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {String}
      */
     Dump(scope:=1, delimiter:=" ", maxDepth:=-1) {
-        local out, n, oChild
+        local out := "", n, oChild
         if !IsInteger(scope)
             try scope := UIA.TreeScope.%scope%
         ; Create cache request, add all the necessary properties that Dump uses: Type, LocalizedType, AutomationId, Name, Value, ClassName, AcceleratorKey
@@ -2027,7 +2026,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         } else {
             ; Build the cache for the set scope
             try el := this.CachedChildren.Length
-            el := el ? this : this.FindFirstBuildCache(cacheRequest, UIA.TrueCondition, scope)
+            el := IsSet(el) && el ? this : this.FindFirstBuildCache(cacheRequest, UIA.RawViewCondition, scope)
             if scope&1
                 out := el.CachedDump(delimiter) "`n"
             if scope&2 {
