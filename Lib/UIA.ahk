@@ -700,7 +700,7 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
  */
 static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, timeOut:=500, cacheRequest?) {
     if activateChromiumAccessibility
-        return UIA.ActivateChromiumAccessibility(winTitle,, timeOut, cacheRequest?)
+        return UIA.ActivateChromiumAccessibility(winTitle, 1, timeOut, cacheRequest?)
     try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
     if !IsSet(cHwnd) || !cHwnd
         return
@@ -732,11 +732,13 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
         return
     SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
     if (cEl := UIA.ElementFromHandle(cHwnd, cacheRequest?, False)) {
-        _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
-        if (cEl.Type == 50030) {
-            waitTime := A_TickCount + timeOut
-            while (!cEl.Value && (A_TickCount < waitTime))
-                Sleep 20
+        try _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
+        try {
+            if (cEl.Type == 50030) {
+                waitTime := A_TickCount + timeOut
+                while (!cEl.Value && (A_TickCount < waitTime))
+                    Sleep 20
+            }
         }
     }
     return cEl
@@ -6640,6 +6642,7 @@ class Viewer {
         local v, pattern, value
         OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
+        DetectHiddenWindows "On"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
         this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.Focused := 1
         this.LoadSettings()
@@ -7078,7 +7081,12 @@ class Viewer {
         this.TVUIA.Opt("-Redraw")
         this.TVUIA.Delete()
         this.Stored.TreeView := Map()
-        this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
+        try this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
+        catch {
+            this.Stored.TreeView := []
+            this.TVUIA.Add("Error: window not found")
+        }
+        
         this.TVUIA.Opt("+Redraw")
         this.SBMain.SetText("  Path: ")
         if !this.Stored.CapturedElement.HasOwnProp("Path") {
