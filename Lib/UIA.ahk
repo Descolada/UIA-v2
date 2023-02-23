@@ -6634,19 +6634,22 @@ class IUIAutomationWindowPattern extends UIA.IUIAutomationBase {
 
 ; Internal class: UIAViewer code
 class Viewer {
+    static SettingsFolderPath := A_AppData "\UIAViewer"
+    static SettingsFilePath := A_AppData "\UIAViewer\settings.ini"
     __New() {
         local v, pattern, value
         OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathType := "", this.Focused := 1
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.Focused := 1
+        this.LoadSettings()
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
         ; Set TreeScope to include the starting element and all descendants as well
         this.cacheRequest.TreeScope := 5
 
-        this.gViewer := Gui("AlwaysOnTop Resize +MinSize520x400","UIAViewer")
+        this.gViewer := Gui((this.AlwaysOnTop ? "AlwaysOnTop " : "") "Resize +MinSize520x400", "UIAViewer")
         this.gViewer.OnEvent("Close", (*) => ExitApp())
         this.gViewer.OnEvent("Size", this.gViewer_Size.Bind(this))
         this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
@@ -6723,6 +6726,18 @@ class Viewer {
         }
         return 0
     }
+    SaveSettings() {
+        if !FileExist(A_AppData "\UIAViewer")
+            DirCreate(A_AppData "\UIAViewer")
+        IniWrite(this.PathIgnoreNames, UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames")
+        IniWrite(this.PathType, UIA.Viewer.SettingsFilePath, "Path", "Type")
+        IniWrite(this.AlwaysOnTop, UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop")
+    }
+    LoadSettings() {
+        this.PathIgnoreNames := IniRead(UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames", 1)
+        this.PathType := IniRead(UIA.Viewer.SettingsFilePath, "Path", "Type", "")
+        this.AlwaysOnTop := IniRead(UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop", 1)
+    }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
@@ -6769,20 +6784,21 @@ class Viewer {
     }
     ; Tries to run the code in the macro Edit
     ButMacroScriptRun_Click(GuiCtrlObj?, Info?) {
+        static tempFileName := "~UIAViewerMacro.tmp"
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear"), this.Stored.HighlightedElement := 0
         DetectHiddenWindows 1
         WinHide(this.gViewer)
-        try FileDelete("~UIAViewerMacro.tmp")
+        try FileDelete(tempFileName)
         try {
-            FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), "~UIAViewerMacro.tmp", "UTF-8") 
-            Run(A_AhkPath " /force /cp65001 " A_ScriptDir "\~UIAViewerMacro.tmp",,,&pid)
+            FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), tempFileName, "UTF-8") 
+            Run(A_AhkPath " /force /cp65001 " A_ScriptDir "\" tempFileName,,,&pid)
             if WinWait("ahk_pid " pid,, 3)
                 WinWaitClose(, , 30)
         }
         if IsSet(pid) && WinExist("ahk_pid " pid)
             WinKill
-        try FileDelete("~UIAViewerMacro.tmp")
+        try FileDelete(tempFileName)
         WinShow(this.gViewer)
         DetectHiddenWindows 0
     }
@@ -6870,6 +6886,11 @@ class Viewer {
             SBMain_Menu.Check("Display numeric path (least reliable, short)")
         if this.PathType = "Condition"
             SBMain_Menu.Check("Display condition path (most reliable, longest)")
+        SBMain_Menu.Add()
+        SBMain_Menu.Add("UIAViewer always on top", (*) => (this.AlwaysOnTop := !this.AlwaysOnTop, this.gViewer.Opt((this.AlwaysOnTop ? "+" : "-") "AlwaysOnTop")))
+        if this.AlwaysOnTop
+            SBMain_Menu.Check("UIAViewer always on top")
+        SBMain_Menu.Add("Save settings", (*) => (this.SaveSettings(), ToolTip("Settings saved!"), SetTimer(ToolTip, -2000)))
         SBMain_Menu.Show()
     }
     ; Stops capturing elements under mouse, unhooks CaptureCallback
