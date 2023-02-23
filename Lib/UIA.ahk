@@ -834,6 +834,8 @@ static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
     if !IsSet(element)
         element := UIA.ElementFromPoint(x, y, cacheRequest)
+    else
+        element := element.BuildUpdatedCache(cacheRequest)
     lastArr := [element]
     Loop {
         nextArr := []
@@ -3185,11 +3187,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @returns {UIA.IUIAutomationElement}
      */
-    FindFirst(condition, scope:=4) {
+    FindFirst(condition?, scope:=4) {
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope)
         if !(condition is UIA.IUIAutomationCondition)
             condition := UIA.__CreateRawCondition(condition)
-        if (ComCall(5, this, "int", scope, "ptr", condition, "ptr*", &found := 0), found)
+        if (ComCall(5, this, "int", scope, "ptr", condition ?? UIA.TrueCondition, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
         throw TargetError("An element matching the condition was not found", -1)
     }
@@ -3203,28 +3205,28 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @returns {[UIA.IUIAutomationElement]}
      */
-    FindAll(condition, scope := 4) {
+    FindAll(condition?, scope := 4) {
         if !IsObject(condition)
             throw TypeError("Condition must be an condition object or array", -1)
         if !InStr(Type(condition), "Condition")
             condition := UIA.__CreateRawCondition(condition)
-        return (ComCall(6, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
+        return (ComCall(6, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition ?? UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
     }
 
     ; Retrieves the first child or descendant element that matches the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    FindFirstBuildCache(cacheRequest, condition, scope := 4) {
+    FindFirstBuildCache(cacheRequest, condition?, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.__CreateRawCondition(condition)
-        if (ComCall(7, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found)
+        if (ComCall(7, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition ?? UIA.TrueCondition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
         throw TargetError("An element matching the condition was not found", -1)
     }
 
     ; Returns all UI Automation elements that satisfy the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
-    FindAllBuildCache(cacheRequest, condition, scope := 4) {
+    FindAllBuildCache(cacheRequest, condition?, scope := 4) {
         if !InStr(Type(condition), "Condition")
             condition := UIA.__CreateRawCondition(condition)
-        return (ComCall(8, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
+        return (ComCall(8, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition ?? UIA.TrueCondition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
     }
 
     ; Retrieves a  UI Automation element with an updated cache.
@@ -6634,10 +6636,10 @@ class IUIAutomationWindowPattern extends UIA.IUIAutomationBase {
 class Viewer {
     __New() {
         local v, pattern, value
-        OnError this.GetMethod("ErrorHandler").Bind(this)
+        OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathType := ""
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.PathIgnoreNames := 1, this.PathType := "", this.Focused := 1
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
         this.cacheRequest.AutomationElementMode := UIA.AutomationElementMode.None
@@ -6646,10 +6648,10 @@ class Viewer {
 
         this.gViewer := Gui("AlwaysOnTop Resize +MinSize520x400","UIAViewer")
         this.gViewer.OnEvent("Close", (*) => ExitApp())
-        this.gViewer.OnEvent("Size", this.GetMethod("gViewer_Size").Bind(this))
+        this.gViewer.OnEvent("Size", this.gViewer_Size.Bind(this))
         this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
         this.LVWin := this.gViewer.Add("ListView", "h135 w250", ["Property", "Value"])
-        this.LVWin.OnEvent("ContextMenu", LV_CopyTextMethod := this.GetMethod("LV_CopyText").Bind(this))
+        this.LVWin.OnEvent("ContextMenu", LV_CopyTextMethod := this.LV_CopyText.Bind(this))
         this.LVWin.ModifyCol(1,60)
         this.LVWin.ModifyCol(2,180)
         for v in ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
@@ -6671,40 +6673,59 @@ class Viewer {
 
         (this.TextTVPatterns := this.gViewer.Add("Text", "w100", "Patterns")).SetFont("bold")
         this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250")
-        this.TVPatterns.OnEvent("DoubleClick", this.GetMethod("TVPatterns_DoubleClick").Bind(this))
+        this.TVPatterns.OnEvent("DoubleClick", this.TVPatterns_DoubleClick.Bind(this))
 
         this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
-        this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.GetMethod("ButCapture_Click").Bind(this))
+        this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.ButCapture_Click.Bind(this))
         HotKey("~F1", this.CaptureHotkeyFunc)
         this.SBMain := this.gViewer.Add("StatusBar",, "  Start capturing, then hold cursor still to construct tree")
-        this.SBMain.OnEvent("Click", this.GetMethod("SBMain_Click").Bind(this))
-        this.SBMain.OnEvent("ContextMenu", this.GetMethod("SBMain_ContextMenu").Bind(this))
+        this.SBMain.OnEvent("Click", this.SBMain_Click.Bind(this))
+        this.SBMain.OnEvent("ContextMenu", this.SBMain_ContextMenu.Bind(this))
         this.gViewer.Add("Text", "x278 y10 w100", "UIA Tree").SetFont("bold")
         this.TVUIA := this.gViewer.Add("TreeView", "x275 y25 w300 h465")
-        this.TVUIA.OnEvent("Click", this.GetMethod("TVUIA_Click").Bind(this))
-        this.TVUIA.OnEvent("ContextMenu", this.GetMethod("TVUIA_ContextMenu").Bind(this))
+        this.TVUIA.OnEvent("Click", this.TVUIA_Click.Bind(this))
+        this.TVUIA.OnEvent("ContextMenu", this.TVUIA_ContextMenu.Bind(this))
         this.TVUIA.Add("Start capturing to show tree")
         this.TextFilterTVUIA := this.gViewer.Add("Text", "x275 y503", "Filter:")
         this.EditFilterTVUIA := this.gViewer.Add("Edit", "x305 y500 w100")
-        this.EditFilterTVUIA.OnEvent("Change", this.GetMethod("EditFilterTVUIA_Change").Bind(this))
+        this.EditFilterTVUIA.OnEvent("Change", this.EditFilterTVUIA_Change.Bind(this))
         this.GroupBoxMacro := this.gViewer.Add("GroupBox", "x900 y20 w" (this.MacroSidebarWidth-20), "Macro creator")
         (this.TextMacroAction := this.gViewer.Add("Text", "x900 y40 w40", "Action:")).SetFont("bold")
         this.DDLMacroAction := this.gViewer.Add("DDL", "Choose1 x900 y38 w120", ["No element selected"])
         (this.ButMacroAddElement := this.gViewer.Add("Button","x900 y37 w90 h20", "Add element")).SetFont("bold")
-        this.ButMacroAddElement.OnEvent("Click", this.GetMethod("ButMacroAddElement_Click").Bind(this))
+        this.ButMacroAddElement.OnEvent("Click", this.ButMacroAddElement_Click.Bind(this))
         (this.EditMacroScript := this.gViewer.Add("Edit", "-Wrap HScroll x900 y65 h410 w" (this.MacroSidebarWidth-40), "#include UIA.ahk`n`n")).SetFont("s10") ; Setting a font here disables UTF-8-BOM
         (this.ButMacroScriptRun := this.gViewer.Add("Button", "x900 y120 w70", "Test script")).SetFont("bold")
-        this.ButMacroScriptRun.OnEvent("Click", this.GetMethod("ButMacroScriptRun_Click").Bind(this))
+        this.ButMacroScriptRun.OnEvent("Click", this.ButMacroScriptRun_Click.Bind(this))
         this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro sidebar =>")
-        this.ButToggleMacroSidebar.OnEvent("Click", this.GetMethod("ButToggleMacroSidebar_Click").Bind(this))
+        this.ButToggleMacroSidebar.OnEvent("Click", this.ButToggleMacroSidebar_Click.Bind(this))
         this.gViewer.Show("w600 h550")
         this.gViewer_Size(this.gViewer,0,600,550)
+        this.FocusHook := DllCall("SetWinEventHook", "UInt", 0x8005, "UInt", 0x8005, "Ptr",0,"Ptr", CallbackCreate(this.HandleFocusChangedEvent.Bind(this), "F", 7),"UInt", 0, "UInt",0, "UInt",0)
+    }
+    __Delete() {
+        DllCall("UnhookWinEvent", "Ptr", this.FocusHook)
+    }
+    HandleFocusChangedEvent(hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
+        winHwnd := DllCall("GetAncestor", "UInt", hWnd, "UInt", 2)
+        if winHwnd = this.gViewer.Hwnd {
+            if !this.Focused {
+                this.Focused := 1
+                if IsObject(this.Stored.HighlightedElement)
+                    this.Stored.HighlightedElement.Highlight(0, "Blue", 4)
+            }
+        } else {
+            if this.Focused {
+                this.Focused := 0
+                if IsObject(this.Stored.HighlightedElement)
+                    this.Stored.HighlightedElement.Highlight("clear")
+            }
+        }
+        return 0
     }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
-        if MinMax = -1 && IsObject(this.Stored.HighlightedElement)
-            this.Stored.HighlightedElement.Highlight("clear")
         static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
         this.TVUIA.GetPos(&TV_Pos_X, &TV_Pos_Y, &TV_Pos_W, &TV_Pos_H)
         this.MoveControls(this.MacroSidebarVisible ? {Control:this.TVUIA,w:(TV_Pos_W:=Width-this.MacroSidebarWidth-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)} : {Control:this.TVUIA,w:(TV_Pos_W:=Width-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)})
@@ -6778,7 +6799,7 @@ class Viewer {
         this.TVUIA.Delete()
         this.TVUIA.Add("Hold cursor still to construct tree")
         this.ButCapture.Text := "Stop capturing (Esc)"
-        this.CaptureCallback := this.GetMethod("CaptureCycle").Bind(this)
+        this.CaptureCallback := this.CaptureCycle.Bind(this)
         SetTimer(this.CaptureCallback, 200)
     }
     ; Handles right-clicking a listview (copies to clipboard)
@@ -6866,6 +6887,7 @@ class Viewer {
     ; Gets UIA element under mouse, updates the GUI.
     ; If the mouse is not moved for 1 second then constructs the UIA tree.
     CaptureCycle() {
+        CoordMode "Mouse", "Screen" 
         MouseGetPos(&mX, &mY, &mwId)
         try CapturedElement := UIA.SmallestElementFromPoint(mX,mY,,this.cacheRequest)
         if !IsSet(CapturedElement)
@@ -6994,7 +7016,7 @@ class Viewer {
             return
         if (Info != "DoAction") || ChangeActive {
             if !TimeoutFunc
-                TimeoutFunc := this.GetMethod("EditFilterTVUIA_Change").Bind(this, GuiCtrlObj, "DoAction")
+                TimeoutFunc := this.EditFilterTVUIA_Change.Bind(this, GuiCtrlObj, "DoAction")
             SetTimer(TimeoutFunc, -500)
             return
         }
