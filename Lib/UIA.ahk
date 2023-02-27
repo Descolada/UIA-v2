@@ -775,6 +775,8 @@ static GetRootElement(cacheRequest?) {
  * @param cacheRequest Optional: a cache request object.
  * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
  * and if it is then try to activate accessibility. Default: True.
+ * If a VarRef is passed, then that variable will be set to the Chromium Document element (only
+ * if the activation was done).
  * @returns {UIA.IUIAutomationElement}
  */
 static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:=True) {
@@ -782,8 +784,8 @@ static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:
         hwnd := WinExist(hwnd)
     if !hwnd
         throw TargetError("No matching window found", -1)
-    if (activateChromiumAccessibility && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
-        activateChromiumAccessibility := retEl
+    if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
+        %activateChromiumAccessibility% := retEl
     if IsSet(cacheRequest)
         return UIA.ElementFromHandleBuildCache(cacheRequest, hwnd)
 
@@ -799,16 +801,18 @@ static ElementFromWindow(WinTitle:="", cacheRequest?, activateChromiumAccessibil
  * @param y y coordinate for the screen point.
  * @param cacheRequest Optional: a cache request object.
  * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
- * and if it is then try to activate accessibility. The ByRef variable is set to the found Chromium element.
+ * and if it is then try to activate accessibility. 
+ * If a VarRef is passed, then that variable will be set to the Chromium Document element (only
+ * if the activation was done).
  * @returns {UIA.IUIAutomationElement}
  */
-static ElementFromPoint(x?, y?, cacheRequest?, &activateChromiumAccessibility:=True) {
+static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=True) {
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
     else
         pt64 := y << 32 | (x & 0xFFFFFFFF)
-    if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
-        activateChromiumAccessibility := UIA.ActivateChromiumAccessibility(hwnd)
+    if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
+        %activateChromiumAccessibility% := UIA.ActivateChromiumAccessibility(hwnd)
     }
     if IsSet(cacheRequest)
         return UIA.ElementFromPointBuildCache(cacheRequest, pt64)
@@ -6795,7 +6799,7 @@ class Viewer {
         try FileDelete(tempFileName)
         try {
             FileAppend(StrReplace(this.EditMacroScript.Text, "`r"), tempFileName, "UTF-8") 
-            Run(A_AhkPath " /force /cp65001 " A_ScriptDir "\" tempFileName,,,&pid)
+            Run(A_AhkPath " /force /cp65001 `"" A_ScriptDir "\" tempFileName "`"",,,&pid)
             if WinWait("ahk_pid " pid,, 3)
                 WinWaitClose(, , 30)
         }
