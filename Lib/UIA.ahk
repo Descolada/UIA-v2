@@ -528,6 +528,31 @@ static Filter(elementArray, function) {
     return ret
 }
 
+static FindElementFromArray(elementArray, condition, index:=1, startingElement:=0, cacheRequest:=0, cached:=False) {
+    local out
+    condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, , &index)
+    condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement)
+    if index = 0
+        throw ValueError("Condition index cannot be 0", -1)
+    if startingElement
+        startingElement := UIA.RuntimeIdToString(startingElement.GetRuntimeId())
+    if index > 0 {
+        for element in elementArray {
+            if (startingElement ? (startingElement = UIA.RuntimeIdToString(element.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && element.ValidateCondition(condition, cached) && --index = 0
+                return cacheRequest ? element.BuildUpdatedCache(cacheRequest) : element
+        }
+    } else {
+        index := -index, len := elementArray.Length + 1
+        Loop len-1 {
+            element := elementArray[len-A_index]
+            if (startingElement ? (startingElement = UIA.RuntimeIdToString(element.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && element.ValidateCondition(condition, cached) && --index = 0
+                return cacheRequest ? element.BuildUpdatedCache(cacheRequest) : element
+        }
+    }
+    throw TargetError("An element matching the condition was not found", -1)
+}
+static FindCachedElementFromArray(elementArray, condition, index:=1, startingElement:=0) => UIA.FindElementFromArray(elementArray, condition, index, startingElement)
+
 /**
  * Clears all highlights created by Element.Highlight
  */
@@ -1913,7 +1938,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     TextPattern {
         get {
             try return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text2)}), this.TextPattern)
-            return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text2)}), this.TextPattern)
+            return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text)}), this.TextPattern)
         }
     }
     TogglePattern => (this.DefineProp("TogglePattern", {value:this.GetPattern(UIA.Pattern.Toggle)}), this.TogglePattern)
@@ -1961,7 +1986,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedTextPattern {
         get {
             try return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text2)}), this.CachedTextPattern)
-            return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text2)}), this.CachedTextPattern)
+            return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text)}), this.CachedTextPattern)
         }
     }
     CachedTogglePattern => (this.DefineProp("CachedTogglePattern", {value:this.GetCachedPattern(UIA.Pattern.Toggle)}), this.CachedTogglePattern)
@@ -2440,7 +2465,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 ; and using FindAllWithOptions from startingElement should give a speed improvement,
                 ; it actually doesn't  affect the search speed significantly, probably because
                 ; the cache search is just so much faster.
-                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition))
+                ; It would be useful to use TreeFilter=IUIAcondition, but unfortunately it seems
+                ; that TreeFilter is applied before TreeScope. This leads to the unwanted behavior
+                ; of the tree being flattened, so this can't be used with scope=Children
+                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,, scope>3 ? IUIAcondition : unset))
                 found := cache.FindCachedElement(condition, scope, index, order, startingElement)
                 return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
             } else if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElement instead
@@ -2448,8 +2476,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
             ; If the user is running an older Windows, but is trying to use FindFirstWithOptions arguments
             ; then either use cached elements, or in the case of index 1 and PreOrder, use TreeWalker
-            if withOptions && !UIA.IsIUIAutomationElement7Available {
-                if index = 1 && order = 2 { ; Special case for index -1, PreOrder, and older Windows version
+            if withOptions && (!UIA.IsIUIAutomationElement7Available || (scope < 4 && startingElement)) {
+                if index = 1 && order = 2 && !startingElement { ; Special case for index -1, PreOrder, and older Windows version
                     if scope & 1 
                         try return cacheRequest ? this.FindFirstBuildCache(cacheRequest, IUIAcondition, 1) : this.FindFirst(IUIAcondition, 1)
                     if scope > 1
@@ -2457,7 +2485,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     else
                         throw TargetError("An element matching the condition was not found", -1)
                 }
-                found := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition)).FindCachedElement(condition, scope, index, order, startingElement)
+                found := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,scope>3 ? IUIAcondition : unset)).FindCachedElement(condition, scope, index, order, startingElement)
                 return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
             }
             condition := IUIAcondition
@@ -2623,8 +2651,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=False), unfilteredEls := [], filteredEls := []
             if nonUIAEncountered = 2 ; A cached name was encountered, use FindCachedElements instead
                 return this.FindCachedElements(condition, scope, order, startingElement)
-            else if nonUIAEncountered = 1 || (withOptions && !UIA.IsIUIAutomationElement7Available) {
-                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,IUIAcondition))
+            else if nonUIAEncountered = 1 || (withOptions && (!UIA.IsIUIAutomationElement7Available || (scope < 4 && startingElement))) {
+                cache := this.BuildUpdatedCache(UIA.CreateCacheRequest(condition,,scope,,scope>3 ? IUIAcondition : unset))
                 found := cache.FindCachedElements(condition, scope, order, startingElement)
                 if cacheRequest {
                     Loop found.Length
@@ -3290,7 +3318,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 patternId := UIA.Pattern.%(name := patternId)%
         } catch
             Throw ValueError("Failed to find pattern `"" name "`" among UIA.Pattern properties/values", -1)
-        DllCall("ole32\CLSIDFromString", "wstr", riid, "ptr*", &GUID:=Buffer(16))
+        DllCall("ole32\CLSIDFromString", "wstr", riid, "ptr", GUID:=Buffer(16))
         ComCall(14, this, "int", patternId, "ptr", GUID, "ptr*", &patternObject := 0)
         return UIA.IUIAutomation%name%Pattern(patternObject)
     }
@@ -3305,7 +3333,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 patternId := UIA.Pattern.%(name := patternId)%
         } catch
             Throw ValueError("Failed to find pattern `"" name "`" among UIA.Pattern properties/values", -1)
-        DllCall("ole32\CLSIDFromString", "wstr", riid, "ptr*", &GUID:=Buffer(16))
+        DllCall("ole32\CLSIDFromString", "wstr", riid, "ptr", GUID:=Buffer(16))
         ComCall(15, this, "int", patternId, "ptr", GUID, "ptr*", &patternObject := 0)
         return UIA.IUIAutomation%name%Pattern(patternObject)
     }
@@ -5294,7 +5322,7 @@ class IUIAutomationLegacyIAccessiblePattern extends UIA.IUIAutomationBase {
     ; This method returns NULL if the underlying implementation of the UI Automation element is not a native Microsoft Active Accessibility server; that is, if a client attempts to retrieve the IAccessible interface for an element originally supported by a proxy object from OLEACC.dll, or by the UIA-to-MSAA Bridge.
     GetIAccessible() {
         local ppAccessible
-        return (ComCall(26, this, "ptr*", &ppAccessible := 0), ComValue(0xd, ppAccessible))
+        return (ComCall(26, this, "ptr*", &ppAccessible := 0), ComValue(9, ppAccessible))
     }
 }
 
@@ -6076,14 +6104,14 @@ class IUIAutomationTextEditPattern extends UIA.IUIAutomationBase {
 }
 
 class IUIAutomationTextPattern extends UIA.IUIAutomationBase {
-    ; Retrieves the degenerate (empty) text range nearest to the specified screen coordinates.
     /*
+    * Retrieves the degenerate (empty) text range nearest to the specified screen coordinates.
     * A text range that wraps a child object is returned if the screen coordinates are within the coordinates of an image, hyperlink, Microsoft Excel spreadsheet, or other embedded object.
     * Because hidden text is not ignored, this method retrieves a degenerate range from the visible text closest to the specified coordinates.
     */
-    RangeFromPoint(pt) {
+    RangeFromPoint(x, y?) {
         local range
-        if (ComCall(3, this, "int64", pt, "ptr*", &range := 0), range)
+        if (ComCall(3, this, "int64", IsSet(y) ? y << 32 | (x & 0xFFFFFFFF) : x, "ptr*", &range := 0), range)
             return UIA.IUIAutomationTextRange(range)
         throw UnsetError("No TextRange returned by " A_ThisFunc, -1)
     }
@@ -6179,7 +6207,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     ; EndPoint must be one of UIA.TextPatternRangeEndpoint values: Start, End
     CompareEndpoints(srcEndPoint, range, targetEndPoint) {
         local compValue
-        return (ComCall(5, this, "int", srcEndPoint, "ptr", range, "int", UIA.TypeValidation.TextPatternRangeEndpoint(targetEndPoint), "int*", &compValue := 0), compValue)
+        return (ComCall(5, this, "int", UIA.TypeValidation.TextPatternRangeEndpoint(srcEndPoint), "ptr", range, "int", UIA.TypeValidation.TextPatternRangeEndpoint(targetEndPoint), "int*", &compValue := 0), compValue)
     }
 
     ; Normalizes the text range by the specified text unit. The range is expanded if it is smaller than the specified unit, or shortened if it is longer than the specified unit.
@@ -6246,7 +6274,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     ; unit must be one of UIA.TextUnit values: Character, Format, Word, Line, Paragraph, Page, Document.
     Move(unit, count) {
         local moved
-        return (ComCall(13, this, "int", unit, "int", count, "int*", &moved := 0), moved)
+        return (ComCall(13, this, "int", UIA.TypeValidation.TextUnit(unit), "int", count, "int*", &moved := 0), moved)
     }
 
     ; Moves one endpoint of the text range the specified number of text units within the document range.
