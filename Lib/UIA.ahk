@@ -528,10 +528,20 @@ static Filter(elementArray, function) {
     return ret
 }
 
+/**
+ * Finds the first element matching a condition from an AHK array
+ * @param elementArray The array to search
+ * @param condition The condition the element must match
+ * @param index Looks for the n-th element matching the condition. Negative index starts the search from the end.
+ * @param startingElement Optional: The element to start the search with
+ * @param cacheRequest Optional: A cache request to cache the found element with
+ * @param cached Whether the condition match uses cached properties or not
+ * @returns {UIA.IUIAutomationElement}
+ */
 static FindElementFromArray(elementArray, condition, index:=1, startingElement:=0, cacheRequest:=0, cached:=False) {
-    local out
+    local out, scope := 0, order := 0
     condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, , &index)
-    condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement)
+    condition := UIA.TypeValidation.Condition(condition), index := UIA.TypeValidation.Integer(index, "Index"), startingElement := UIA.TypeValidation.Element(startingElement)
     if index = 0
         throw ValueError("Condition index cannot be 0", -1)
     if startingElement
@@ -551,7 +561,7 @@ static FindElementFromArray(elementArray, condition, index:=1, startingElement:=
     }
     throw TargetError("An element matching the condition was not found", -1)
 }
-static FindCachedElementFromArray(elementArray, condition, index:=1, startingElement:=0) => UIA.FindElementFromArray(elementArray, condition, index, startingElement)
+static FindCachedElementFromArray(elementArray, condition, index:=1, startingElement:=0) => UIA.FindElementFromArray(elementArray, condition, index, startingElement,, 1)
 
 /**
  * Clears all highlights created by Element.Highlight
