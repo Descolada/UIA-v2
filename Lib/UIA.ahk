@@ -6749,18 +6749,20 @@ class Viewer {
         this.TVUIA.OnEvent("Click", this.TVUIA_Click.Bind(this))
         this.TVUIA.OnEvent("ContextMenu", this.TVUIA_ContextMenu.Bind(this))
         this.TVUIA.Add("Start capturing to show tree")
-        this.TextFilterTVUIA := this.gViewer.Add("Text", "x275 y503", "Filter:")
+        this.TextFilterTVUIA := this.gViewer.Add("Text", "x275 y503", "&Filter:")
         this.EditFilterTVUIA := this.gViewer.Add("Edit", "x305 y500 w100")
         this.EditFilterTVUIA.OnEvent("Change", this.EditFilterTVUIA_Change.Bind(this))
         this.GroupBoxMacro := this.gViewer.Add("GroupBox", "x900 y20 w" (this.MacroSidebarWidth-20), "Macro creator")
         (this.TextMacroAction := this.gViewer.Add("Text", "x900 y40 w40", "Action:")).SetFont("bold")
         this.DDLMacroAction := this.gViewer.Add("DDL", "Choose1 x900 y38 w120", ["No element selected"])
-        (this.ButMacroAddElement := this.gViewer.Add("Button","x900 y37 w90 h20", "Add element")).SetFont("bold")
+        (this.ButMacroAddElement := this.gViewer.Add("Button","x900 y37 w90 h20", "&Add element")).SetFont("bold")
         this.ButMacroAddElement.OnEvent("Click", this.ButMacroAddElement_Click.Bind(this))
         (this.EditMacroScript := this.gViewer.Add("Edit", "-Wrap HScroll x900 y65 h410 w" (this.MacroSidebarWidth-40), "#include UIA.ahk`n`n")).SetFont("s10") ; Setting a font here disables UTF-8-BOM
-        (this.ButMacroScriptRun := this.gViewer.Add("Button", "x900 y120 w70", "Test script")).SetFont("bold")
+        (this.ButMacroScriptRun := this.gViewer.Add("Button", "x880 y120 w70", "&Test script")).SetFont("bold")
         this.ButMacroScriptRun.OnEvent("Click", this.ButMacroScriptRun_Click.Bind(this))
-        this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro sidebar =>")
+        this.ButMacroScriptCopy := this.gViewer.Add("Button", "x920 y120 w70", "&Copy")
+        this.ButMacroScriptCopy.OnEvent("Click", (*) => (A_Clipboard := this.EditMacroScript.Text, ToolTip("Macro code copied to Clipboard!"), SetTimer(ToolTip, -3000)))
+        this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro &sidebar =>")
         this.ButToggleMacroSidebar.OnEvent("Click", this.ButToggleMacroSidebar_Click.Bind(this))
         this.gViewer.Show("w600 h550")
         this.gViewer_Size(this.gViewer,0,600,550)
@@ -6809,7 +6811,7 @@ class Viewer {
         this.ButToggleMacroSidebar.GetPos(,,&ButToggleMacroSidebarW)
         this.MoveControls({Control:this.TextFilterTVUIA, x:TV_Pos_X, y:Height-47}, {Control:this.ButToggleMacroSidebar, x:TV_Pos_X+TV_Pos_W-ButToggleMacroSidebarW, y:Height-50}, {Control:this.EditFilterTVUIA, x:TV_Pos_X+30, y:Height-50}
             , {Control:this.LVProps,h:Height-LVPropsY-170}, {Control:this.TextTVPatterns,y:Height-165}, {Control:this.TVPatterns,y:Height-145}, {Control:this.ButCapture,y:Height-50}
-            , {Control:this.GroupBoxMacro,x:TV_Pos_R+15, h:TV_Pos_H+35}, {Control:this.TextMacroAction,x:TV_Pos_R+25}, {Control:this.DDLMacroAction,x:TV_Pos_R+70}, {Control:this.ButMacroAddElement,x:TV_Pos_R+245}, {Control:this.EditMacroScript,x:TV_Pos_R+25,h:TV_Pos_H-50}, {Control:this.ButMacroScriptRun,x:TV_Pos_R+140,y:TV_Pos_Y+TV_Pos_H-2})
+            , {Control:this.GroupBoxMacro,x:TV_Pos_R+15, h:TV_Pos_H+35}, {Control:this.TextMacroAction,x:TV_Pos_R+25}, {Control:this.DDLMacroAction,x:TV_Pos_R+70}, {Control:this.ButMacroAddElement,x:TV_Pos_R+245}, {Control:this.EditMacroScript,x:TV_Pos_R+25,h:TV_Pos_H-50}, {Control:this.ButMacroScriptRun,x:TV_Pos_R+100,y:TV_Pos_Y+TV_Pos_H-2}, {Control:this.ButMacroScriptCopy,x:TV_Pos_R+200,y:TV_Pos_Y+TV_Pos_H-2})
         RedrawFunc()
     }
     MoveControls(ctrls*) {
@@ -6820,7 +6822,7 @@ class Viewer {
     ButToggleMacroSidebar_Click(GuiCtrlObj?, Info?) {
         local w
         this.MacroSidebarVisible := !this.MacroSidebarVisible
-        GuiCtrlObj.Text := this.MacroSidebarVisible ? "Hide macro sidebar <=" : "Show macro sidebar =>"
+        GuiCtrlObj.Text := this.MacroSidebarVisible ? "Hide macro &sidebar <=" : "Show macro &sidebar =>"
         this.gViewer.Opt("+MinSize" (520 + (this.MacroSidebarVisible ? this.MacroSidebarWidth : 0)) "x400")
         this.gViewer.GetPos(,, &w)
         this.gViewer.Move(,,w+(this.MacroSidebarVisible ? this.MacroSidebarWidth : -this.MacroSidebarWidth))
@@ -7035,8 +7037,8 @@ class Viewer {
             prop := ""
         }
         this.DDLMacroAction.Delete()
-        this.DDLMacroAction.Add(['Click()','Click("left")','ControlClick()', 'SetFocus()', 'ShowContextMenu()', 'Highlight()', 'Dump()','DumpAll()'])
-        this.DDLMacroAction.Choose(6)
+        this.DDLMacroAction.Add(['', 'Click()', 'Click("left")', 'ControlClick()', 'SetFocus()', 'ShowContextMenu()', 'Highlight()', 'Dump()','DumpAll()'])
+        this.DDLMacroAction.Choose(7)
         for pattern, value in UIA.Property.OwnProps() {
             if RegExMatch(pattern, "Is([\w]+)Pattern(\d?)Available", &match:=0) && Element.GetCachedPropertyValue(value) {
                 parent := this.TVPatterns.Add(match[1] (match.Count > 1 ? match[2] : ""))
