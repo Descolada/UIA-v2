@@ -43,7 +43,7 @@
     To-do:
     - Better error handling
 */
-global IUIAutomationMaxVersion := 7
+global IUIAutomationMaxVersion := 7, IUIAutomationActivateScreenReader := 1
 
 if !A_IsCompiled && A_LineFile = A_ScriptFullPath
     UIA.Viewer()
@@ -64,11 +64,8 @@ static __New() {
         IUIAutomation5:"{25f700c8-d816-4057-a9dc-3cbdee77e256}",
         IUIAutomation6:"{aae072da-29e3-413d-87a7-192dbf81ed10}",
         IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}"
-    }
+    }, __Cleanup := UIA.Cleanup()
     global IUIAutomationMaxVersion
-    A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "uint", 0, "ptr*", &screenreader:=0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
-    if !screenreader
-        A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "uint", 0, "ptr*", &screenreader:=0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
     this.IUIAutomationVersion := IUIAutomationMaxVersion+1, this.ptr := 0
     while (--this.IUIAutomationVersion > 1) {
         if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
@@ -85,8 +82,19 @@ static __New() {
     ; Define some properties that shouldn't be included in the value->name Map
     UIA.Property[30000], UIA.Property.T := 30003, UIA.Property.ControlType := 30003, UIA.Property.N := 30005, UIA.Property.CN := 30012, UIA.Property.A := 30011
 }
-static __Delete() {
-    try UIA.RemoveAllEventHandlers()
+class Cleanup {
+    __New() {
+        global IUIAutomationActivateScreenReader
+        this.ScreenReaderStartingState := UIA.GetScreenReader()
+        if IUIAutomationActivateScreenReader && !this.ScreenReaderStartingState
+            UIA.SetScreenReader(1)
+    }
+    __Delete() {
+        global IUIAutomationActivateScreenReader
+        try UIA.RemoveAllEventHandlers()
+        if IUIAutomationActivateScreenReader
+            DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", this.ScreenReaderStartingState, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
+    }
 }
 
 ; ---------- IUIAutomation constants and enumerations. ----------
@@ -1340,6 +1348,13 @@ static RemoveActiveTextPositionChangedEventHandler(handler, element) => (ComCall
 
 ; ---------- Internal methods and properties ----------
 
+static SetScreenReader(state, fWinIni:=2) {
+    DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", state, "uint", 0, "int", fWinIni) ; SPI_SETSCREENREADER
+}
+static GetScreenReader() {
+    A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0, "uint", 0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
+    return screenreader
+}
 
 ; BSTR wrapper, convert BSTR to AHK string and free it
 static BSTR(ptr) {
