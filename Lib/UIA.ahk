@@ -2839,7 +2839,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ElementFromPath(paths*) {
         try return this[paths*]
         catch IndexError as err
-            throw IndexError(StrReplace(err.Message, "at index", "at argument"), -1, err.Extra)
+            throw IndexError(StrReplace(err.Message, "at index", "at path index"), -1, err.Extra)
     }
 
     /**
@@ -6701,7 +6701,7 @@ class Viewer {
         CoordMode "Mouse", "Screen"
         DetectHiddenWindows "On"
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
-        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.Focused := 1
+        this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.MacroSidebarMinWidth := 290, this.GuiMinWidth := 540, this.GuiMinHeight := 400, this.Focused := 1
         this.LoadSettings()
         this.cacheRequest := UIA.CreateCacheRequest()
         ; Don't even get the live element, because we don't need it. Gives a significant speed improvement.
@@ -6709,7 +6709,7 @@ class Viewer {
         ; Set TreeScope to include the starting element and all descendants as well
         this.cacheRequest.TreeScope := 5
 
-        this.gViewer := Gui((this.AlwaysOnTop ? "AlwaysOnTop " : "") "Resize +MinSize520x400", "UIAViewer")
+        this.gViewer := Gui((this.AlwaysOnTop ? "AlwaysOnTop " : "") "Resize +MinSize" this.GuiMinWidth "x" this.GuiMinHeight, "UIAViewer")
         this.gViewer.OnEvent("Close", (*) => ExitApp())
         this.gViewer.OnEvent("Size", this.gViewer_Size.Bind(this))
         this.gViewer.Add("Text", "w100", "Window Info").SetFont("bold")
@@ -6805,14 +6805,29 @@ class Viewer {
     gViewer_Size(GuiObj, MinMax, Width, Height) {
         static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
         this.TVUIA.GetPos(&TV_Pos_X, &TV_Pos_Y, &TV_Pos_W, &TV_Pos_H)
-        this.MoveControls(this.MacroSidebarVisible ? {Control:this.TVUIA,w:(TV_Pos_W:=Width-this.MacroSidebarWidth-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)} : {Control:this.TVUIA,w:(TV_Pos_W:=Width-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)})
+        this.MoveControls(this.MacroSidebarVisible ? {Control:this.TVUIA,h:(TV_Pos_H:=Height-TV_Pos_Y-60)} : {Control:this.TVUIA,w:(TV_Pos_W:=Width-TV_Pos_X-10),h:(TV_Pos_H:=Height-TV_Pos_Y-60)})
         TV_Pos_R := TV_Pos_X+TV_Pos_W
         this.LVProps.GetPos(&LVPropsX, &LVPropsY, &LVPropsWidth, &LVPropsHeight)
         this.ButToggleMacroSidebar.GetPos(,,&ButToggleMacroSidebarW)
-        this.MoveControls({Control:this.TextFilterTVUIA, x:TV_Pos_X, y:Height-47}, {Control:this.ButToggleMacroSidebar, x:TV_Pos_X+TV_Pos_W-ButToggleMacroSidebarW, y:Height-50}, {Control:this.EditFilterTVUIA, x:TV_Pos_X+30, y:Height-50}
-            , {Control:this.LVProps,h:Height-LVPropsY-170}, {Control:this.TextTVPatterns,y:Height-165}, {Control:this.TVPatterns,y:Height-145}, {Control:this.ButCapture,y:Height-50}
-            , {Control:this.GroupBoxMacro,x:TV_Pos_R+15, h:TV_Pos_H+35}, {Control:this.TextMacroAction,x:TV_Pos_R+25}, {Control:this.DDLMacroAction,x:TV_Pos_R+70}, {Control:this.ButMacroAddElement,x:TV_Pos_R+245}, {Control:this.EditMacroScript,x:TV_Pos_R+25,h:TV_Pos_H-50}, {Control:this.ButMacroScriptRun,x:TV_Pos_R+100,y:TV_Pos_Y+TV_Pos_H-2}, {Control:this.ButMacroScriptCopy,x:TV_Pos_R+200,y:TV_Pos_Y+TV_Pos_H-2})
-        RedrawFunc()
+        this.MoveControls(
+            {Control:this.TextFilterTVUIA, x:TV_Pos_X, y:Height-47}, 
+            {Control:this.ButToggleMacroSidebar, x:TV_Pos_X+TV_Pos_W-ButToggleMacroSidebarW, y:Height-50}, 
+            {Control:this.EditFilterTVUIA, x:TV_Pos_X+30, y:Height-50},
+            {Control:this.LVProps,h:Height-LVPropsY-170}, 
+            {Control:this.TextTVPatterns,y:Height-165}, 
+            {Control:this.TVPatterns,y:Height-145}, 
+            {Control:this.ButCapture,y:Height-50})
+        if this.MacroSidebarVisible
+            this.MacroSidebarWidth := Width-(TV_Pos_X+TV_Pos_W)-10
+        this.MoveControls(
+            {Control:this.GroupBoxMacro,x:TV_Pos_R+15, w:Width-TV_Pos_R-30, h:TV_Pos_H+35}, 
+            {Control:this.TextMacroAction,x:TV_Pos_R+25}, 
+            {Control:this.DDLMacroAction,x:TV_Pos_R+70}, 
+            {Control:this.ButMacroAddElement,x:TV_Pos_R+this.MacroSidebarWidth-105}, 
+            {Control:this.EditMacroScript,x:TV_Pos_R+25,w:Width-TV_Pos_R-50,h:TV_Pos_H-50}, 
+            {Control:this.ButMacroScriptRun,x:TV_Pos_R+85,y:TV_Pos_Y+TV_Pos_H-2}, 
+            {Control:this.ButMacroScriptCopy,x:TV_Pos_R+this.MacroSidebarWidth-145,y:TV_Pos_Y+TV_Pos_H-2})
+        DllCall("RedrawWindow", "ptr", GuiObj.Hwnd, "ptr", 0, "ptr", 0, "uint", 0x0081) ; Reduces flicker compared to RedrawFunc
     }
     MoveControls(ctrls*) {
         for ctrl in ctrls
@@ -6823,8 +6838,8 @@ class Viewer {
         local w
         this.MacroSidebarVisible := !this.MacroSidebarVisible
         GuiCtrlObj.Text := this.MacroSidebarVisible ? "Hide macro &sidebar <=" : "Show macro &sidebar =>"
-        this.gViewer.Opt("+MinSize" (520 + (this.MacroSidebarVisible ? this.MacroSidebarWidth : 0)) "x400")
         this.gViewer.GetPos(,, &w)
+        this.gViewer.Opt("+MinSize" (this.MacroSidebarVisible ? w + this.MacroSidebarMinWidth : this.GuiMinWidth) "x" this.GuiMinHeight)
         this.gViewer.Move(,,w+(this.MacroSidebarVisible ? this.MacroSidebarWidth : -this.MacroSidebarWidth))
     }
     ; Handles adding elements with actions to the macro Edit
