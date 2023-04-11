@@ -5209,6 +5209,7 @@ class IUIAutomationLegacyIAccessiblePattern extends UIA.IUIAutomationBase {
             local pszValue
             return (ComCall(8, this, "ptr*", &pszValue := 0), UIA.BSTR(pszValue))
         }
+        set => this.SetValue(value)
     }
 
     ; Retrieves the Microsoft Active Accessibility description of the element.
