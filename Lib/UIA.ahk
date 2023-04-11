@@ -7052,9 +7052,9 @@ class Viewer {
             }
             prop := ""
         }
+        lastAction := this.DDLMacroAction.Text
         this.DDLMacroAction.Delete()
         this.DDLMacroAction.Add(['', 'Click()', 'Click("left")', 'ControlClick()', 'SetFocus()', 'ShowContextMenu()', 'Highlight()', 'Dump()','DumpAll()'])
-        this.DDLMacroAction.Choose(7)
         for pattern, value in UIA.Property.OwnProps() {
             if RegExMatch(pattern, "Is([\w]+)Pattern(\d?)Available", &match:=0) && Element.GetCachedPropertyValue(value) {
                 parent := this.TVPatterns.Add(match[1] (match.Count > 1 ? match[2] : ""))
@@ -7082,6 +7082,9 @@ class Viewer {
                 }
             }
         }
+        try this.DDLMacroAction.Choose(lastAction)
+        catch
+            this.DDLMacroAction.Choose(7)
     }
     ; Handles selecting elements in the UIA tree, highlights the selected element
     TVUIA_Click(GuiCtrlObj, Info) {
