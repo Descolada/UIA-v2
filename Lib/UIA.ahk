@@ -6727,7 +6727,7 @@ class Viewer {
         this.LVProps.ModifyCol(2,140)
         this.DisplayedProps := ["Type", "LocalizedType", "Name", "Value", "AutomationId", "BoundingRectangle", "ClassName", "FullDescription", "HelpText", "AccessKey", "AcceleratorKey", "HasKeyboardFocus", "IsKeyboardFocusable", "ItemType", "ProcessId", "IsEnabled", "IsPassword", "IsOffscreen", "FrameworkId", "IsRequiredForForm", "ItemStatus", "RuntimeId"]
         for v in this.DisplayedProps {
-            this.LVProps.Add(,v,"")
+            this.LVProps.Add(,v = "BoundingRectangle" ? "Location" : v,"")
             this.cacheRequest.AddProperty(v)
         }
         for pattern, value in UIA.Property.OwnProps() {
@@ -6904,6 +6904,8 @@ class Viewer {
             : ListViewGetContent("Selected", GuiCtrlObj)
         for LVData in StrSplit(LVData, "`n") {
             LVData := StrSplit(LVData, "`t",,2)
+            if LVData.Length < 2
+                continue
             switch LVData[1], 0 {
                 case "Type":
                     LVData[2] := "`"" RTrim(SubStr(LVData[2],8), ")") "`""
@@ -6912,7 +6914,7 @@ class Viewer {
             }
             Property := -1
             try Property := UIA.Property.%LVData[1]%
-            out .= ", " LVData[1] ":" (UIA.PropertyVariantTypeBSTR.Has(Property) ? "`"" StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") "`"" : LVData[2])
+            out .= ", " (GuiCtrlObj.Hwnd = this.LVWin.Hwnd ? "" : LVData[1] ":") (UIA.PropertyVariantTypeBSTR.Has(Property) ? "`"" StrReplace(StrReplace(LVData[2], "``", "````"), "`"", "```"") "`"" : LVData[2])
         }
         ToolTip("Copied: " (A_Clipboard := SubStr(out, 3)))
         SetTimer(ToolTip, -3000)
