@@ -6954,9 +6954,9 @@ class Viewer {
             SBMain_Menu.Add("Copy numeric path", (*) => (ToolTip("Copied: " (A_Clipboard := this.Stored.CapturedElement.NumericPath)), SetTimer(ToolTip, -3000)))
             SBMain_Menu.Add()
         }
-        SBMain_Menu.Add("Display UIA path (relatively reliable, shortest)", (*) => (this.PathType := this.PathType = "" ? "" : "", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
-        SBMain_Menu.Add("Display numeric path (least reliable, short)", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
-        SBMain_Menu.Add("Display condition path (most reliable, longest)", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display UIA path (relatively reliable, shortest)", (*) => (this.PathType := this.PathType = "" ? "" : "", this.Stored.HasOwnProp("CapturedElement") && this.Stored.CapturedElement.HasOwnProp("Path") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display numeric path (least reliable, short)", (*) => (this.PathType := this.PathType = "Numeric" ? "" : "Numeric", this.Stored.HasOwnProp("CapturedElement") && this.Stored.CapturedElement.HasOwnProp("Path") ? this.SBMain.SetText("  Path: " (this.PathType = "Numeric" ? this.Stored.CapturedElement.NumericPath : this.Stored.CapturedElement.Path)) : 1))
+        SBMain_Menu.Add("Display condition path (most reliable, longest)", (*) => (this.PathType := this.PathType = "Condition" ? "" : "Condition", this.Stored.HasOwnProp("CapturedElement") && this.Stored.CapturedElement.HasOwnProp("Path") ? this.SBMain.SetText("  Path: " (this.PathType = "Condition" ? this.Stored.CapturedElement.ConditionPath : this.Stored.CapturedElement.Path)) : 1))
         SBMain_Menu.Add("Ignore Name properties in condition path", (*) => (this.PathIgnoreNames := !this.PathIgnoreNames))
         if this.PathIgnoreNames
             SBMain_Menu.Check("Ignore Name properties in condition path")
@@ -7230,11 +7230,7 @@ class Viewer {
         local n := "", c := "", a := ""
         type := Element.CachedType
         t := "{T:" (type-50000)
-        if !pathsMap.Has(t) {
-            pathsMap[t] := 1
-            return t
-        }
-        pathsMap[t] := pathsMap[t] + 1
+        pathsMap[t] := pathsMap.Has(t) ? pathsMap[t] + 1 : 1
         try a := StrReplace(automationId := Element.CachedAutomationId, "`"", "```"")
         if a != "" && !IsInteger(a) { ; Ignore Integer AutomationIds, since they seem to be auto-generated in Chromium apps
             a := t ",A:`"" a "`""
@@ -7250,6 +7246,8 @@ class Viewer {
             n := t ",N:`"" n "`""
             pathsMap[n] := pathsMap.Has(n) ? pathsMap[n] + 1 : 1
         }
+        if pathsMap[t] = 1
+            return t
         if a != "" && !IsInteger(a) {
             return c != "" ? (pathsMap[a] <= pathsMap[c] ? a : c) : a
         } else if c != ""
