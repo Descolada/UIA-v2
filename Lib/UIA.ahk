@@ -6994,10 +6994,7 @@ class Viewer {
         if !IsSet(CapturedElement)
             return
         if this.Stored.HasOwnProp("CapturedElement") && IsObject(CapturedElement) {
-            try same := UIA.CompareElements(CapturedElement, this.Stored.CapturedElement) ; Cached element RuntimeIds sometimes cause an error here
-            catch {
-                try same := CapturedElement.CachedDump() == this.Stored.CapturedElement.CachedDump()
-            }
+            try same := this.SafeCompareElements(CapturedElement, this.Stored.CapturedElement) ; UIA.CompareElements(CapturedElement, this.Stored.CapturedElement) ; Cached element RuntimeIds sometimes cause an error here
             if same ?? 0 {
                 if this.FoundTime != 0 && ((A_TickCount - this.FoundTime) > 1000) {
                     if (mX == this.Stored.mX) && (mY == this.Stored.mY) {
@@ -7212,6 +7209,10 @@ class Viewer {
     ; CompareElements sometimes fails to match elements, so this compares some properties instead
     SafeCompareElements(e1, e2) {
         if e1.CachedDump() == e2.CachedDump() {
+            try {
+                if UIA.RuntimeIdToString(e1.CachedRuntimeId) == UIA.RuntimeIdToString(e2.CachedRuntimeId)
+                    return 1
+            }
             br_e1 := e1.CachedBoundingRectangle, br_e2 := e2.CachedBoundingRectangle
             return br_e1.l = br_e2.l && br_e1.t = br_e2.t && br_e1.r = br_e2.r && br_e1.b = br_e2.b
         }
