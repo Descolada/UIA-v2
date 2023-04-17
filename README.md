@@ -11,7 +11,7 @@ Additionally there is UIA_Browser.ahk, which contains helper functions for brows
 
 Multiple examples are included in the Examples folder.
 
-If you have questions or issues, either post it in the [AutoHotkey forums' main thread](https://www.autohotkey.com/boards/viewtopic.php?f=6&t=104999) or create a [new issue](https://github.com/Descolada/UIA-v2/issues).
+If you have questions or issues, either post it in the [AutoHotkey forums' main thread](https://www.autohotkey.com/boards/viewtopic.php?f=83&t=113065) or create a [new issue](https://github.com/Descolada/UIA-v2/issues).
 
 If you wish to support me in this and other projects:
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/descolada)
