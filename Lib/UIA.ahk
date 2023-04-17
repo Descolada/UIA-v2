@@ -742,8 +742,9 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
  * @returns {UIA.IUIAutomationElement}
  */
 static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, timeOut:=500, cacheRequest?) {
-    if activateChromiumAccessibility
+    if activateChromiumAccessibility {
         return UIA.ActivateChromiumAccessibility(winTitle, 1, timeOut, cacheRequest?)
+    }
     try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
     if !IsSet(cHwnd) || !cHwnd
         return
@@ -772,7 +773,7 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
     activatedHwnds[hWnd] := 1, cHwnd := 0
     try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
     if !IsSet(cHwnd) || !cHwnd
-        return
+        throw TargetError("No Chromium control (Chrome_RenderWidgetHostHWND1) found", -1)
     SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
     if (cEl := UIA.ElementFromHandle(cHwnd, cacheRequest?, False)) {
         try _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
@@ -827,8 +828,10 @@ static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:
         hwnd := WinExist(hwnd)
     if !hwnd
         throw TargetError("No matching window found", -1)
-    if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
-        %activateChromiumAccessibility% := retEl
+    try {
+        if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && IsObject(retEl := UIA.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
+            %activateChromiumAccessibility% := retEl
+    }
     if IsSet(cacheRequest)
         return UIA.ElementFromHandleBuildCache(cacheRequest, hwnd)
 
@@ -854,8 +857,9 @@ static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=Tr
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
     else
         pt64 := y << 32 | (x & 0xFFFFFFFF)
-    if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) { ; hwnd from point by SKAN
-        %activateChromiumAccessibility% := UIA.ActivateChromiumAccessibility(hwnd)
+    try {
+        if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) ; hwnd from point by SKAN
+            %activateChromiumAccessibility% := UIA.ActivateChromiumAccessibility(hwnd)
     }
     if IsSet(cacheRequest)
         return UIA.ElementFromPointBuildCache(cacheRequest, pt64)
@@ -6539,6 +6543,7 @@ class IUIAutomationValuePattern extends UIA.IUIAutomationBase {
             local retVal
             return (ComCall(4, this, "ptr*", &retVal := 0), UIA.BSTR(retVal))
         }
+        set => ComCall(3, this, "wstr", value)
     }
 
     ; Indicates whether the value of the element is read-only.
