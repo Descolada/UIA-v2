@@ -14,7 +14,7 @@
 	BrowserId
 		ahk_id of the browser window
 	BrowserType
-		"Chrome", "Edge", "Mozilla" or "Unknown"
+		"Chrome", "Edge", "Mozilla", "Vivaldi", "Brave" or "Unknown"
 	BrowserElement
 		The browser window element, which can also be accessed by just calling an element method from UIA_Browser (cUIA.FindFirst would call FindFirst method on the BrowserElement, is equal to cUIA.BrowserElement.FindFirst)
 	MainPaneElement
@@ -51,17 +51,17 @@
 		Navigates to URL and waits page to load
 	NewTab()
 		Presses the New tab button.
-	GetTab(searchPhrase:="", matchMode:=3, caseSensitive:=True)
+	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True)
 		Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	TabExist(searchPhrase:="", matchMode:=3, caseSensitive:=True)
+	TabExist(searchPhrase:="", matchMode:=3, caseSense:=True)
 		Checks whether a tab element with text of searchPhrase exists: if a matching tab is found then the element is returned, otherwise 0 is returned. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	GetTabs(searchPhrase:="", matchMode:=3, caseSensitive:=True)
+	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True)
 		Returns all tab elements with text of searchPhrase, or if empty then all tabs. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	GetAllTabNames()
 		Gets all the titles of tabs
-	SelectTab(tabName, matchMode:=3, caseSensitive:=True) 
+	SelectTab(tabName, matchMode:=3, caseSense:=True) 
 		Selects a tab with the text of tabName. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	CloseTab(tabElementOrName:="", matchMode:=3, caseSensitive:=True)
+	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True)
 		Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
 	IsBrowserVisible()
 		Returns True if any of the 4 corners of the browser are visible.
@@ -110,6 +110,109 @@
 	this.ReloadButton
 */
 
+class UIA_Vivaldi extends UIA_Browser {
+	__New(wTitle:="") {
+		this.BrowserType := "Vivaldi"
+		this.InitiateUIA(wTitle)
+	}
+	GetCurrentMainPaneElement() {
+		this.GetCurrentDocumentElement()
+		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateAndCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Group), UIA.CreatePropertyCondition(UIA.Property.AutomationId, "modal-bg")))
+		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := this.BrowserElement.WaitElement(this.DocumentControlCondition, 3000))
+			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
+		Loop 2 {
+			this.URLEditElement := this.BrowserElement.WaitElement(this.EditControlCondition, 3000)
+			try {
+				this.NavigationBarElement := this.DocumentElement
+				this.MainPaneElement := this.NavigationBarElement
+				this.TabBarElement := this.NavigationBarElement
+				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
+				this.ReloadButton := this.URLEditElement.WalkTree("-3", {Type:"Button"})
+				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
+				this.ReloadButtonName := this.ReloadButton.Name
+				if !this.ReloadButtonDescription && !this.ReloadButtonName
+					this.ReloadButtonName := "Reload"
+				return this.MainPaneElement
+			} catch {
+				WinActivate "ahk_id " this.BrowserId
+				WinWaitActive "ahk_id " this.BrowserId,,1
+			}
+		}
+		; If all goes well, this part is not reached
+	}
+
+	GetCurrentDocumentElement() {
+		Loop 2 {
+			try {
+				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", i:2})
+			} catch TargetError {
+				WinActivate this.BrowserId
+				WinWaitActive this.BrowserId,,1
+			}
+		}
+		return this.BrowserElement.WaitElement({Type:"Document"},5000)
+	}
+
+	NewTab() {
+		local lastTab
+		if !this.HasOwnProp("NewTabButton") {
+			lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
+			this.NewTabButton := this.MainPaneElement.FindElement({Type:"Button", startingElement:lastTab},2)
+		}
+		this.NewTabButton.Click()
+	}
+	
+	GetAllTabs() {
+		return this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
+	}
+
+	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
+		local allTabs := this.GetAllTabs()
+		matchMode := UIA.TypeValidation.MatchMode(matchMode)
+		if !searchPhrase
+			return allTabs
+		return UIA.Filter(allTabs, (element) => element.ElementExist({Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))
+	}
+
+	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True) { 
+		local match, els
+		if !searchPhrase {
+			RegExMatch(WinGetTitle(this.BrowserId), "(.*) - Vivaldi", &match:="")
+			searchPhrase := match[1], matchMode := 3, caseSense := True
+		}
+		els := UIA.Filter(this.GetAllTabs(), (element) => element.ElementExist({Type:"Text", Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))
+		return els[els.Length]
+	}
+
+	GetAllTabNames() { 
+		local names := [], k, v
+		for k, v in this.GetTabs() {
+			names.Push(v.FindElement({Type:"Text"}).Name)
+		}
+		return names
+	}
+	
+	SetURL(newUrl, navigateToNewUrl := False) => UIA_Mozilla.Prototype.GetMethod("SetURL")(this, newUrl, navigateToNewUrl)
+
+	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) {
+		this.SelectTab(tabElementOrName)
+		Sleep 40
+		ControlSend("{ctrl down}w{ctrl up}",,this.BrowserId)
+	}
+
+	Back() { 
+		this.ReloadButton.WalkTree("-2", this.ButtonControlCondition).Click()
+	}
+
+	Forward() { 
+		this.ReloadButton.WalkTree("-1", this.ButtonControlCondition).Click()
+	}
+
+	Home() {
+		throw Error("Method not implemented", -1)
+	}
+}
+
 class UIA_Chrome extends UIA_Browser {
 	__New(wTitle:="") {
 		this.BrowserType := "Chrome"
@@ -117,15 +220,11 @@ class UIA_Chrome extends UIA_Browser {
 	}
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		try this.BrowserElement.FindElement({Type:"Document"}) 
-		catch {
-			WinActivate this.BrowserId
-			WinWaitActive this.BrowserId,,1
-		}
-		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+		this.GetCurrentDocumentElement()
+		if !this.HasOwnProp("DocumentElement")
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
-			 this.URLEditElement := this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
+			this.URLEditElement := this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
 			try {
 				if !this.URLEditElement
 					this.URLEditElement := UIA.CreateTreeWalker(this.EditControlCondition).GetLastChildElement(this.BrowserElement)
@@ -158,6 +257,9 @@ class UIA_Chrome extends UIA_Browser {
 	}
 }
 
+class UIA_Brave extends UIA_Chrome {
+}
+
 class UIA_Edge extends UIA_Browser {
 	__New(wTitle:="") {
 		this.BrowserType := "Edge"
@@ -166,13 +268,9 @@ class UIA_Edge extends UIA_Browser {
 
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		local k, v
-		try this.BrowserElement.FindElement({Type:"Document"}) 
-		catch {
-			WinActivate this.BrowserId
-			WinWaitActive this.BrowserId,,1
-		}
-		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+		local k, v, el, topCoord, bt
+		this.GetCurrentDocumentElement()
+		if !this.HasOwnProp("DocumentElement")
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			try {
@@ -213,6 +311,13 @@ class UIA_Edge extends UIA_Browser {
 			}
 		}
 		; If all goes well, this part is not reached
+	}
+
+	GetCurrentDocumentElement() {
+		local endtime := A_TickCount+3000
+		While A_TickCount < endtime
+			try return this.DocumentElement := this.CurrentDocumentElement := UIA.ElementFromChromium(this.BrowserId).FindFirst(UIA.TrueCondition,1)
+		throw Error("Unable to get the current Document element", -1)
 	}
 }
 
@@ -281,6 +386,7 @@ class UIA_Mozilla extends UIA_Browser {
 	SetURL(newUrl, navigateToNewUrl := False) { 
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
+		Sleep 40
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
 			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
 		}
@@ -334,13 +440,13 @@ class UIA_Mozilla extends UIA_Browser {
 	}
 
 	; Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
-	CloseTab(tabElementOrName:="", matchMode:=3, caseSensitive:=True) { 
+	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) { 
 		if (tabElementOrName != "") {
 			if IsObject(tabElementOrName) {
 				if (tabElementOrName.Type == UIA.Type.TabItem)
 					tabElementOrName.Click()
 			} else {
-				try this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSensitive}).Click()
+				try this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSense}).Click()
 			}
 		}
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
@@ -361,6 +467,7 @@ class UIA_Browser {
 		this.TabControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Tab)
 		this.ToolbarTreeWalker := UIA.CreateTreeWalker(this.ToolbarControlCondition)
 		this.BrowserElement := UIA.ElementFromHandle(this.BrowserId)
+		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		this.GetCurrentMainPaneElement()
 	}
 	; Initiates UIA and hooks to the browser window specified with wTitle. 
@@ -370,7 +477,7 @@ class UIA_Browser {
 			throw TargetError("UIA_Browser: failed to find the browser!", -1)
 		wExe := WinGetProcessName("ahk_id" this.BrowserId)
 		wClass := WinGetClass("ahk_id" this.BrowserId)
-		this.BrowserType := (wExe = "chrome.exe") ? "Chrome" : (wExe = "msedge.exe") ? "Edge" : InStr(wClass, "Mozilla") ? "Mozilla" : "Unknown"
+		this.BrowserType := (wExe = "chrome.exe") ? "Chrome" : (wExe = "msedge.exe") ? "Edge" : (wExe = "vivaldi.exe") ? "Vivaldi" : InStr(wClass, "Mozilla") ? "Mozilla" : (wExe = "brave.exe") ? "Brave" : "Unknown"
 		if (this.BrowserType != "Unknown") {
 			this.base := UIA_%(this.BrowserType)%.Prototype
 			this.__New(wTitle)
@@ -379,6 +486,7 @@ class UIA_Browser {
 	}
 	
 	__Get(member, params) {
+		local err
 		if this.HasOwnProp("BrowserElement") {
 			try return this.BrowserElement.%member%
 			catch PropertyError {
@@ -393,6 +501,7 @@ class UIA_Browser {
 	}
 	
 	__Call(member, params) {
+		local err
 		if this.HasOwnProp("BrowserElement") {
 			try return this.BrowserElement.%member%(params*)
 			catch MethodError {
@@ -421,14 +530,9 @@ class UIA_Browser {
 	
 	; Refreshes UIA_Browser.MainPaneElement and returns it
 	GetCurrentMainPaneElement() { 
-		try this.BrowserElement.FindElement({Type:"Document"}) 
-		catch {
-			WinActivate this.BrowserId
-			WinWaitActive this.BrowserId,,1
-		}
-		if !this.BrowserElement.WaitElement({Type:"Document"}, 3000)
+		this.GetCurrentDocumentElement()
+		if !this.HasOwnProp("DocumentElement")
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
-
 		; Finding the correct Toolbar ends up to be quite tricky. 
 		; In Chrome the toolbar element is located in the tree after the content element, 
 		; so if the content contains a toolbar then that will be returned. 
@@ -472,9 +576,7 @@ class UIA_Browser {
 	
 	; Returns the current document/content element of the browser
 	GetCurrentDocumentElement() { 
-		if (this.BrowserType = "Mozilla")
-			return (this.CurrentDocumentElement := this.BrowserElement.FindElement({Name:this.GetTab().Name, Type:"Document"}))
-		return (this.CurrentDocumentElement := this.BrowserElement.FindFirst(this.DocumentControlCondition))
+		return (this.DocumentElement := this.CurrentDocumentElement := this.BrowserElement.WaitElement(this.DocumentControlCondition, 3000))
 	}
 
 	GetCurrentReloadButton() {
@@ -567,8 +669,6 @@ class UIA_Browser {
 	; Gets text from an alert-box created with for example javascript:alert('message')
 	GetAlertText(closeAlert:=True, timeOut:=3000) {
 		local startTime := A_TickCount, text := ""
-		if !this.HasOwnProp("DialogTreeWalker")
-			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		startTime := A_TickCount
 		while ((A_tickCount - startTime) < timeOut) {
 			try {
@@ -587,8 +687,6 @@ class UIA_Browser {
 	}
 	
 	CloseAlert() {
-		if !this.HasOwnProp("DialogTreeWalker")
-			this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		try {
 			dialogEl := this.DialogTreeWalker.GetLastChildElement(this.BrowserElement)
 			OKBut := dialogEl.FindFirst(this.ButtonControlCondition)
@@ -616,29 +714,10 @@ class UIA_Browser {
 		return this.BrowserElement.FindAll(LinkCondition)
 	}
 	
-	__CompareTitles(compareTitle, winTitle, matchMode:="", caseSensitive:=True) {
-		if !matchMode
-			matchMode := A_TitleMatchMode
-		if (matchMode == 1) {
-			if (caseSensitive ? (SubStr(winTitle, 1, StrLen(compareTitle)) == compareTitle) : (SubStr(winTitle, 1, StrLen(compareTitle)) = compareTitle))
-				return 1
-		} else if (matchMode == 2) {
-			if InStr(winTitle, compareTitle, caseSensitive)
-				return 1
-		} else if (matchMode == 3) {
-			if (caseSensitive ? (compareTitle == winTitle) : (compareTitle = winTitle))
-				return 1
-		} else if (matchMode = "RegEx") {
-			if RegexMatch(winTitle, compareTitle)
-				return 1
-		}
-		return 0
-	}
-	
 	; Waits the browser title to change to targetTitle (by default just waits for the title to change), timeOut is in milliseconds (default is indefinite waiting)
 	WaitTitleChange(targetTitle:="", timeOut:=-1) { 
 		local origTitle := WinGetTitle("ahk_id" this.BrowserId), startTime := A_TickCount, newTitle := origTitle
-		while ((((A_TickCount - startTime) < timeOut) || (timeOut = -1)) && (targetTitle ? !this.__CompareTitles(targetTitle, newTitle) : (origTitle == newTitle))) {
+		while ((((A_TickCount - startTime) < timeOut) || (timeOut = -1)) && (targetTitle ? !UIA_Browser.CompareTitles(targetTitle, newTitle) : (origTitle == newTitle))) {
 			Sleep 200
 			newTitle := WinGetTitle("A")
 		}
@@ -661,7 +740,7 @@ class UIA_Browser {
 			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)) {
 				if targetTitle {
 					wTitle := WinGetTitle(this.BrowserId)
-					if this.__CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
+					if UIA_Browser.CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
 						break
 				} else
 					break
@@ -742,10 +821,10 @@ class UIA_Browser {
 	GetAllTabs() { 
 		return this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.TabItem))
 	}
-	; Gets all tab elements matching searchPhrase, matchMode and caseSensitive
+	; Gets all tab elements matching searchPhrase, matchMode and caseSense
 	; If searchPhrase is omitted then all tabs will be returned
-	GetTabs(searchPhrase:="", matchMode:=3, caseSensitive:=True) {
-		return (searchPhrase == "") ? this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.TabItem)) : this.TabBarElement.FindElements({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
+		return (searchPhrase == "") ? this.TabBarElement.FindAll(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.TabItem)) : this.TabBarElement.FindElements({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSense})
 	}
 
 	; Gets all the titles of tabs
@@ -758,28 +837,28 @@ class UIA_Browser {
 	}
 	
 	; Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	GetTab(searchPhrase:="", matchMode:=3, caseSensitive:=True) { 
-		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True) { 
+		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSense})
 	}
 	; Checks whether a tab element with text of searchPhrase exists: if a matching tab is found then the element is returned, otherwise 0 is returned. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	TabExist(searchPhrase:="", matchMode:=3, caseSensitive:=True) {
-		try return this.GetTab(searchPhrase, matchMode, caseSensitive)
+	TabExist(searchPhrase:="", matchMode:=3, caseSense:=True) {
+		try return this.GetTab(searchPhrase, matchMode, caseSense)
 		return 0
 	}
 	
 	; Selects a tab with the text of tabName. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
-	SelectTab(tabName, matchMode:=3, caseSensitive:=True) { 
+	SelectTab(tabName, matchMode:=3, caseSense:=True) { 
 		local selectedTab
 		try {
-			selectedTab := this.TabBarElement.FindElement({Name:tabName, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+			selectedTab := IsObject(tabName) ? tabName : this.GetTab(tabName, matchMode, caseSense)
 			selectedTab.Click()
 		} catch TargetError
-			throw TargetError("Tab with name " tabName " was not found (MatchMode: " matchMode ", CaseSensitive: " caseSensitive ")")
+			throw TargetError("Tab with name " tabName " was not found (MatchMode: " matchMode ", CaseSense: " caseSense ")")
 		return selectedTab
 	}
 	
 	; Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
-	CloseTab(tabElementOrName:="", matchMode:=3, caseSensitive:=True) { 
+	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) { 
 		if IsObject(tabElementOrName) {
 			if (tabElementOrName.Type == UIA.Type.TabItem)
 				try UIA.TreeWalkerTrue.GetLastChildElement(tabElementOrName).Click()
@@ -788,10 +867,10 @@ class UIA_Browser {
 				try UIA.TreeWalkerTrue.GetLastChildElement(this.GetTab()).Click()
 			} else {
 				try {
-					targetTab := this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSensitive})
+					targetTab := this.GetTab(tabElementOrName, matchMode, caseSense)
 					UIA.TreeWalkerTrue.GetLastChildElement().Click(targetTab)
 				} catch
-					throw TargetError("Tab with name " tabElementOrName " was not found (MatchMode: " matchMode ", CaseSensitive: " caseSensitive ")")
+					throw TargetError("Tab with name " tabElementOrName " was not found (MatchMode: " matchMode ", CaseSense: " caseSense ")")
 			}
 		}
 	}
@@ -806,7 +885,6 @@ class UIA_Browser {
 	}
 
 	Send(text) {
-		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Enter}" , this.BrowserId
 		ControlSend text, , this.BrowserId
 	}
 	
@@ -821,5 +899,23 @@ class UIA_Browser {
 		for k, v in arr
 			ret .= "Key: " k " Value: " (HasMethod(v)? v.name:IsObject(v)?this.PrintArray(v):v) "`n"
 		return ret
+	}
+
+	static CompareTitles(compareTitle, winTitle, matchMode:="", caseSense:=True) => UIA_Browser.StrCompare(winTitle, compareTitle, matchMode ? matchMode : A_TitleMatchMode, caseSense)
+
+	static StrCompare(str1, str2, matchMode:=3, caseSense:=True) {
+		local str3, len3
+		matchMode := UIA.TypeValidation.MatchMode(matchMode)
+		if matchMode != "RegEx" && (len1 := StrLen(str1)) < (len2 := StrLen(str2))
+			str3 := str1, str1 := str2, str2 := str3, len3 := len1, len1 := len2, len2 := len3
+		if matchMode = 1
+			return caseSense ? SubStr(str1, 1, len2) == str2 : SubStr(str1, 1, len2) = str2
+		else if matchMode = 2
+			return InStr(str1, str2, caseSense)
+		else if matchMode = 3
+			return caseSense ? str1 == str2 : str1 = str2
+		else if matchMode = "Regex"
+			return RegExMatch(str1, str2)
+		return 0
 	}
 }
