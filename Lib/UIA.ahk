@@ -527,9 +527,9 @@ static RuntimeIdFromString(str) {
  * @returns {Array}
  */
 static Filter(elementArray, function) {
+    local el, ret := []
     if !InStr(Type(elementArray), "Array")
         throw TypeError("elementArray must be an Array or IUIAutomationElementArray", -1)
-    ret := []
     for el in elementArray
         if function(el)
             ret.Push(el)
@@ -635,7 +635,7 @@ static __CreateRawCondition(condition) {
 }
 
 static __ConditionBuilder(obj, &nonUIAEncountered?) {
-    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, j, val, match
+    local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, j, val, match, arr
     sanitizeMM := False
     switch Type(obj) {
         case "Object":
@@ -878,6 +878,7 @@ static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=Tr
  * @returns {UIA.IUIAutomationElement}
  */
 static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
+    local el, lastArr, nextArr, inEl
     if !IsSet(cacheRequest) {
         cacheRequest := UIA.CreateCacheRequest()
         cacheRequest.TreeScope := 5
@@ -1192,7 +1193,7 @@ static IntNativeArrayToSafeArray(array, arrayCount) {
 
 ; Converts a SAFEARRAY of integers to an array.
 static IntSafeArrayToNativeArray(intArray) {
-    local array
+    local array, arrayCount
     return (ComCall(43, this, "ptr", intArray, "ptr*", &array := 0, "int*", &arrayCount := 0), UIA.NativeArray(array, arrayCount, "int"))
 }
 ; Creates a VARIANT that contains the coordinates of a rectangle.
@@ -1715,7 +1716,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     __Item[params*] {
         get {
-            local el, _, param, i
+            local el, _, param, i, arr, found
             el := this
             for _, param in params {
                 if IsObject(param) {
@@ -1801,7 +1802,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      *     Element.ValuePattern == Element.GetPattern("Value")
      */
     __Get(Name, Params) {
-        local pName, pVal, NewName := StrReplace(Name, "Current",,,,1)
+        local pName, pVal, NewName := StrReplace(Name, "Current",,,,1), err, tryName
         if (SubStr(Name, 1, 6) = "Cached") {
             if UIA.Property.HasOwnProp(PropName := SubStr(Name, 7))
                 return this.GetCachedPropertyValue(UIA.Property.%PropName%)
@@ -1828,7 +1829,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
     ; Setter for UIA element and pattern properties.
     __Set(Name, Params, Value) {
-        local pVal, pName, NewName := StrReplace(Name, "Current",,,,1)
+        local pVal, pName, NewName := StrReplace(Name, "Current",,,,1), tryName, err
         if this.base.HasOwnProp(NewName)
             return this.%NewName% := Value
         for pName, pVal in UIA.Pattern.OwnProps()
@@ -1852,7 +1853,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      *     Element.Invoke() == Element.GetPattern("Value").Invoke()
      */
     __Call(Name, Params) {
-        local NewName, pName, pVal
+        local NewName, pName, pVal, tryName, err
         if this.base.HasOwnProp(NewName := StrReplace(Name, "Current",,,,1))
             return this.%NewName%(Params*)
         for pName, pVal in UIA.Pattern.OwnProps()
@@ -1893,7 +1894,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             children.Push(this)
         return children
         AppendChildren(el) {
-            subchildren := el.CachedChildren
+            local subchildren := el.CachedChildren, child
             for child in subchildren {
                 children.Push(child)
                 AppendChildren(child)
@@ -2051,7 +2052,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Get all child elements using TreeWalker. This is only for debugging purposes.
     TWGetChildren() {
-        arr := []
+        local arr := [], nextChild
         if !IsObject(nextChild := UIA.TreeWalkerTrue.GetFirstChildElement(this))
             return ""
         arr.Push(nextChild)
@@ -2067,7 +2068,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {String}
      */
     Dump(scope:=1, delimiter:=" ", maxDepth:=-1) {
-        local out := "", n, oChild
+        local out := "", n, oChild, el
         if !IsInteger(scope)
             try scope := UIA.TreeScope.%scope%
         ; Create cache request, add all the necessary properties that Dump uses: Type, LocalizedType, AutomationId, Name, Value, ClassName, AcceleratorKey
@@ -2152,7 +2153,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Array}
      */
     GetConditionPath(targetEl, cached := False) {
-        local i, child, cachedThis, numPath, conditionPath, children, targetType, targetIndex, sameTypeCount, targetTypeIndex
+        local i, child, cachedThis, numPath, conditionPath, children, targetType, targetIndex, sameTypeCount, targetTypeIndex, found
         cachedThis := cached ? this : this.BuildUpdatedCache(UIA.CreateCacheRequest(["Type"],,5))
         numPath := cachedThis.GetNumericPath(targetEl, true)
         conditionPath := []
@@ -2182,6 +2183,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Array}
      */
     GetNumericPath(targetEl, cached := False) {
+        local cachedThis, found
         cachedThis := cached ? this : this.BuildUpdatedCache(cacheRequest := UIA.CreateCacheRequest(["Type"],,5))
         if found := FindTarget(cachedThis)
             return found
@@ -2258,13 +2260,15 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         local SleepTime, togglePattern, expandState, selectionPattern, rel, pos, cCount
         if WhichButton = "" or IsInteger(WhichButton) {
             SleepTime := WhichButton ? WhichButton : -1
+            ; Caching the properties doesn't seem to make a speed difference, rather it might be slower with caching
+            ; Using DoDefaultAction as default might end up slower (tested in Chrome - clicked much slower)
             if (this.GetPropertyValue(UIA.Property.IsInvokePatternAvailable)) {
                 this.InvokePattern.Invoke()
                 Sleep SleepTime
                 return 1
             }
             if (this.GetPropertyValue(UIA.Property.IsTogglePatternAvailable)) {
-                togglePattern := this.GetCurrentPatternAs("Toggle"), toggleState := togglePattern.CurrentToggleState
+                togglePattern := this.TogglePattern, toggleState := togglePattern.CurrentToggleState
                 togglePattern.Toggle()
                 if (togglePattern.CurrentToggleState != toggleState) {
                     Sleep sleepTime
@@ -2397,7 +2401,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Integer}
      */
     WaitNotExist(timeOut:=-1) {
-        endtime := A_TickCount + timeout
+        local endtime := A_TickCount + timeout, exists
         while ((exists := this.Exists) && ((timeout == -1) || (A_Tickcount < endtime)))
             Sleep 20
         return !exists
@@ -2469,7 +2473,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     FindElement(condition, scope:=4, index:=1, order:=0, startingElement:=0, cacheRequest:=0) {
-        local withOptions := 0
+        local withOptions := 0, found, cache
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest, &index)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
         if index < 0 ; Convert negative index to LastToFirst order
@@ -2613,6 +2617,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             throw TargetError("An element matching the condition was not found", -1)
         }
         PreOrderFirstToLastRecursiveFind(el) {
+            local child, found
             for child in el.CachedChildren {
                 if (startingElement ? (startingElement = UIA.RuntimeIdToString(child.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && child.ValidateCondition(condition, true) && --index = 0
                     return child
@@ -2621,7 +2626,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PreOrderLastToFirstRecursiveFind(el) {
-            children := el.CachedChildren, len := children.Length + 1
+            local children := el.CachedChildren, len := children.Length + 1, found, child
             Loop len-1 {
                 child := children[len-A_index]
                 if (startingElement ? (startingElement = UIA.RuntimeIdToString(child.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && child.ValidateCondition(condition, true) && --index = 0
@@ -2631,6 +2636,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PostOrderFirstToLastRecursiveFind(el) {
+            local child, found
             if scope > 1 {
                 if scope < 4 ; Limit the scope so the next recursion doesn't go deeper
                     scope := 1
@@ -2643,6 +2649,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 return el
         }
         PostOrderLastToFirstRecursiveFind(el) {
+            local children, len, found
             if scope > 1 {
                 if scope < 4 ; Limit the scope so the next recursion doesn't go deeper
                     scope := 1
@@ -2670,7 +2677,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindElements(condition, scope := 4, order:=0, startingElement:=0, cacheRequest:=0) {
-        local withOptions
+        local withOptions, found, cache
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest)
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement), cacheRequest := UIA.TypeValidation.CacheRequest(cacheRequest)
         withOptions := order || startingElement
@@ -2735,6 +2742,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if scope > 1
             return (order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this), foundElements)
         PreOrderFirstToLastRecursiveFind(el) {
+            local child
             for child in el.CachedChildren {
                 if (startingElement ? (startingElement = UIA.RuntimeIdToString(child.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && child.ValidateCondition(condition, true)
                     foundElements.Push(child)
@@ -2743,7 +2751,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PreOrderLastToFirstRecursiveFind(el) {
-            children := el.CachedChildren, len := children.Length + 1
+            local children := el.CachedChildren, len := children.Length + 1, child
             Loop len-1 {
                 child := children[len-A_index]
                 if (startingElement ? (startingElement = UIA.RuntimeIdToString(child.GetRuntimeId()) ? !(startingElement := "") : 0) : 1) && child.ValidateCondition(condition, true)
@@ -2753,6 +2761,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PostOrderFirstToLastRecursiveFind(el) {
+            local child
             if scope > 1 {
                 if scope < 4 ; Limit the scope so the next recursion doesn't go deeper
                     scope := 1
@@ -2763,6 +2772,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 foundElements.Push(el)
         }
         PostOrderLastToFirstRecursiveFind(el) {
+            local children, len
             if scope > 1 {
                 if scope < 4 ; Limit the scope so the next recursion doesn't go deeper
                     scope := 1
@@ -2789,6 +2799,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement} Found element if successful, 0 if timeout happens
      */
     WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
+        local endtime
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut")
         endtime := A_TickCount + timeOut
@@ -2812,6 +2823,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns 1 if element disappeared, 0 otherwise
      */
     WaitElementNotExist(condition, timeout := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
+        local endtime
         timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
@@ -2841,6 +2853,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     ElementFromPath(paths*) {
+        local err
         try return this[paths*]
         catch IndexError as err
             throw IndexError(StrReplace(err.Message, "at index", "at path index"), -1, err.Extra)
@@ -2866,7 +2879,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     CachedElementFromPath(paths*) {
-        local el := this, _, path, subpath
+        local el := this, _, path, subpath, err, arr
         for _, path in paths {
             if IsObject(path) {
                 try el := el.FindCachedElement(path, 2)
@@ -2964,7 +2977,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     WaitElementFromPath(paths*) {
-        local timeOut := -1
+        local timeOut := -1, endtime
         if paths.Length > 1 && paths[paths.Length] is Integer
             paths := paths.Clone(), timeOut := paths.Pop()
         endtime := A_TickCount + timeOut
@@ -2987,6 +3000,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     WalkTree(searchPath, filterCondition?) {
+        local PathTW, el, loopFunc, m, err
         PathTW := IsSet(filterCondition) ? UIA.CreateTreeWalker(filterCondition) : UIA.TreeWalkerTrue
         el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
         Loop Parse searchPath, "," {
@@ -3031,6 +3045,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     WalkCachedTree(searchPath, filterCondition?) {
+        local el, m, parent, children, child, err, steps
         el := this, searchPath := StrReplace(StrReplace(String(searchPath), " "), ".", ",")
         Loop Parse searchPath, "," {
             try {
@@ -3251,6 +3266,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     FindFirst(condition?, scope:=4) {
+        local found
         condition := UIA.TypeValidation.Condition(condition), scope := UIA.TypeValidation.TreeScope(scope)
         if !(condition is UIA.IUIAutomationCondition)
             condition := UIA.__CreateRawCondition(condition)
@@ -3269,6 +3285,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindAll(condition?, scope := 4) {
+        local found
         if !IsObject(condition)
             throw TypeError("Condition must be an condition object or array", -1)
         if !InStr(Type(condition), "Condition")
@@ -3278,6 +3295,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Retrieves the first child or descendant element that matches the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
     FindFirstBuildCache(cacheRequest, condition?, scope := 4) {
+        local found
         if !InStr(Type(condition), "Condition")
             condition := UIA.__CreateRawCondition(condition)
         if (ComCall(7, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition ?? UIA.TrueCondition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found)
@@ -3287,6 +3305,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Returns all UI Automation elements that satisfy the specified condition, prefetches the requested properties and control patterns, and stores the prefetched items in the cache.
     FindAllBuildCache(cacheRequest, condition?, scope := 4) {
+        local found
         if !InStr(Type(condition), "Condition")
             condition := UIA.__CreateRawCondition(condition)
         return (ComCall(8, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", condition ?? UIA.TrueCondition, "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
@@ -4083,6 +4102,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; FindFirst with additional parameters
     ; This gets called when FindFirst or FindElement is used with traversalOptions or startingElement arguments
     FindFirstWithOptions(condition, traversalOptions:=0, root:=0, scope:=4) {
+        local found
         if (ComCall(110, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", InStr(Type(condition), "Condition") ? condition : UIA.__CreateRawCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
         throw TargetError("An element matching the condition was not found", -1)
@@ -4090,6 +4110,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; FindAll with additional parameters
     ; This gets called when FindAll or FindElements is used with traversalOptions or startingElement arguments
     FindAllWithOptions(condition,  traversalOptions:=0, root:=0, scope:=4) {
+        local found
         if (ComCall(111, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", InStr(Type(condition), "Condition") ? condition : UIA.__CreateRawCondition(condition), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElementArray(found).ToArray()
         return []
@@ -4097,12 +4118,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; TreeScope, IUIAutomationCondition, IUIAutomationCacheRequest, TreeTraversalOptions, UIA.IUIAutomationElement
     FindFirstWithOptionsBuildCache(cacheRequest, condition, traversalOptions:=0, root:=0, scope := 4) {
+        local found
         condition := UIA.TypeValidation.Condition(condition)
         if (ComCall(112, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", InStr(Type(condition), "Condition") ? condition : UIA.__CreateRawCondition(condition), "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElement(found)
         throw TargetError("An element matching the condition was not found", -1)
     }
     FindAllWithOptionsBuildCache(cacheRequest, condition, traversalOptions:=0, root:=0, scope := 4) {
+        local found
         if (ComCall(113, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", InStr(Type(condition), "Condition") ? condition : UIA.__CreateRawCondition(condition), "ptr", UIA.TypeValidation.CacheRequest(cacheRequest), "int", traversalOptions, "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElementArray(found).ToArray()
         return []
@@ -5965,7 +5988,8 @@ class IUIAutomationStylesPattern extends UIA.IUIAutomationBase {
         }
     }
     GetExtendedPropertiesAsArray() {
-        ComCall(10, this, "ptr*", &propertyArray := 0, "int*", &propertyCount := 0), arr := []
+        local arr := [], p, propertyArray, propertyCount
+        ComCall(10, this, "ptr*", &propertyArray := 0, "int*", &propertyCount := 0)
         for p in UIA.NativeArray(propertyArray, propertyCount)
             arr.Push({ PropertyName: UIA.BSTR(NumGet(p, "ptr")), PropertyValue: UIA.BSTR(NumGet(p, A_PtrSize, "ptr")) })
         return arr
@@ -6013,7 +6037,8 @@ class IUIAutomationStylesPattern extends UIA.IUIAutomationBase {
         }
     }
     GetCachedExtendedPropertiesAsArray() {
-        ComCall(18, this, "ptr*", &propertyArray := 0, "int*", &propertyCount := 0), arr := []
+        local arr := [], p, propertyArray, propertyCount
+        ComCall(18, this, "ptr*", &propertyArray := 0, "int*", &propertyCount := 0)
         for p in UIA.NativeArray(propertyArray, propertyCount)
             arr.Push({ PropertyName: UIA.BSTR(NumGet(p, "ptr")), PropertyValue: UIA.BSTR(NumGet(p, A_PtrSize, "ptr")) })
         return arr
@@ -6251,6 +6276,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     ; Retrieves a text range subset that has the specified text attribute value.
     ; The FindAttribute method retrieves matching text regardless of whether the text is hidden or visible. Use UIA_IsHiddenAttributeId to check text visibility.
     FindAttribute(attr, val, backward:=False) {
+        local found
         if A_PtrSize = 4
             val := UIA.ComVar(val, , true), ComCall(7, this, "int", attr, "int64", NumGet(val, "int64"), "int64", NumGet(val, 8, "int64"), "int", backward, "ptr*", &found := 0)
         else
