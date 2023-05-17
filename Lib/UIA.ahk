@@ -2959,20 +2959,20 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     /**
-     * Wait element to appear at a path.  
-     * `WaitElementFromPath(path1[, path2, ...])`
+     * Wait element to appear at a path. The last argument may optionally be a timeout in milliseconds (default is indefinite wait).
+     * `WaitElementFromPath(path1[, path2, ..., timeout])`
      *
      * Paths can be:
      * 1. Comma-separated numeric path that defines which path to travel down the tree. In addition
      *     to integer values, or TypeN which selects the nth occurrence of Type.  
-     *     Eg. `Element.ElementFromPath("3,2")` => selects Elements third childs second child  
-     *         `Element.ElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
+     *     Eg. `Element.WaitElementFromPath("3,2", 2000)` => waits for Elements third childs second child, timeout 2 seconds 
+     *         `Element.WaitElementFromPath("Button3,2")` => waits for Elements third child of type Button, then its second child
      *
      * 2. UIA path copied from UIAViewer.  
-     *     Eg. `Element.ElementFromPath("bAx3")`
+     *     Eg. `Element.WaitElementFromPath("bAx3")`
      *
      * 3. A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.  
-     *        Eg. `Element.ElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
+     *        Eg. `Element.WaitElementFromPath({Type:"Button"}, {Type:"List"})` => waits for the first Button type child of Element, then the first List type child of that element
      *
      * @returns {UIA.IUIAutomationElement}
      */
