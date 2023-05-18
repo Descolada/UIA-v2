@@ -116,14 +116,14 @@ class UIA_Vivaldi extends UIA_Browser {
 		this.InitiateUIA(wTitle)
 	}
 	GetCurrentMainPaneElement() {
-		this.GetCurrentDocumentElement()
+		MainDocumentElement := this.GetCurrentDocumentElement()
 		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateAndCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Group), UIA.CreatePropertyCondition(UIA.Property.AutomationId, "modal-bg")))
-		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := this.BrowserElement.WaitElement(this.DocumentControlCondition, 3000))
+		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := MainDocumentElement)
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			this.URLEditElement := this.BrowserElement.WaitElement(this.EditControlCondition, 3000)
 			try {
-				this.NavigationBarElement := this.DocumentElement
+				this.NavigationBarElement := MainDocumentElement
 				this.MainPaneElement := this.NavigationBarElement
 				this.TabBarElement := this.NavigationBarElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
@@ -735,9 +735,10 @@ class UIA_Browser {
 			try ReloadButtonName := this.ReloadButton.Name
 			try ReloadButtonDescription := legacyPattern.Description
 			try ReloadButtonFullDescription := this.ReloadButton.FullDescription
-			if ((this.ReloadButtonName ? InStr(ReloadButtonName, this.ReloadButtonName) : 1) 
+			if (((this.ReloadButtonName ? InStr(ReloadButtonName, this.ReloadButtonName) : 1) 
 			   && (this.ReloadButtonDescription && legacyPattern ? InStr(ReloadButtonDescription, this.ReloadButtonDescription) : 1)
-			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)) {
+			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)))
+			   || !this.ReloadButton.IsEnabled {
 				if targetTitle {
 					wTitle := WinGetTitle(this.BrowserId)
 					if UIA_Browser.CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
