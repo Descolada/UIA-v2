@@ -156,14 +156,14 @@ class UIA_Vivaldi extends UIA_Browser {
 	NewTab() {
 		local lastTab
 		if !this.HasOwnProp("NewTabButton") {
-			lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1})
-			this.NewTabButton := this.MainPaneElement.FindElement({Type:"Button", startingElement:lastTab},2)
+			lastTab := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1})
+			this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
 		}
 		this.NewTabButton.Click()
 	}
 	
 	GetAllTabs() {
-		return this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
+		return this.BrowserElement.FindElements({AutomationId:"tab-", matchmode:"Substring"})
 	}
 
 	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
