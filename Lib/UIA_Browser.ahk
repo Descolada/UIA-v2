@@ -156,7 +156,7 @@ class UIA_Vivaldi extends UIA_Browser {
 	NewTab() {
 		local lastTab
 		if !this.HasOwnProp("NewTabButton") {
-			lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
+			lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1})
 			this.NewTabButton := this.MainPaneElement.FindElement({Type:"Button", startingElement:lastTab},2)
 		}
 		this.NewTabButton.Click()
