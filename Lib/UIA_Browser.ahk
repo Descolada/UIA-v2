@@ -156,28 +156,18 @@ class UIA_Vivaldi extends UIA_Browser {
 	NewTab() {
 		local lastTab
 		if !this.HasOwnProp("NewTabButton") {
-			if this.HasOwnProp("TabBarElement")
-				lastTab := this.TabBarElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-			else {
-				try lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-				catch
-					lastTab := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"StartsWith", i:-1})
-				this.TabBarElement := lastTab.Parent
-			}
+			try lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
+			catch
+				lastTab := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"StartsWith", i:-1})
 			this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
 		}
 		this.NewTabButton.Click()
 	}
 	
 	GetAllTabs() {
-		local found
-		if this.HasOwnProp("TabBarElement")
-			return this.TabBarElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
-		else {
-			try return (found := this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children), this.TabBarElement := found.Parent, found)
-			catch
-				return (found := this.BrowserElement.FindElements({AutomationId:"tab-", matchmode:"StartsWith"}), this.TabBarElement := found.Parent, found)
-		}
+		try return this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
+		catch
+			return this.BrowserElement.FindElements({AutomationId:"tab-", matchmode:"StartsWith"})
 	}
 
 	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
