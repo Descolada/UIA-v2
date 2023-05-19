@@ -123,9 +123,14 @@ class UIA_Vivaldi extends UIA_Browser {
 		Loop 2 {
 			this.URLEditElement := this.BrowserElement.WaitElement({AutomationId:"urlFieldInput"}, 3000)
 			try {
-				this.NavigationBarElement := MainDocumentElement
-				this.MainPaneElement := this.NavigationBarElement
-				this.TabBarElement := this.NavigationBarElement
+				lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
+				this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
+			} catch
+				this.NewTabButton := this.BrowserElement.FindElement({Name:"New Tab", Type:"Button", matchmode:"Substring"})
+			try {
+				this.MainPaneElement := MainDocumentElement
+				this.TabBarElement := this.NewTabButton.WalkTree("p", [{Type:"Group", Type:"Document"}])
+				this.NavigationBarElement := this.TabBarElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				this.ReloadButton := this.URLEditElement.WalkTree("-3", {Type:"Button"})
 				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
@@ -154,21 +159,11 @@ class UIA_Vivaldi extends UIA_Browser {
 	}
 
 	NewTab() {
-		local lastTab
-		if !this.HasOwnProp("NewTabButton") {
-			try {
-				lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-				this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
-			} catch
-				this.NewTabButton := this.BrowserElement.FindElement({Name:"New Tab", Type:"Button", matchmode:"Substring"})
-		}
 		this.NewTabButton.Click()
 	}
 	
 	GetAllTabs() {
-		try return this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
-		catch
-			return this.BrowserElement.FindElements({AutomationId:"tab-", matchmode:"StartsWith"})
+		return this.TabBarElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, 2)
 	}
 
 	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
