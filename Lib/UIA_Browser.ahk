@@ -121,7 +121,7 @@ class UIA_Vivaldi extends UIA_Browser {
 		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := MainDocumentElement)
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
-			this.URLEditElement := this.BrowserElement.WaitElement(this.EditControlCondition, 3000)
+			this.URLEditElement := this.BrowserElement.WaitElement({AutomationId:"urlFieldInput"}, 3000)
 			try {
 				this.NavigationBarElement := MainDocumentElement
 				this.MainPaneElement := this.NavigationBarElement
@@ -156,10 +156,11 @@ class UIA_Vivaldi extends UIA_Browser {
 	NewTab() {
 		local lastTab
 		if !this.HasOwnProp("NewTabButton") {
-			try lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-			catch
-				lastTab := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"StartsWith", i:-1})
-			this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
+			try {
+				lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
+				this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
+			} catch
+				this.NewTabButton := this.BrowserElement.FindElement({Name:"New Tab", Type:"Button", matchmode:"Substring"})
 		}
 		this.NewTabButton.Click()
 	}
