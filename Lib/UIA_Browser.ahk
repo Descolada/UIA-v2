@@ -50,7 +50,7 @@
 	Navigate(url, targetTitle:="", waitLoadTimeOut:=-1, sleepAfter:=500)
 		Navigates to URL and waits page to load
 	NewTab()
-		Presses the New tab button.
+		Opens a new tab.
 	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True)
 		Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	TabExist(searchPhrase:="", matchMode:=3, caseSense:=True)
@@ -122,14 +122,11 @@ class UIA_Vivaldi extends UIA_Browser {
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			this.URLEditElement := this.BrowserElement.WaitElement({AutomationId:"urlFieldInput"}, 3000)
-			try {
-				lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-				this.NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:lastTab})
-			} catch
-				this.NewTabButton := this.BrowserElement.FindElement({Name:"New Tab", Type:"Button", matchmode:"Substring"})
+			TabElement := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"Substring"})
+			NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:TabElement})
 			try {
 				this.MainPaneElement := MainDocumentElement
-				this.TabBarElement := this.NewTabButton.WalkTree("p", [{Type:"Group", Type:"Document"}])
+				this.TabBarElement := TabElement.WalkTree("p", [{Type:"Document"}, {LocalizedType: "content info"}])
 				this.NavigationBarElement := this.TabBarElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				this.ReloadButton := this.URLEditElement.WalkTree("-3", {Type:"Button"})
@@ -156,10 +153,6 @@ class UIA_Vivaldi extends UIA_Browser {
 			}
 		}
 		return this.BrowserElement.WaitElement({Type:"Document"},5000)
-	}
-
-	NewTab() {
-		this.NewTabButton.Click()
 	}
 	
 	GetAllTabs() {
@@ -377,16 +370,11 @@ class UIA_Mozilla extends UIA_Browser {
 		}
 	}
 
-	; Presses the New tab button. 
-	NewTab() { 
-		this.TabBarElement.FindFirst(this.ButtonControlCondition,4).Click()
-	}
-
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
 	SetURL(newUrl, navigateToNewUrl := False) { 
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
-		Sleep 40
+		Sleep 100
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
 			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
 		}
@@ -808,15 +796,9 @@ class UIA_Browser {
 		this.WaitPageLoad(targetTitle,waitLoadTimeOut,sleepAfter)
 	}
 	
-	; Presses the New tab button. The button name might differ if the browser language is not set to English and can be specified with butName
+	; Opens a new tab by sending Ctrl+T
 	NewTab() {
-		local el
-		try el := this.TabBarElement.FindFirstWithOptions(this.ButtonControlCondition,2,this.TabBarElement)
-		if IsSet(el) && el
-			el.Click()
-		else {
-			UIA.CreateTreeWalker(this.ButtonControlCondition).GetLastChildElement(this.TabBarElement).Click()
-		}
+		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}t{LCtrl up}", , this.BrowserId
 	}
 	
 	GetAllTabs() { 
