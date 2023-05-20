@@ -146,13 +146,14 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetCurrentDocumentElement() {
 		Loop 2 {
 			try {
-				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", i:2})
+				MainDocument := this.BrowserElement.FindElement({Type:"Document"})
+				this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", startingElement:MainDocument})
 			} catch TargetError {
 				WinActivate this.BrowserId
 				WinWaitActive this.BrowserId,,1
 			}
 		}
-		return this.BrowserElement.WaitElement({Type:"Document"},5000)
+		return MainDocument
 	}
 	
 	GetAllTabs() {
@@ -372,11 +373,15 @@ class UIA_Mozilla extends UIA_Browser {
 
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
 	SetURL(newUrl, navigateToNewUrl := False) { 
+		local endTime
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
-		Sleep 100
-		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
-			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
+		endTime := A_TickCount+200
+		if navigateToNewUrl {
+			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
+				Sleep 40
+			if A_TickCount < endTime
+				ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
 		}
 	}
 
