@@ -116,16 +116,15 @@ class UIA_Vivaldi extends UIA_Browser {
 		this.InitiateUIA(wTitle)
 	}
 	GetCurrentMainPaneElement() {
-		MainDocumentElement := this.GetCurrentDocumentElement()
+		this.GetCurrentDocumentElement()
 		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateAndCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Group), UIA.CreatePropertyCondition(UIA.Property.AutomationId, "modal-bg")))
-		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := MainDocumentElement)
+		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := this.MainPaneElement)
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			this.URLEditElement := this.BrowserElement.WaitElement({AutomationId:"urlFieldInput"}, 3000)
 			TabElement := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"Substring"})
 			NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:TabElement})
 			try {
-				this.MainPaneElement := MainDocumentElement
 				this.TabBarElement := TabElement.WalkTree("p", [{Type:"Document"}, {LocalizedType: "content info"}])
 				this.NavigationBarElement := this.TabBarElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
@@ -146,14 +145,13 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetCurrentDocumentElement() {
 		Loop 2 {
 			try {
-				MainDocument := this.BrowserElement.FindElement({Type:"Document"})
-				this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", startingElement:MainDocument})
+				this.MainPaneElement := this.BrowserElement.FindElement({Type:"Document"})
+				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", startingElement:this.MainPaneElement})
 			} catch TargetError {
 				WinActivate this.BrowserId
 				WinWaitActive this.BrowserId,,1
 			}
 		}
-		return MainDocument
 	}
 	
 	GetAllTabs() {
