@@ -266,7 +266,7 @@ class UIA_Edge extends UIA_Browser {
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			try {
-				if !(this.URLEditElement := this.BrowserElement.FindFirst(this.EditControlCondition)) {
+				if !(this.URLEditElement := this.BrowserElement.FindElement({Type:"Edit"},,,UIA.TreeTraversalOptions.LastToFirst,this.DocumentElement)) {
 					this.ToolbarElements := this.BrowserElement.FindAll(this.ToolbarControlCondition), topCoord := 10000000
 					for k, v in this.ToolbarElements {
 						if ((bT := v.BoundingRectangle.t) && (bt < topCoord))
@@ -618,7 +618,7 @@ class UIA_Browser {
 	
 	; Uses Javascript's querySelector to get a Javascript element and then its position. useRenderWidgetPos=True uses position of the Chrome_RenderWidgetHostHWND1 control to locate the position element relative to the window, otherwise it uses UIA_Browsers CurrentDocumentElement position.
     JSGetElementPos(selector, useRenderWidgetPos:=False) { ; based on code by AHK Forums user william_ahk
-        js := "
+        local js := "
         (LTrim
 			(() => {
 				let bounds = document.querySelector("%selector%").getBoundingClientRect().toJSON();
@@ -629,7 +629,7 @@ class UIA_Browser {
 				return JSON.stringify(bounds);
 			})()
         )"
-        bounds_str := this.JSReturnThroughClipboard(js)
+        local bounds_str := this.JSReturnThroughClipboard(js)
         RegexMatch(bounds_str, "`"x`":(\d+).?\d*?,`"y`":(\d+).?\d*?,`"width`":(\d+).?\d*?,`"height`":(\d+).?\d*?", &size)
 		if useRenderWidgetPos {
 			ControlGetPos &win_x, &win_y, &win_w, &win_h, "Chrome_RenderWidgetHostHWND1", this.BrowserId
