@@ -10,6 +10,7 @@
 ; Run in Incognito mode to avoid any extensions interfering. 
 Run "msedge.exe -inprivate" 
 WinWaitActive "ahk_exe msedge.exe"
+Sleep 500
 ; Initialize UIA_Browser, use Last Found Window
 cUIA := UIA_Browser() 
 ; Wait the "New inprivate tab" (case insensitive) page to load with a timeout of 5 seconds

@@ -10,6 +10,7 @@
 ; Run in Incognito mode to avoid any extensions interfering.
 Run "chrome.exe -incognito" 
 WinWaitActive "ahk_exe chrome.exe"
+Sleep 500
 ; Initialize UIA_Browser, use Last Found Window (returned by WinWaitActive)
 cUIA := UIA_Browser() 
 A_Clipboard := ""
