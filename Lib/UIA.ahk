@@ -2339,10 +2339,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Eg. ControlClick(200) will sleep 200ms after clicking.
      * @param ClickCount How many times to click. Default is 1.
      * @param Options Additional ControlClick Options (see AHK documentations).
+     * @param WinTitle Optional: providing the WinTitle of the window the element belongs to might
+     *  give speed improvements and sometimes be more reliable.
      */
-    ControlClick(WhichButton:="left", ClickCount:=1, Options:="") {
+    ControlClick(WhichButton:="left", ClickCount:=1, Options:="", WinTitle?) {
         pos := this.GetPos("client")
-        ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, this.WinId,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
+        ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, WinTitle ?? this.WinId,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
         if IsInteger(WhichButton)
             Sleep(WhichButton)
     }
