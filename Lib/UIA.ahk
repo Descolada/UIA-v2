@@ -6972,7 +6972,7 @@ class Viewer {
         if !InStr(Item, "()")
             return
         Item := SubStr(Item, 1, -2)
-        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).FindElement({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
+        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
             return MsgBox("Live element not found!",,"4096")
         if Item ~= "Value|Scroll(?!Into)" {
             this.gViewer.Opt("-AlwaysOnTop")
@@ -6981,6 +6981,8 @@ class Viewer {
             if Ret.Result != "OK"
                 return
         }
+        WinActivate(this.Stored.mwId)
+        WinWaitActive(this.Stored.mwId)
         try CurrentEl.%GuiCtrlObj.GetText(GuiCtrlObj.GetParent(Info)) "Pattern"%.%Item%(IsSet(Ret) ? Ret.Value : unset)
     }
     ; Copies the UIA path to clipboard when statusbar is clicked
