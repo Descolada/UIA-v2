@@ -2211,19 +2211,22 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * @param relativeTo CoordMode to be used: client, window or screen. Default is A_CoordModeMouse
+     * @param WinTitle Optional: may be used to specifically define the window that the element belongs to
      * @returns {x:x coordinate, y:y coordinate, w:width, h:height}
      */
-    GetPos(relativeTo:="") {
+    GetPos(relativeTo:="", WinTitle?) {
+        if IsSet(WinTitle) && !IsInteger(WinTitle)
+            WinTitle := WinExist(WinTitle)
         local br := this.BoundingRectangle, pt
         relativeTo := (relativeTo == "") ? A_CoordModeMouse : relativeTo
         if (relativeTo = "screen")
             return {x:br.l, y:br.t, w:(br.r-br.l), h:(br.b-br.t)}
         else if (relativeTo = "window") {
-            DllCall("user32\GetWindowRect", "Int", this.WinId, "Ptr", RECT := Buffer(16))
+            DllCall("user32\GetWindowRect", "Int", WinTitle ?? this.WinId, "Ptr", RECT := Buffer(16))
             return {x:(br.l-NumGet(RECT, 0, "Int")), y:(br.t-NumGet(RECT, 4, "Int")), w:br.r-br.l, h:br.b-br.t}
         } else if (relativeTo = "client") {
             pt := Buffer(8), NumPut("int",br.l,pt), NumPut("int", br.t,pt,4)
-            DllCall("ScreenToClient", "Int", this.WinId, "Ptr", pt)
+            DllCall("ScreenToClient", "Int", WinTitle ?? this.WinId, "Ptr", pt)
             return {x:NumGet(pt,0,"int"), y:NumGet(pt,4,"int"), w:br.r-br.l, h:br.b-br.t}
         } else
             throw Error(relativeTo "is not a valid CoordMode",-1)
@@ -2343,7 +2346,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      *  give speed improvements and sometimes be more reliable.
      */
     ControlClick(WhichButton:="left", ClickCount:=1, Options:="", WinTitle?) {
-        pos := this.GetPos("client")
+        pos := this.GetPos("client", WinTitle?)
         ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, WinTitle ?? this.WinId,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
         if IsInteger(WhichButton)
             Sleep(WhichButton)
