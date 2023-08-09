@@ -50,7 +50,7 @@
 	Navigate(url, targetTitle:="", waitLoadTimeOut:=-1, sleepAfter:=500)
 		Navigates to URL and waits page to load
 	NewTab()
-		Presses the New tab button.
+		Opens a new tab.
 	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True)
 		Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	TabExist(searchPhrase:="", matchMode:=3, caseSense:=True)
@@ -118,14 +118,15 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetCurrentMainPaneElement() {
 		this.GetCurrentDocumentElement()
 		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateAndCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Group), UIA.CreatePropertyCondition(UIA.Property.AutomationId, "modal-bg")))
-		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := this.BrowserElement.WaitElement(this.DocumentControlCondition, 3000))
+		if !this.HasOwnProp("DocumentElement") && !(this.DocumentElement := this.MainPaneElement)
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
-			this.URLEditElement := this.BrowserElement.WaitElement(this.EditControlCondition, 3000)
+			this.URLEditElement := this.BrowserElement.WaitElement({AutomationId:"urlFieldInput"}, 3000)
+			TabElement := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"Substring"})
+			NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:TabElement})
 			try {
-				this.NavigationBarElement := this.DocumentElement
-				this.MainPaneElement := this.NavigationBarElement
-				this.TabBarElement := this.NavigationBarElement
+				this.TabBarElement := TabElement.WalkTree("p", [{Type:"Document"}, {LocalizedType: "content info"}])
+				this.NavigationBarElement := this.TabBarElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				this.ReloadButton := this.URLEditElement.WalkTree("-3", {Type:"Button"})
 				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
@@ -144,26 +145,17 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetCurrentDocumentElement() {
 		Loop 2 {
 			try {
-				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", i:2})
+				this.MainPaneElement := this.BrowserElement.FindElement({Type:"Document"})
+				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", startingElement:this.MainPaneElement})
 			} catch TargetError {
 				WinActivate this.BrowserId
 				WinWaitActive this.BrowserId,,1
 			}
 		}
-		return this.BrowserElement.WaitElement({Type:"Document"},5000)
-	}
-
-	NewTab() {
-		local lastTab
-		if !this.HasOwnProp("NewTabButton") {
-			lastTab := this.MainPaneElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:-1}, UIA.TreeScope.Children)
-			this.NewTabButton := this.MainPaneElement.FindElement({Type:"Button", startingElement:lastTab},2)
-		}
-		this.NewTabButton.Click()
 	}
 	
 	GetAllTabs() {
-		return this.MainPaneElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, UIA.TreeScope.Children)
+		return this.TabBarElement.FindElements({AutomationId:"tab-", matchmode:"Substring"}, 2)
 	}
 
 	GetTabs(searchPhrase:="", matchMode:=3, caseSense:=True) {
@@ -274,7 +266,7 @@ class UIA_Edge extends UIA_Browser {
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
 			try {
-				if !(this.URLEditElement := this.BrowserElement.FindFirst(this.EditControlCondition)) {
+				if !(this.URLEditElement := this.BrowserElement.ElementExist({Type:"Edit"},,,UIA.TreeTraversalOptions.LastToFirstOrder,this.DocumentElement)) {
 					this.ToolbarElements := this.BrowserElement.FindAll(this.ToolbarControlCondition), topCoord := 10000000
 					for k, v in this.ToolbarElements {
 						if ((bT := v.BoundingRectangle.t) && (bt < topCoord))
@@ -377,18 +369,17 @@ class UIA_Mozilla extends UIA_Browser {
 		}
 	}
 
-	; Presses the New tab button. 
-	NewTab() { 
-		this.TabBarElement.FindFirst(this.ButtonControlCondition,4).Click()
-	}
-
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
 	SetURL(newUrl, navigateToNewUrl := False) { 
+		local endTime
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
-		Sleep 40
-		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
-			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
+		endTime := A_TickCount+200
+		if navigateToNewUrl {
+			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
+				Sleep 40
+			if A_TickCount < endTime
+				ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
 		}
 	}
 
@@ -627,7 +618,7 @@ class UIA_Browser {
 	
 	; Uses Javascript's querySelector to get a Javascript element and then its position. useRenderWidgetPos=True uses position of the Chrome_RenderWidgetHostHWND1 control to locate the position element relative to the window, otherwise it uses UIA_Browsers CurrentDocumentElement position.
     JSGetElementPos(selector, useRenderWidgetPos:=False) { ; based on code by AHK Forums user william_ahk
-        js := "
+        local js := "
         (LTrim
 			(() => {
 				let bounds = document.querySelector("%selector%").getBoundingClientRect().toJSON();
@@ -638,7 +629,7 @@ class UIA_Browser {
 				return JSON.stringify(bounds);
 			})()
         )"
-        bounds_str := this.JSReturnThroughClipboard(js)
+        local bounds_str := this.JSReturnThroughClipboard(js)
         RegexMatch(bounds_str, "`"x`":(\d+).?\d*?,`"y`":(\d+).?\d*?,`"width`":(\d+).?\d*?,`"height`":(\d+).?\d*?", &size)
 		if useRenderWidgetPos {
 			ControlGetPos &win_x, &win_y, &win_w, &win_h, "Chrome_RenderWidgetHostHWND1", this.BrowserId
@@ -735,9 +726,10 @@ class UIA_Browser {
 			try ReloadButtonName := this.ReloadButton.Name
 			try ReloadButtonDescription := legacyPattern.Description
 			try ReloadButtonFullDescription := this.ReloadButton.FullDescription
-			if ((this.ReloadButtonName ? InStr(ReloadButtonName, this.ReloadButtonName) : 1) 
+			if (((this.ReloadButtonName ? InStr(ReloadButtonName, this.ReloadButtonName) : 1) 
 			   && (this.ReloadButtonDescription && legacyPattern ? InStr(ReloadButtonDescription, this.ReloadButtonDescription) : 1)
-			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)) {
+			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)))
+			   || !this.ReloadButton.IsEnabled {
 				if targetTitle {
 					wTitle := WinGetTitle(this.BrowserId)
 					if UIA_Browser.CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
@@ -807,15 +799,9 @@ class UIA_Browser {
 		this.WaitPageLoad(targetTitle,waitLoadTimeOut,sleepAfter)
 	}
 	
-	; Presses the New tab button. The button name might differ if the browser language is not set to English and can be specified with butName
+	; Opens a new tab by sending Ctrl+T
 	NewTab() {
-		local el
-		try el := this.TabBarElement.FindFirstWithOptions(this.ButtonControlCondition,2,this.TabBarElement)
-		if IsSet(el) && el
-			el.Click()
-		else {
-			UIA.CreateTreeWalker(this.ButtonControlCondition).GetLastChildElement(this.TabBarElement).Click()
-		}
+		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}t{LCtrl up}", , this.BrowserId
 	}
 	
 	GetAllTabs() { 

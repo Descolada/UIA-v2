@@ -8,7 +8,12 @@ npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
 ; Display all the sub-elements for the Notepad window. Press OK to continue
 MsgBox npEl.DumpAll()
 ; Find the first Document or Edit control (in Notepad there is only one). In older versions of Windows this was an Edit type control, in newer ones it's Document.
-documentEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) 
+try documentEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) 
+catch {
+    ; Windows 11 has broken Notepad so that the Document element isn't findable; instead get it by the ClassNN
+    Sleep 40
+    documentEl := UIA.ElementFromHandle(ControlGetHwnd("RichEditD2DPT1"))
+}
 ; Set the value of the document control, same as documentEl.SetValue("Lorem ipsum")
 documentEl.Value := "Lorem ipsum" 
 MsgBox "Press OK to test saving." ; Wait for the user to press OK

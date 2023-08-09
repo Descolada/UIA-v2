@@ -13,6 +13,7 @@
 
 Run "chrome.exe https://www.w3schools.com/howto/howto_css_login_form.asp -incognito" 
 WinWaitActive "ahk_exe chrome.exe"
+Sleep 500
 cUIA := UIA_Browser()
 
 ; Click the Login button

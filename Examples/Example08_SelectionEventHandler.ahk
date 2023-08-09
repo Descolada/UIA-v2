@@ -22,9 +22,15 @@ lorem := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmo
 
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
-	
+
+try {
 NotepadEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
 DocumentControl := NotepadEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) ; If UIA Interface version is 1, then the ControlType is Edit instead of Document!
+} catch {
+    ; Windows 11 has broken Notepad, so the Document element isn't findable; instead get the focused element
+    Sleep 40
+    DocumentControl := UIA.ElementFromHandle(ControlGetHwnd("RichEditD2DPT1"))
+}
 DocumentControl.Value := lorem ; Set the value to our sample text
 
 handler := UIA.CreateAutomationEventHandler(TextSelectionChangedEventHandler) ; Create a new event handler that points to the function TextSelectionChangedEventHandler, which must accept two arguments: element and eventId.

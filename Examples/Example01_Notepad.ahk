@@ -7,10 +7,16 @@
 
 Run "notepad.exe"
 WinWaitActive "ahk_exe notepad.exe"
-; Get the element for the Notepad window
-npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
-; Find the first Document or Edit control (in Notepad there is only one). 
-documentEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}]) 
+try {
+    ; Get the element for the Notepad window
+    npEl := UIA.ElementFromHandle("ahk_exe notepad.exe")
+    ; Find the first Document or Edit control (in Notepad there is only one). 
+    documentEl := npEl.FindElement([{Type:"Document"}, {Type:"Edit"}])
+} catch {
+    ; Windows 11 has broken Notepad so that the Document element isn't findable; instead get it by the ClassNN
+    Sleep 40
+    documentEl := UIA.ElementFromHandle(ControlGetHwnd("RichEditD2DPT1"))
+}
 ; Highlight the found element
 documentEl.Highlight() 
 ; Set the value for the document control. 

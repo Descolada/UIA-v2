@@ -1940,7 +1940,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Checks whether this object still exists
     Exists {
         get {
-            try return (((br := this.BoundingRectangle) && br.t ? 1 : this.IsOffscreen ? "" : 1)) != ""
+            try {
+                br := this.BoundingRectangle
+                if br := this.BoundingRectangle && (br.b - br.t + br.r - br.l) == 0
+                    return 0
+                if this.IsOffscreen
+                    return 0
+            } catch
+                return 0
             return 1
         }
     }
@@ -2204,19 +2211,22 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * @param relativeTo CoordMode to be used: client, window or screen. Default is A_CoordModeMouse
+     * @param WinTitle Optional: may be used to specifically define the window that the element belongs to
      * @returns {x:x coordinate, y:y coordinate, w:width, h:height}
      */
-    GetPos(relativeTo:="") {
+    GetPos(relativeTo:="", WinTitle?) {
+        if IsSet(WinTitle) && !IsInteger(WinTitle)
+            WinTitle := WinExist(WinTitle)
         local br := this.BoundingRectangle, pt
         relativeTo := (relativeTo == "") ? A_CoordModeMouse : relativeTo
         if (relativeTo = "screen")
             return {x:br.l, y:br.t, w:(br.r-br.l), h:(br.b-br.t)}
         else if (relativeTo = "window") {
-            DllCall("user32\GetWindowRect", "Int", this.GetWinId(), "Ptr", RECT := Buffer(16))
+            DllCall("user32\GetWindowRect", "Int", WinTitle ?? this.WinId, "Ptr", RECT := Buffer(16))
             return {x:(br.l-NumGet(RECT, 0, "Int")), y:(br.t-NumGet(RECT, 4, "Int")), w:br.r-br.l, h:br.b-br.t}
         } else if (relativeTo = "client") {
             pt := Buffer(8), NumPut("int",br.l,pt), NumPut("int", br.t,pt,4)
-            DllCall("ScreenToClient", "Int", this.GetWinId(), "Ptr", pt)
+            DllCall("ScreenToClient", "Int", WinTitle ?? this.WinId, "Ptr", pt)
             return {x:NumGet(pt,0,"int"), y:NumGet(pt,4,"int"), w:br.r-br.l, h:br.b-br.t}
         } else
             throw Error(relativeTo "is not a valid CoordMode",-1)
@@ -2227,11 +2237,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
         try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
     }
+    WinId => (this.DefineProp("WinId", {value:this.GetWinId()}), this.WinId)
     ; Get the control hwnd (that the element belongs to) from the element
     GetControlId() {
         static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
         try return TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle)
     }
+    ControlId => (this.DefineProp("WinId", {value:this.GetControlId()}), this.ControlId)
 
     /**
      * Tries to click the element. The method depends on WhichButton variable: by default it is attempted
@@ -2312,7 +2324,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         } else if ClickCount > 9 {
             SleepTime := cCount, cCount := 1
         }
-        if (!NoActivate && (UIA.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != (wId := this.GetWinId()))) {
+        if (!NoActivate && (UIA.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != (wId := this.WinId))) {
             WinActivate(wId)
             WinWaitActive(wId)
         }
@@ -2330,10 +2342,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Eg. ControlClick(200) will sleep 200ms after clicking.
      * @param ClickCount How many times to click. Default is 1.
      * @param Options Additional ControlClick Options (see AHK documentations).
+     * @param WinTitle Optional: providing the WinTitle of the window the element belongs to might
+     *  give speed improvements and sometimes be more reliable.
      */
-    ControlClick(WhichButton:="left", ClickCount:=1, Options:="") {
-        pos := this.GetPos("client")
-        ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, this.GetWinId(),, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
+    ControlClick(WhichButton:="left", ClickCount:=1, Options:="", WinTitle?) {
+        pos := this.GetPos("client", WinTitle?)
+        ControlClick("X" pos.x+pos.w//2 " Y" pos.y+pos.h//2, WinTitle ?? this.WinId,, IsInteger(WhichButton) ? "left" : WhichButton, ClickCount, Options)
         if IsInteger(WhichButton)
             Sleep(WhichButton)
     }
@@ -2959,20 +2973,20 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     /**
-     * Wait element to appear at a path.  
-     * `WaitElementFromPath(path1[, path2, ...])`
+     * Wait element to appear at a path. The last argument may optionally be a timeout in milliseconds (default is indefinite wait).
+     * `WaitElementFromPath(path1[, path2, ..., timeout])`
      *
      * Paths can be:
      * 1. Comma-separated numeric path that defines which path to travel down the tree. In addition
      *     to integer values, or TypeN which selects the nth occurrence of Type.  
-     *     Eg. `Element.ElementFromPath("3,2")` => selects Elements third childs second child  
-     *         `Element.ElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
+     *     Eg. `Element.WaitElementFromPath("3,2", 2000)` => waits for Elements third childs second child, timeout 2 seconds 
+     *         `Element.WaitElementFromPath("Button3,2")` => waits for Elements third child of type Button, then its second child
      *
      * 2. UIA path copied from UIAViewer.  
-     *     Eg. `Element.ElementFromPath("bAx3")`
+     *     Eg. `Element.WaitElementFromPath("bAx3")`
      *
      * 3. A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.  
-     *        Eg. `Element.ElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
+     *        Eg. `Element.WaitElementFromPath({Type:"Button"}, {Type:"List"})` => waits for the first Button type child of Element, then the first List type child of that element
      *
      * @returns {UIA.IUIAutomationElement}
      */
@@ -6958,7 +6972,7 @@ class Viewer {
         if !InStr(Item, "()")
             return
         Item := SubStr(Item, 1, -2)
-        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).FindElement({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
+        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
             return MsgBox("Live element not found!",,"4096")
         if Item ~= "Value|Scroll(?!Into)" {
             this.gViewer.Opt("-AlwaysOnTop")
@@ -6967,6 +6981,8 @@ class Viewer {
             if Ret.Result != "OK"
                 return
         }
+        WinActivate(this.Stored.mwId)
+        WinWaitActive(this.Stored.mwId)
         try CurrentEl.%GuiCtrlObj.GetText(GuiCtrlObj.GetParent(Info)) "Pattern"%.%Item%(IsSet(Ret) ? Ret.Value : unset)
     }
     ; Copies the UIA path to clipboard when statusbar is clicked
@@ -7192,7 +7208,7 @@ class Viewer {
         try this.RecurseTreeView(UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest))
         catch {
             this.Stored.TreeView := []
-            this.TVUIA.Add("Error: window not found")
+            this.TVUIA.Add("Error: unspecified error (window not found?)")
         }
         
         this.TVUIA.Opt("+Redraw")

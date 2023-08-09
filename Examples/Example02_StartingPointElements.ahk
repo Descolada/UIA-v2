@@ -16,7 +16,10 @@ MsgBox "Notepad window element with all descendants: `n`n" npEl.DumpAll() ; Disp
     used to get a part of the window. This is sometimes necessary when for some reason UIAutomation
     hasn't been implemented properly and not all elements are displayed in the UIA tree.
 */
-editHandle := ControlGetHwnd("Edit1", "ahk_exe notepad.exe")
+try editHandle := ControlGetHwnd("Edit1", "ahk_exe notepad.exe")
+catch
+    editHandle := ControlGetHwnd("RichEditD2DPT1")
+
 editEl := UIA.ElementFromHandle(editHandle)
 MsgBox "Edit control element with all descendants: `n`n" editEl.DumpAll()
 
