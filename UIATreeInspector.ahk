@@ -207,6 +207,17 @@ class TreeInspector {
             return
         processName := WinGetProcessName(this.Stored.hWnd)
         winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? match[] "El" : "winEl"
+        if not IsAlnum(winElVariable){
+            lengthElVariable := StrLen(winElVariable)
+            cleanedVar := ""
+            loop lengthElVariable {
+                char := SubStr(winElVariable, A_Index, 1)
+                if IsAlnum(char) {
+                    cleanedVar .= char
+                }
+            }
+            winElVariable := cleanedVar
+        }
         winTitle := "`"" WinGetTitle(this.Stored.hWnd) " ahk_exe " processName "`""
         winElText := winElVariable " := UIA.ElementFromHandle(" (this.Stored.Controls.Has(ctrl := this.Stored.hWnd) ? "ControlGetHwnd(`"" ControlGetClassNN(ctrl, this.Stored.Controls[ctrl]) "`", " winTitle ")" : winTitle) ")"
         if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
