@@ -6894,7 +6894,7 @@ class Viewer {
         if !this.Stored.HasOwnProp("CapturedElement")
             return
         processName := WinGetProcessName(this.Stored.mwId)
-        winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? match[] "El" : "winEl"
+        winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? RegExReplace(match[], "[^\p{L}0-9_#@$]") "El" : "winEl" ; Leaves only letters, numbers, and symbols _#@$ (allowed AHK characters)
         winElText := winElVariable " := UIA.ElementFromHandle(`"" WinGetTitle(this.Stored.mwId) " ahk_exe " processName "`")"
         if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText

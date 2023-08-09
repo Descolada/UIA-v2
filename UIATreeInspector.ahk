@@ -206,7 +206,7 @@ class TreeInspector {
         if !this.Stored.HasOwnProp("CapturedElement")
             return
         processName := WinGetProcessName(this.Stored.hWnd)
-        winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? match[] "El" : "winEl"
+        winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? RegExReplace(match[], "[^\p{L}0-9_#@$]") "El" : "winEl" ; Leaves only letters, numbers, and symbols _#@$ (allowed AHK characters)
         winTitle := "`"" WinGetTitle(this.Stored.hWnd) " ahk_exe " processName "`""
         winElText := winElVariable " := UIA.ElementFromHandle(" (this.Stored.Controls.Has(ctrl := this.Stored.hWnd) ? "ControlGetHwnd(`"" ControlGetClassNN(ctrl, this.Stored.Controls[ctrl]) "`", " winTitle ")" : winTitle) ")"
         if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
