@@ -13,8 +13,14 @@
 
 Run "chrome.exe https://www.w3schools.com/howto/howto_css_login_form.asp -incognito" 
 WinWaitActive "ahk_exe chrome.exe"
-Sleep 500
+Sleep 3000 ; Give enough time to load the page
 cUIA := UIA_Browser()
+
+try {
+    ; Might ask for permission to store cookies
+    cUIA.FindElement({Name:"Accept all & visit the site"}).Click()
+    Sleep 500
+}
 
 ; Click the Login button
 cUIA.FindElement({Name:"Login", Type:"Button"}).Click()
