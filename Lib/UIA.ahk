@@ -537,6 +537,32 @@ static Filter(elementArray, function) {
 }
 
 /**
+ * Can be used to set or get the current scripts DPI awareness to fix problems with invalid coordinates in
+ * multi-monitor setups. 
+ * Possible values (read more: https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context):
+ * DPI_AWARENESS_CONTEXT_UNAWARE = -1
+ * DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = -2 (default)
+ * DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = -3
+ * DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+ * DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = -5
+ * 
+ */
+static DPIAwareness {
+    set => DllCall("SetThreadDpiAwarenessContext", "ptr", value, "ptr")
+    get {
+        local context := DllCall("GetThreadDpiAwarenessContext")
+        Loop 5 {
+            if DllCall("AreDpiAwarenessContextsEqual", "ptr", context, "ptr", -A_Index)
+                return -A_index
+        }
+        return context
+    }
+}
+
+; Sets the maximum possible DPI awareness level depending on Windows version
+static SetMaximumDPIAwareness() => UIA.DPIAwareness := UIA.IsIUIAutomationElement6Available ? -4 : -3
+
+/**
  * Finds the first element matching a condition from an AHK array
  * @param elementArray The array to search
  * @param condition The condition the element must match
@@ -547,7 +573,7 @@ static Filter(elementArray, function) {
  * @returns {UIA.IUIAutomationElement}
  */
 static FindElementFromArray(elementArray, condition, index:=1, startingElement:=0, cacheRequest:=0, cached:=False) {
-    local out, scope := 0, order := 0
+    local scope := 0, order := 0
     condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, , &index)
     condition := UIA.TypeValidation.Condition(condition), index := UIA.TypeValidation.Integer(index, "Index"), startingElement := UIA.TypeValidation.Element(startingElement)
     if index = 0
@@ -707,7 +733,7 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
                 arr[i++] := t[]
             }
         } else if IsObject(v) && !(SubStr(Type(v), 1, 6) = "ComObj") && !v.HasOwnProp("ptr") {
-            t := UIA.__ConditionBuilder(v, &nonUIAEncountered?)
+            t := UIA.__ConditionBuilder(v, &nonUIAEncountered)
             if k = "not" || operator = "not"
                 t := UIA.CreateNotCondition(t)
             arr[i++] := t[]
@@ -2160,7 +2186,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {Array}
      */
     GetConditionPath(targetEl, cached := False) {
-        local i, child, cachedThis, numPath, conditionPath, children, targetType, targetIndex, sameTypeCount, targetTypeIndex, found
+        local i, child, cachedThis, numPath, conditionPath, children, targetType, targetIndex, sameTypeCount, targetTypeIndex
         cachedThis := cached ? this : this.BuildUpdatedCache(UIA.CreateCacheRequest(["Type"],,5))
         numPath := cachedThis.GetNumericPath(targetEl, true)
         conditionPath := []
@@ -2364,7 +2390,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     Highlight(showTime:=unset, color:="Red", d:=2) {
-        local _, r, i, loc, x1, y1, w1, h1
+        local r, i, loc, x1, y1, w1, h1
         static Guis := Map()
         if IsSet(showTime) && showTime = "clearall" {
             for key, prop in Guis {
@@ -2893,7 +2919,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     CachedElementFromPath(paths*) {
-        local el := this, _, path, subpath, err, arr
+        local el := this, _, path, subpath, arr
         for _, path in paths {
             if IsObject(path) {
                 try el := el.FindCachedElement(path, 2)
@@ -6840,11 +6866,13 @@ class Viewer {
         IniWrite(this.PathIgnoreNames, UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames")
         IniWrite(this.PathType, UIA.Viewer.SettingsFilePath, "Path", "Type")
         IniWrite(this.AlwaysOnTop, UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop")
+        IniWrite(this.DPIAwareness, UIA.Viewer.SettingsFilePath, "General", "DPIAwareness")
     }
     LoadSettings() {
         this.PathIgnoreNames := IniRead(UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames", 1)
         this.PathType := IniRead(UIA.Viewer.SettingsFilePath, "Path", "Type", "")
         this.AlwaysOnTop := IniRead(UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop", 1)
+        this.DPIAwareness := IniRead(UIA.Viewer.SettingsFilePath, "General", "DPIAwareness", 0)
     }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
     ; Resizes window controls when window is resized
@@ -7017,6 +7045,9 @@ class Viewer {
         SBMain_Menu.Add("UIAViewer always on top", (*) => (this.AlwaysOnTop := !this.AlwaysOnTop, this.gViewer.Opt((this.AlwaysOnTop ? "+" : "-") "AlwaysOnTop")))
         if this.AlwaysOnTop
             SBMain_Menu.Check("UIAViewer always on top")
+        SBMain_Menu.Add("Enable DPI awareness", (*) => (this.DPIAwareness := !this.DPIAwareness, this.DPIAwareness ? UIA.SetMaximumDPIAwareness() : UIA.DPIAwareness := -2))
+        if this.DPIAwareness
+            SBMain_Menu.Check("Enable DPI awareness")
         SBMain_Menu.Add("Save settings", (*) => (this.SaveSettings(), ToolTip("Settings saved!"), SetTimer(ToolTip, -2000)))
         SBMain_Menu.Show()
     }
@@ -7198,7 +7229,7 @@ class Viewer {
     }
     ; Populates the TreeView with the UIA tree when capturing and the mouse is held still
     ConstructTreeView() {
-        local k, v, same
+        local k, v
         this.TVUIA.Delete()
         this.TVUIA.Add("Constructing Tree, please wait...")
         Sleep -1
@@ -7229,7 +7260,7 @@ class Viewer {
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="", conditionpath := "", numpath:="") {
-        local info, child, type, name, k, v, paths := Map(), childInfo := [], children := Element.CachedChildren
+        local info, child, type, k, paths := Map(), childInfo := [], children := Element.CachedChildren
         Element.DefineProp("Path", {value:"`"" path "`""})
         Element.DefineProp("ConditionPath", {value:conditionpath})
         Element.DefineProp("NumericPath", {value:numpath})
