@@ -2420,7 +2420,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if (!IsSet(showTime) && Guis.Has(this.ptr)) || (IsSet(showTime) && showTime = "clear") {
                 if Guis.Has(this.ptr) {
                     SetTimer(Guis[this.ptr].TimerObj, 0)
-                    try Guis[this.ptr].Destroy()
+                    try Guis[this.ptr].GuiObj.Destroy()
                     Guis.Delete(this.ptr)
                 }
                 return this
