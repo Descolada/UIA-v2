@@ -2410,7 +2410,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         static Guis := Map()
         if IsSet(showTime) && showTime = "clearall" {
             for key, prop in Guis {
-                try prop.Destroy()
+                try prop.GuiObj.Destroy()
+                SetTimer(Guis[this.ptr].TimerObj, 0)
             }
             Guis := Map()
             return this
@@ -2418,6 +2419,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
         if (!IsSet(showTime) && Guis.Has(this.ptr)) || (IsSet(showTime) && showTime = "clear") {
                 if Guis.Has(this.ptr) {
+                    SetTimer(Guis[this.ptr].TimerObj, 0)
                     try Guis[this.ptr].Destroy()
                     Guis.Delete(this.ptr)
                 }
@@ -2431,18 +2433,22 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             if !IsSet(loc) || !IsObject(loc)
                 return this
         
-        if !Guis.Has(this.ptr)
-            Guis[this.ptr] := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000")
-        Guis[this.ptr].BackColor := color
+        if !Guis.Has(this.ptr) {
+            Guis[this.ptr] := {}
+            Guis[this.ptr].GuiObj := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x08000000")
+            Guis[this.ptr].TimerObj := ObjBindMethod(this, "Highlight", "clear")
+        }
+        GuiObj := Guis[this.ptr].GuiObj
+        GuiObj.BackColor := color
         x:=loc.l, y:=loc.t, w:=(loc.r-loc.l), h:=(loc.b-loc.t), iw:= w+d, ih:= h+d, w:=w+d*2, h:=h+d*2, x:=x-d, y:=y-d
-        WinSetRegion("0-0 " w "-0 " w "-" h " 0-" h " 0-0 " d "-" d " " iw "-" d " " iw "-" ih " " d "-" ih " " d "-" d, Guis[this.ptr].Hwnd)
-        Guis[this.ptr].Show("NA x" . x . " y" . y . " w" . w . " h" . h)
+        WinSetRegion("0-0 " w "-0 " w "-" h " 0-" h " 0-0 " d "-" d " " iw "-" d " " iw "-" ih " " d "-" ih " " d "-" d, GuiObj.Hwnd)
+        GuiObj.Show("NA x" . x . " y" . y . " w" . w . " h" . h)
 
         if showTime > 0 {
             Sleep(showTime)
             this.Highlight()
         } else if showTime < 0
-            SetTimer(ObjBindMethod(this, "Highlight", "clear"), -Abs(showTime))
+            SetTimer(Guis[this.ptr].TimerObj, -Abs(showTime))
         return this
     }
     ClearHighlight() => this.Highlight("clear")
