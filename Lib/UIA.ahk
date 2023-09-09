@@ -905,23 +905,20 @@ static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=Tr
  * @param x x coordinate for the screen point.
  * Omit both x and y to get the element from the current mouse position.
  * @param y y coordinate for the screen point.
- * @param element Optional: optionally provide an element for which the search is performed for
+ * @param element Optional: optionally provide an element for which the search is performed for.
+ *   This element must be cached with CachedBoundingRectangle and TreeScope.Element+Descendants.
  * @param cacheRequest Optional: a cache request object.
  * @returns {UIA.IUIAutomationElement}
  */
 static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
     static sCacheRequest := this.CreateCacheRequest(["BoundingRectangle"],,5)
-    if IsSet(cacheRequest)
-        cacheRequest.AddProperty("BoundingRectangle")
-    else
+    if !IsSet(cacheRequest)
         cacheRequest := sCacheRequest
     
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
     if !IsSet(element)
-        element := UIA.ElementFromHandle(UIA.WindowFromPoint(x, y), cacheRequest)
-    else
-        element := element.BuildUpdatedCache(cacheRequest)
+        element := UIA.ElementFromPoint(x, y, cacheRequest)
 
     return this.SmallestElementInElementContainingPoint(x, y, element)
 }
