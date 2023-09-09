@@ -914,6 +914,8 @@ static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
     static sCacheRequest := this.CreateCacheRequest(["BoundingRectangle"],,5)
     if !IsSet(cacheRequest)
         cacheRequest := sCacheRequest
+    else
+        cacheRequest.AddProperty(UIA.Property.BoundingRectangle)
     
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
