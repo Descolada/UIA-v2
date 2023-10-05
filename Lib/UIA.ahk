@@ -6799,7 +6799,7 @@ class Viewer {
         this.cacheRequest.TreeScope := 5
 
         this.gViewer := Gui((this.AlwaysOnTop ? "AlwaysOnTop " : "") "Resize +MinSize" this.GuiMinWidth "x" this.GuiMinHeight, "UIAViewer")
-        this.gViewer.OnEvent("Close", (*) => ExitApp())
+        this.gViewer.OnEvent("Close", this.gViewer_Close.Bind(this))
         this.gViewer.OnEvent("Size", this.gViewer_Size.Bind(this))
         (this.TextLVWin := this.gViewer.Add("Text", "w250", "Window Info")).SetFont("bold")
         this.LVWin := this.gViewer.Add("ListView", "h135 w250", ["Property", "Value"])
@@ -6853,7 +6853,19 @@ class Viewer {
         this.ButMacroScriptCopy.OnEvent("Click", (*) => (A_Clipboard := this.EditMacroScript.Text, ToolTip("Macro code copied to Clipboard!"), SetTimer(ToolTip, -3000)))
         this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro &sidebar =>")
         this.ButToggleMacroSidebar.OnEvent("Click", this.ButToggleMacroSidebar_Click.Bind(this))
-        this.gViewer.Show("w600 h550")
+        xy := ""
+        if this.RememberGuiPosition {
+            xy := StrSplit(this.RememberGuiPosition, ","), monitor := 0
+            Loop MonitorGetCount() {
+                MonitorGetWorkArea(A_Index, &Left, &Top, &Right, &Bottom)
+                if xy[1] > (Left-50) && xy[2] > (Top-50) && xy[1] < (Right-50) && xy[2] < (Bottom-30) {
+                    monitor := A_Index
+                    break
+                }
+            }
+            xy := monitor ? "x" xy[1] " y" xy[2] " " : ""
+        }
+        this.gViewer.Show(xy "w600 h550")
         this.gViewer_Size(this.gViewer,0,600,550)
         this.FocusHook := DllCall("SetWinEventHook", "UInt", 0x8005, "UInt", 0x8005, "Ptr",0,"Ptr", CallbackCreate(this.HandleFocusChangedEvent.Bind(this), "F", 7),"UInt", 0, "UInt",0, "UInt",0)
     }
@@ -6886,14 +6898,22 @@ class Viewer {
         IniWrite(this.PathType, UIA.Viewer.SettingsFilePath, "Path", "Type")
         IniWrite(this.AlwaysOnTop, UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop")
         IniWrite(this.DPIAwareness, UIA.Viewer.SettingsFilePath, "General", "DPIAwareness")
+        IniWrite(this.RememberGuiPosition, UIA.Viewer.SettingsFilePath, "General", "RememberGuiPosition")
     }
     LoadSettings() {
         this.PathIgnoreNames := IniRead(UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames", 1)
         this.PathType := IniRead(UIA.Viewer.SettingsFilePath, "Path", "Type", "")
         this.AlwaysOnTop := IniRead(UIA.Viewer.SettingsFilePath, "General", "AlwaysOnTop", 1)
         this.DPIAwareness := IniRead(UIA.Viewer.SettingsFilePath, "General", "DPIAwareness", 0)
+        this.RememberGuiPosition := IniRead(UIA.Viewer.SettingsFilePath, "General", "RememberGuiPosition", "")
     }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
+    gViewer_Close(GuiObj, *) {
+        if this.RememberGuiPosition {
+            WinGetPos(&X, &Y,,,GuiObj.Hwnd), this.RememberGuiPosition := X "," Y, this.SaveSettings()
+        }
+        ExitApp()
+    }
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
         static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
@@ -7064,9 +7084,13 @@ class Viewer {
         SBMain_Menu.Add("UIAViewer always on top", (*) => (this.AlwaysOnTop := !this.AlwaysOnTop, this.gViewer.Opt((this.AlwaysOnTop ? "+" : "-") "AlwaysOnTop")))
         if this.AlwaysOnTop
             SBMain_Menu.Check("UIAViewer always on top")
+        SBMain_Menu.Add("Remember UIAViewer position", (*) => (this.RememberGuiPosition := !this.RememberGuiPosition, this.SaveSettings()))
+        if this.RememberGuiPosition
+            SBMain_Menu.Check("Remember UIAViewer position")
         SBMain_Menu.Add("Enable DPI awareness", (*) => (this.DPIAwareness := !this.DPIAwareness, this.DPIAwareness ? UIA.SetMaximumDPIAwareness() : UIA.DPIAwareness := -2))
         if this.DPIAwareness
             SBMain_Menu.Check("Enable DPI awareness")
+        SBMain_Menu.Add()
         SBMain_Menu.Add("Save settings", (*) => (this.SaveSettings(), ToolTip("Settings saved!"), SetTimer(ToolTip, -2000)))
         SBMain_Menu.Show()
     }
