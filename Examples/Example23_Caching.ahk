@@ -1,4 +1,5 @@
-﻿;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
+﻿#Requires AutoHotkey v2
+;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
 cacheRequest := UIA.CreateCacheRequest()

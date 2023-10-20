@@ -1,4 +1,5 @@
-﻿;#include <UIA_Interface> ; Uncomment if you have moved UIA_Interface.ahk to your main Lib folder
+﻿#Requires AutoHotkey v2
+;#include <UIA_Interface> ; Uncomment if you have moved UIA_Interface.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 ;#include <UIA_Browser> ; Uncomment if you have moved UIA_Browser.ahk to your main Lib folder
 #include ..\Lib\UIA_Browser.ahk

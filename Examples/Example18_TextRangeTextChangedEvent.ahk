@@ -1,4 +1,5 @@
-﻿;#include <UIA> ; Uncomment if you have moved UIA_Interface.ahk to your main Lib folder
+﻿#Requires AutoHotkey v2
+;#include <UIA> ; Uncomment if you have moved UIA_Interface.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
 MsgBox "To test this file, create a new Word document (with the title `"Document1 - Word`") and write some sample text in it."

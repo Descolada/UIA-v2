@@ -1,3 +1,4 @@
+#Requires AutoHotkey v2
 ;#include <UIA> ; Uncomment if you have moved UIA.ahk to your main Lib folder
 #include ..\Lib\UIA.ahk
 
@@ -30,6 +31,10 @@ MsgBox "Edit control element with all descendants: `n`n" editEl.DumpAll()
 
     For this example you need to have Chrome open.
 */
+if WinExist("ahk_exe chrome.exe") {
+    WinActivate("ahk_exe chrome.exe")
+    WinWaitActive("ahk_exe chrome.exe")
+}
 chromiumEl := UIA.ElementFromChromium("ahk_exe chrome.exe")
 MsgBox "Chromium control element without descendants: `n`n" chromiumEl.Dump()
 
