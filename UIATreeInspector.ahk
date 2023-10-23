@@ -278,8 +278,9 @@ class TreeInspector {
             if Ret.Result != "OK"
                 return
         }
-        WinActivate(this.Stored.hWnd)
-        WinWaitActive(this.Stored.hWnd)
+        parent := DllCall("GetAncestor", "UInt", this.Stored.hWnd, "UInt", 2)
+        WinActivate(parent)
+        WinWaitActive(parent,1)
         try CurrentEl.%GuiCtrlObj.GetText(GuiCtrlObj.GetParent(Info)) "Pattern"%.%Item%(IsSet(Ret) ? Ret.Value : unset)
     }
     ; Copies the UIA path to clipboard when statusbar is clicked
@@ -326,8 +327,9 @@ class TreeInspector {
         this.cacheRequest.TreeScope := 5
         propsOrder := ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
         if this.WinActivate {
-            WinActivate(hWnd)
-            WinWaitActive(hWnd)
+            parent := DllCall("GetAncestor", "UInt", hWnd, "UInt", 2)
+            WinActivate(parent)
+            WinWaitActive(parent, 1)
             WinActivate(this.gViewer.Hwnd)
         }
         WinGetPos(&wX, &wY, &wW, &wH, hWnd)
