@@ -768,19 +768,19 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
  * to get the element for the content (using Chrome_RenderWidgetHostHWND1 control).
  * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
  * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
- * and if it is then try to activate accessibility. Default: True
+ * and if it is then try to activate accessibility. If not 0 then it also defines the timeout period
+ * for activation.
  * @param timeOut How long to wait for confirmation that accessibility is enabled in the app after
  * trying to enable accessibility. Default: 500ms
  * @param cacheRequest Optional: a cache request object.
  * @returns {UIA.IUIAutomationElement}
  */
-static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, timeOut:=500, cacheRequest?) {
-    if activateChromiumAccessibility {
-        return this.ActivateChromiumAccessibility(winTitle, 1, timeOut, cacheRequest?)
-    }
+static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=500, cacheRequest?) {
+    if activateChromiumAccessibility
+        return this.ActivateChromiumAccessibility(winTitle, 1, activateChromiumAccessibility, cacheRequest?)
     try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
     if !IsSet(cHwnd) || !cHwnd
-        return
+        throw TargetError("Chrome_RenderWidgetHostHWND1 content control was not found", -1)
     return this.ElementFromHandle(cHwnd, cacheRequest?, False)
 }
 /**
@@ -791,15 +791,16 @@ static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=True, ti
  * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
  * @param forceActivation By default a window is activated only once per run. If this is set to True
  *     then the window is activated unconditionally.
- * @param timeOut How long to wait for confirmation that accessibility is enabled in the app after
+ * @param timeOutVarRef How long to wait for confirmation that accessibility is enabled in the app after
  * trying to enable accessibility. Default: 500ms
+ * If timeOutVarRef is a VarRef containing a timeout value, then it'll be set to the returned Chromium element.
  * @param cacheRequest Optional: a cache request object.
  * @returns {UIA.IUIAutomationElement}
  * @credit malcev, rommmcek
  */
-static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeOut:=500, cacheRequest?) {
+static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeOutVarRef:=500, cacheRequest?) {
     static activatedHwnds := Map(), WM_GETOBJECT := 0x003D
-    local _
+    local _, cEl, elVarRef := &cEl, timeOut := timeOutVarRef
     hwnd := IsInteger(winTitle) ? winTitle : WinExist(winTitle)
     if activatedHwnds.Has(hwnd) && !ForceActivation
         return 1
@@ -808,7 +809,10 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
     if !IsSet(cHwnd) || !cHwnd
         throw TargetError("No Chromium control (Chrome_RenderWidgetHostHWND1) found", -1)
     SendMessage(WM_GETOBJECT := 0x003D, 0, 1,, cHwnd)
-    if (cEl := this.ElementFromHandle(cHwnd, cacheRequest?, False)) {
+    if IsObject(timeOutVarRef) && timeOutVarRef is VarRef
+        elVarRef := timeOutVarRef, timeOut := %timeOutVarRef%
+    if (%elVarRef% := this.ElementFromHandle(cHwnd, cacheRequest?, False)) {
+        cEl := cEl ?? %elVarRef%
         try _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
         try {
             if (cEl.Type == 50030) {
@@ -818,7 +822,7 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
             }
         }
     }
-    return cEl
+    return %elVarRef%
 }
 
 ; Compares two UI Automation elements to determine whether they represent the same underlying UI element.
@@ -851,19 +855,20 @@ static GetRootElement(cacheRequest?) {
  * @param hwnd WinTitle, window handle, or control handle
  * @param cacheRequest Optional: a cache request object.
  * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
- * and if it is then try to activate accessibility. Default: True.
+ * and if it is then try to activate accessibility. The value will determine how long to wait for 
+ * activation confirmation.
  * If a VarRef is passed, then that variable will be set to the Chromium Document element (only
  * if the activation was done).
  * @returns {UIA.IUIAutomationElement}
  */
-static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:=True) {
+static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:=500) {
     if !IsInteger(hwnd)
         hwnd := WinExist(hwnd)
     if !hwnd
         throw TargetError("No matching window found", -1)
     try {
-        if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && IsObject(retEl := this.ActivateChromiumAccessibility(hwnd, cacheRequest?)))
-            %activateChromiumAccessibility% := retEl
+        if (activateChromiumAccessibility)
+            this.ActivateChromiumAccessibility(hwnd,, activateChromiumAccessibility, cacheRequest?)
     }
     if IsSet(cacheRequest)
         return this.ElementFromHandleBuildCache(cacheRequest, hwnd)
@@ -872,7 +877,7 @@ static ElementFromHandle(hwnd:="", cacheRequest?, activateChromiumAccessibility:
         return this.IUIAutomationElement(element)
     throw UnsetError("No element returned by " A_ThisFunc, -1)
 }
-static ElementFromWindow(WinTitle:="", cacheRequest?, activateChromiumAccessibility:=True) => this.ElementFromHandle(WinTitle, cacheRequest?, activateChromiumAccessibility)
+static ElementFromWindow(WinTitle:="", cacheRequest?, activateChromiumAccessibility:=500) => this.ElementFromHandle(WinTitle, cacheRequest?, activateChromiumAccessibility)
 /**
  * Retrieves the UI Automation element at the specified point on the desktop.
  * @param x x coordinate for the screen point.
@@ -880,19 +885,20 @@ static ElementFromWindow(WinTitle:="", cacheRequest?, activateChromiumAccessibil
  * @param y y coordinate for the screen point.
  * @param cacheRequest Optional: a cache request object.
  * @param activateChromiumAccessibility Whether to check if the window is a Chromium application
- * and if it is then try to activate accessibility. 
+ * and if it is then try to activate accessibility. The value will determine how long to wait for 
+ * activation confirmation.
  * If a VarRef is passed, then that variable will be set to the Chromium Document element (only
  * if the activation was done).
  * @returns {UIA.IUIAutomationElement}
  */
-static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=True) {
+static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=500) {
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0)
     else
         pt64 := y << 32 | (x & 0xFFFFFFFF)
     try {
-        if (activateChromiumAccessibility && activateChromiumAccessibility is VarRef && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) ; hwnd from point by SKAN
-            %activateChromiumAccessibility% := this.ActivateChromiumAccessibility(hwnd)
+        if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) ; hwnd from point by SKAN
+            this.ActivateChromiumAccessibility(hwnd,, activateChromiumAccessibility, cacheRequest?)
     }
     if IsSet(cacheRequest)
         return this.ElementFromPointBuildCache(cacheRequest, pt64)
@@ -1923,13 +1929,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     GetCachedChildren(scope:=2) {
         local children
         scope := UIA.TypeValidation.TreeScope(scope)
-        if scope&1 && this.HasOwnProp("CachedChildrenTreeScope" UIA.TreeScope[scope]) {
-            local children := this.CachedChildrenTreeScope%UIA.TreeScope[scope]%.Clone()
-            children.Push(this)
-            return children
+        if this.HasOwnProp("CachedChildrenTreeScope" (UIA.TreeScope[scope & ~1])) {
+            if scope&1 {
+                local children := this.CachedChildrenTreeScope%UIA.TreeScope[scope]%.Clone()
+                children.Push(this)
+                return children
+            }
+            return this.CachedChildrenTreeScope%UIA.TreeScope[scope & ~1]%
         }
-        if this.HasOwnProp("CachedChildrenTreeScope" UIA.TreeScope[scope])
-            return this.CachedChildrenTreeScope%UIA.TreeScope[scope]%
         if scope&4 {
             children := []
             AppendChildren(this)
@@ -7354,7 +7361,7 @@ class Viewer {
         ; Also activate accessibility, afterwards don't activate anymore
         try {
             mwCtrl := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", mwId)
-            UIA.ActivateChromiumAccessibility(mwId, 1)
+            UIA.ActivateChromiumAccessibility(mwId)
         }
         ; If the control was considered the window, assume that this is still needed
         if mwCtrl = this.Stored.mwId
