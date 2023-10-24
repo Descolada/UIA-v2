@@ -1772,7 +1772,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                         catch
                             el := ""
                     }
-                } else if IsInteger(param) {
+                } else if param is Integer {
                     try {
                         ComCall(6, el, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0)
                         if found {
@@ -1793,9 +1793,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     maybeEl := ""
                     for path in StrSplit(param, "|") {
                         try {
-                            if InStr(path, ".") || InStr(path, ",")
-                                maybeEl := el[StrSplit(StrReplace(path, ".", ","), ",")*]
-                            else if RegexMatch(path, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
+                            if InStr(path, ".") || InStr(path, ",") {
+                                arr := StrSplit(StrReplace(path, ".", ","), ",")
+                                for i, int in arr
+                                    arr[i] := IsInteger(int) ? Integer(int) : int
+                                maybeEl := el[arr*]
+                            } else if RegexMatch(path, "i)([a-zA-Z]+) *(\d+)?", &m:="") && UIA.Type.HasOwnProp(m[1]) {
                                 try maybeEl := el.FindElement({Type:m[1], i:(m.Count > 1 ? m[2] : 1)}, 2)
                                 catch TargetError
                                     maybeEl := ""
