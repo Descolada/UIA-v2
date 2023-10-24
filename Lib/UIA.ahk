@@ -2368,7 +2368,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
             return 0
         }
-        rel := [0,0], pos := this.Location, cCount := 1, SleepTime := -1
+        rel := [0,0], pos := this.Location, cCount := ClickCount, SleepTime := -1
         if (Relative && !InStr(Relative, "rel"))
             rel := StrSplit(Relative, " "), Relative := ""
         if IsInteger(WhichButton)
@@ -2385,7 +2385,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         saveCoordMode := A_CoordModeMouse
         CoordMode("Mouse", "Screen")
-        Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
+        Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (cCount ? " " cCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
         CoordMode("Mouse", saveCoordMode)
         Sleep(SleepTime)
     }
