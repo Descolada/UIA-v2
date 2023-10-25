@@ -2292,14 +2292,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Get the parent window hwnd from the element
     GetWinId() {
-        static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return DllCall("GetAncestor", "UInt", TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle), "UInt", 2) ; hwnd from point by SKAN
+        static cacheRequest := UIA.CreateCacheRequest(["NativeWindowHandle"],,1, UIA.AutomationElementMode.None), TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
+        try return DllCall("GetAncestor", "UInt", TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle, "UInt", 2) ; hwnd from point by SKAN
     }
     WinId => (this.DefineProp("WinId", {value:this.GetWinId()}), this.WinId)
     ; Get the control hwnd (that the element belongs to) from the element
     GetControlId() {
-        static TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return TW.NormalizeElement(this).GetPropertyValue(UIA.Property.NativeWindowHandle)
+        static cacheRequest := UIA.CreateCacheRequest(["NativeWindowHandle"],,1, UIA.AutomationElementMode.None), TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
+        try return TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle
     }
     ControlId => (this.DefineProp("ControlId", {value:this.GetControlId()}), this.ControlId)
 
