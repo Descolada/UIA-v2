@@ -7364,6 +7364,14 @@ class Viewer {
         SetTimer(this.CaptureCallback, -3000) ; In case of an error try again in 3 seconds
         CoordMode "Mouse", "Screen" 
         MouseGetPos(&mX, &mY, &mwId, &mwCtrl, 2)
+        if this.ProcessIsElevated(WinGetPID(mwId)) > 0 && !A_IsAdmin {
+            if MsgBox("The inspected window is running with elevated privileges.`nUIAViewer must be running in UIAccess mode or as administrator to inspect it.`n`nRun UIAViewer as administrator to inspect it?",, 0x1000 | 0x30 | 0x4) = "Yes" {
+                try {
+                    Run('*RunAs "' (A_IsCompiled ? A_ScriptFullPath '" /restart' : A_AhkPath '" /restart "' A_ScriptFullPath '"'))
+                    ExitApp
+                }
+            }
+        }
         ; If is a Chromium window then also get the control, because some Chromium windows don't show content from main window
         ; Also activate accessibility, afterwards don't activate anymore
         try {
@@ -7429,7 +7437,7 @@ class Viewer {
     TryUpdateElementVariables(mwId, mX, mY) {
         if mwId != this.Stored.mwId {
             this.TextLVWin.Text := "Window Info", this.TextTVUIA.Text := "UIA Tree"
-            if this.Stored.HasOwnProp("CapturedWindowBuildCache")
+            if this.Stored.HasOwnProp("CapturedWindowBuildUpdatedCache")
                 SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
             this.Stored.CapturedWindowBuildUpdatedCache := UIA.Viewer.Prototype.UpdateCapturedWindowCache.Bind(this)
             this.UpdateCapturedWindowCache(mwId)
@@ -7683,6 +7691,22 @@ class Viewer {
         else if !this.PathIgnoreNames && n != "" && (pathsMap[n] < pathsMap[t])
             return n
         return t
+    }
+
+    ProcessIsElevated(vPID) {
+        ;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
+        if !(hProc := DllCall("OpenProcess", "UInt", 0x1000, "Int",0, "UInt",vPID, "Ptr"))
+            return -1
+        ;TOKEN_QUERY := 0x8
+        if !(DllCall("advapi32\OpenProcessToken", "Ptr", hProc, "UInt",0x8, "Ptr*", &hToken:=0)) {
+            DllCall("CloseHandle", "Ptr", hProc)
+            return -1
+        }
+        ;TokenElevation := 20
+        vRet := (DllCall("advapi32\GetTokenInformation", "Ptr", hToken, "Int", 20, "UInt*", &vIsElevated:=0, "UInt", 4, "UInt*", &vSize:=0))
+        DllCall("CloseHandle", "Ptr",hToken)
+        DllCall("CloseHandle", "Ptr",hProc)
+        return vRet ? vIsElevated : -1
     }
 }
 
