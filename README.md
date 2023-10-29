@@ -7,7 +7,7 @@ Additionally there is UIA_Browser.ahk, which contains helper functions for brows
 
 ## For more information and tutorials, [check out the Wiki](https://github.com/Descolada/UIA-v2/wiki).
 
-### For instructional videos, check out [Joe the Automator](https://www.the-automator.com/automate-any-program-with-ui-automation/) and [Axlefublr](https://www.youtube.com/watch?v=o2E6sRxFoB0)
+### For instructional videos, check out [the Tutorial Series](https://www.youtube.com/playlist?list=PLg-VAp_I6_oTfdL9sUqcC7s61jcQW9K38), [Joe the Automator](https://www.the-automator.com/automate-any-program-with-ui-automation/) and [Axlefublr](https://www.youtube.com/watch?v=o2E6sRxFoB0)
 
 Multiple examples are included in the Examples folder.
 
