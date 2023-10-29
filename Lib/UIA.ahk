@@ -6495,6 +6495,11 @@ class IUIAutomationTextPattern extends UIA.IUIAutomationBase {
         return (ComCall(5, this, "ptr*", &ranges := 0), ranges?UIA.IUIAutomationTextRangeArray(ranges).ToArray():[])
     }
 
+    ; Retrieves the first selection text range that represents the currently selected text in a text-based control.
+    SelectionRange {
+        get => this.GetSelection()[1]
+    }
+
     ; Retrieves an array of disjoint text ranges from a text-based control where each text range represents a contiguous span of visible text.
     ; If the visible text consists of one contiguous span of text, the ranges array will contain a single text range that represents all of the visible text.
     ; If the visible text consists of multiple, disjoint spans of text, the ranges array will contain one text range for each visible span, beginning with the first visible span, and ending with the last visible span. Disjoint spans of visible text can occur when the content of a text-based control is partially obscured by an overlapping window or other object, or when a text-based control with multiple pages or columns has content that is partially scrolled out of view.
@@ -7364,14 +7369,6 @@ class Viewer {
         SetTimer(this.CaptureCallback, -3000) ; In case of an error try again in 3 seconds
         CoordMode "Mouse", "Screen" 
         MouseGetPos(&mX, &mY, &mwId, &mwCtrl, 2)
-        if this.ProcessIsElevated(WinGetPID(mwId)) > 0 && !A_IsAdmin {
-            if MsgBox("The inspected window is running with elevated privileges.`nUIAViewer must be running in UIAccess mode or as administrator to inspect it.`n`nRun UIAViewer as administrator to inspect it?",, 0x1000 | 0x30 | 0x4) = "Yes" {
-                try {
-                    Run('*RunAs "' (A_IsCompiled ? A_ScriptFullPath '" /restart' : A_AhkPath '" /restart "' A_ScriptFullPath '"'))
-                    ExitApp
-                }
-            }
-        }
         ; If is a Chromium window then also get the control, because some Chromium windows don't show content from main window
         ; Also activate accessibility, afterwards don't activate anymore
         try {
@@ -7436,6 +7433,14 @@ class Viewer {
     ; Also removes and adds back the StructureChangedEventHandler
     TryUpdateElementVariables(mwId, mX, mY) {
         if mwId != this.Stored.mwId {
+            if this.ProcessIsElevated(WinGetPID(mwId)) > 0 && !A_IsAdmin {
+                if MsgBox("The inspected window is running with elevated privileges.`nUIAViewer must be running in UIAccess mode or as administrator to inspect it.`n`nRun UIAViewer as administrator to inspect it?",, 0x1000 | 0x30 | 0x4) = "Yes" {
+                    try {
+                        Run('*RunAs "' (A_IsCompiled ? A_ScriptFullPath '" /restart' : A_AhkPath '" /restart "' A_ScriptFullPath '"'))
+                        ExitApp
+                    }
+                }
+            }
             this.TextLVWin.Text := "Window Info", this.TextTVUIA.Text := "UIA Tree"
             if this.Stored.HasOwnProp("CapturedWindowBuildUpdatedCache")
                 SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
