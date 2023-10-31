@@ -5002,14 +5002,14 @@ class IUIAutomationEventHandler {
     static __IID := "{146c3c17-f12e-4e22-8c27-f894b9b79c69}"
 
     HandleAutomationEvent(pSelf, sender, eventId) {
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), eventId)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), eventId)
     }
 }
 class IUIAutomationFocusChangedEventHandler {
     static __IID := "{c270f6b5-5c69-4290-9745-7a7f97169468}"
 
     HandleFocusChangedEvent(pSelf, sender) {
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender))
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender))
     }
 }
 
@@ -5024,7 +5024,7 @@ class IUIAutomationPropertyChangedEventHandler { ; UNTESTED
     HandlePropertyChangedEvent(pSelf, sender, propertyId, newValue) {
         local val := ComValue(0x400C, newValue)[]
         DllCall("oleaut32\VariantClear", "ptr", newValue)
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), propertyId, val)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), propertyId, val)
     }
 }
 /*
@@ -5036,7 +5036,7 @@ class IUIAutomationStructureChangedEventHandler {
     static __IID := "{e81d1b4e-11c5-42f8-9754-e7036c79f054}"
 
     HandleStructureChangedEvent(pSelf, sender, changeType, runtimeId) {
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, UIA.SafeArrayToAHKArray(runtimeId))
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, UIA.SafeArrayToAHKArray(runtimeId))
         DllCall("oleaut32\VariantClear", "ptr", runtimeId)
     }
 }
@@ -5051,7 +5051,7 @@ class IUIAutomationTextEditTextChangedEventHandler { ; UNTESTED
     HandleTextEditTextChangedEvent(pSelf, sender, changeType, eventStrings) {
         local val := ComValue(0x400C, eventStrings)[]
         DllCall("oleaut32\VariantClear", "ptr", eventStrings)
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, val)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, val)
     }
 }
 
@@ -5066,7 +5066,7 @@ class IUIAutomationChangesEventHandler { ; UNTESTED
         local changes, pExtraInfo
         changes := {id:NumGet(uiaChanges,"Int"), payload:ComValue(0x400C, pPayload := NumGet(uiaChanges,8,"uint64"))[], extraInfo:ComValue(0x400C, pExtraInfo := NumGet(uiaChanges,16+2*A_PtrSize,"uint64")[])}
         DllCall("oleaut32\VariantClear", "ptr", pPayload), DllCall("oleaut32\VariantClear", "ptr", pExtraInfo)
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), changes, changesCount)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changes, changesCount)
     }
 }
 /*
@@ -5077,7 +5077,7 @@ class IUIAutomationNotificationEventHandler {
     static __IID := "{C7CB2637-E6C2-4D0C-85DE-4948C02175C7}"
 
     HandleNotificationEvent(pSelf, sender, notificationKind, notificationProcessing, displayString, activityId) {
-        this.EventHandler.Call(UIA.IUIAutomationElement(sender), notificationKind, notificationProcessing, UIA.BSTR(displayString), UIA.BSTR(activityId))
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), notificationKind, notificationProcessing, UIA.BSTR(displayString), UIA.BSTR(activityId))
     }
 }
 
