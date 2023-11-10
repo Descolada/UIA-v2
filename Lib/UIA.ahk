@@ -915,29 +915,57 @@ static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=50
  * @param element Optional: optionally provide an element for which the search is performed for.
  *   This element must be cached with CachedBoundingRectangle and TreeScope.Element+Descendants.
  * @param cacheRequest Optional: a cache request object.
+ * @param deepSearch Whether SmallestElementFromPoint checks all the elements in the element Subtree
+ *   or filters the elements level by level by whether they contain the point or not. Default is false.
+ *   This means that is deepSearch is True then every element in the subtree is checked, but if 
+ *   false then only a small part of the tree is checked, which also means a difference in performance. 
+ *   DeepSearch might be useful if some of the intermediary elements have an incorrect size (eg in 
+ *   Firefox some group elements are 0-sized).
+ * 
  * @returns {UIA.IUIAutomationElement}
  */
-static SmallestElementFromPoint(x?, y?, element?, cacheRequest?) {
+static SmallestElementFromPoint(x?, y?, element?, cacheRequest?, deepSearch := false) {
     static sCacheRequest := this.CreateCacheRequest(["BoundingRectangle"],,5)
-    if !IsSet(cacheRequest)
-        cacheRequest := sCacheRequest
-    else
-        cacheRequest.AddProperty(UIA.Property.BoundingRectangle)
-    
+    local pt64
+
     if !(IsSet(x) && IsSet(y))
         DllCall("user32.dll\GetCursorPos", "int64P", &pt64:=0), x := 0xFFFFFFFF & pt64, y := pt64 >> 32
-    if !IsSet(element)
-        element := UIA.ElementFromPoint(x, y, cacheRequest)
+    if deepSearch {
+        if !IsSet(cacheRequest)
+            cacheRequest := sCacheRequest
+        else
+            cacheRequest.AddProperty(UIA.Property.BoundingRectangle)
 
-    return this.SmallestElementInElementContainingPoint(x, y, element)
+        if !IsSet(element)
+            element := UIA.ElementFromPoint(x, y, sCacheRequest)
+        return this.CachedSmallestElementInElementContainingPoint(x, y, element)
+    }
+
+    if !IsSet(element)
+        element := UIA.ElementFromPoint(x, y)
+    element := this.SmallestElementInElementContainingPoint(x, y, element)
+    return IsSet(cacheRequest) ? element.BuildUpdatedCache(cacheRequest) : element
 }
 
 ; Returns the smallest element inside another element (it included) that contains the point (x,y)
-; The element must have BoundingRectangle cached
 static SmallestElementInElementContainingPoint(x, y, element) {
-    local el, smallest, smallestSize, rect
-    smallest := "", smallestSize := 100000000
-    for el in element.GetCachedChildren(scope:=5) {
+    static cr := UIA.CreateCacheRequest(["BoundingRectangle"])
+    local el, smallest := element, smallestSize := 100000000, rect, evaluated := [element.BuildUpdatedCache(cr)]
+    while evaluated.Length {
+        el := evaluated.Pop(), rect := el.CachedBoundingRectangle
+        if rect.l<=x && rect.r >=x && rect.t <= y && rect.b >= y {
+            evaluated.Push(el.FindAllBuildCache(cr,, 2)*), size := (rect.r-rect.l)*(rect.b-rect.t)
+            if size < smallestSize
+                smallest := el, smallestSize := size
+        }
+    }
+    return smallest
+}
+
+; Requires the elements subtree to be cached with the BoundingRectangle property
+static CachedSmallestElementInElementContainingPoint(x, y, element) {
+    local el, smallest := element, smallestSize := 100000000, rect
+    for el in element.GetCachedChildren(5) {
         rect := el.CachedBoundingRectangle
         if rect.l<=x && rect.r >=x && rect.t <= y && rect.b >= y {
             size := (rect.r-rect.l)*(rect.b-rect.t)
@@ -7406,9 +7434,8 @@ class Viewer {
                 if this.FoundTime != 0 && ((A_TickCount - this.FoundTime) > 500) {
                     if (mX == this.Stored.mX) && (mY == this.Stored.mY) {
                         if !(this.Stored.HasOwnProp("TreeViewWindow") && this.SafeCompareElements(this.Stored.CapturedWindow, this.Stored.TreeViewWindow))
+                            || !this.TreeViewSelectCapturedElement()
                             this.ConstructTreeView()
-                        else
-                            this.TreeViewSelectCapturedElement()
                         this.FoundTime := 0
                     } else
                         this.FoundTime := A_TickCount
@@ -7447,7 +7474,7 @@ class Viewer {
             this.Stored.CapturedWindowBuildUpdatedCache := UIA.Viewer.Prototype.UpdateCapturedWindowCache.Bind(this)
             this.UpdateCapturedWindowCache(mwId)
         }
-        try return CapturedElement := UIA.SmallestElementInElementContainingPoint(mX, mY, this.Stored.CapturedWindow)
+        try return CapturedElement := UIA.CachedSmallestElementInElementContainingPoint(mX, mY, this.Stored.CapturedWindow)
     }
     UpdateCapturedWindowCache(mwId?) {
         if !WinExist(mwId ?? this.Stored.mwId) 
@@ -7617,8 +7644,10 @@ class Viewer {
                 , this.Stored.CapturedElement.Path := v.Path
                 , this.Stored.CapturedElement.NumericPath := v.NumericPath
                 , this.Stored.CapturedElement.ConditionPath := v.ConditionPath
+                return 1
             }
         }
+        return 0
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="", conditionpath := "", numpath:="") {
