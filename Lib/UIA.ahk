@@ -568,6 +568,22 @@ static DPIAwareness {
 ; Sets the maximum possible DPI awareness level depending on Windows version
 static SetMaximumDPIAwareness() => this.DPIAwareness := this.IsIUIAutomationElement6Available ? -4 : -3
 
+static ProcessIsElevated(vPID) {
+    ;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
+    if !(hProc := DllCall("OpenProcess", "UInt", 0x1000, "Int",0, "UInt",vPID, "Ptr"))
+        return -1
+    ;TOKEN_QUERY := 0x8
+    if !(DllCall("advapi32\OpenProcessToken", "Ptr", hProc, "UInt",0x8, "Ptr*", &hToken:=0)) {
+        DllCall("CloseHandle", "Ptr", hProc)
+        return -1
+    }
+    ;TokenElevation := 20
+    vRet := (DllCall("advapi32\GetTokenInformation", "Ptr", hToken, "Int", 20, "UInt*", &vIsElevated:=0, "UInt", 4, "UInt*", &vSize:=0))
+    DllCall("CloseHandle", "Ptr",hToken)
+    DllCall("CloseHandle", "Ptr",hProc)
+    return vRet ? vIsElevated : -1
+}
+
 /**
  * Finds the first element matching a condition from an AHK array
  * @param elementArray The array to search
@@ -3619,6 +3635,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; For riid specify a GUID string, that is the IID for the desired pattern
     ; GetPatternAs doesn't have a use in this library, use GetPattern instead
     GetPatternAs(patternId, riid) {
+        local name
         try {
             if IsInteger(patternId)
                 name := UIA.Pattern[patternId]
@@ -3634,6 +3651,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Retrieves the control pattern interface of the specified pattern from the cache of this UI Automation element.
     ; GetCachedPatternAs doesn't have a use in this library, use GetCachedPattern instead
     GetCachedPatternAs(patternId, riid) {	; not completed
+        local name, GUID, patternObject
         try {
             if IsInteger(patternId)
                 name := UIA.Pattern[patternId]
@@ -3650,6 +3668,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; This method gets the specified control pattern based on its availability at the time of the call.
     ; For some forms of UI, this method will incur cross-process performance overhead. Applications can reduce overhead by caching control patterns and then retrieving them by using UIA.IUIAutomationElement,,GetCachedPattern.
     GetPattern(patternId) {
+        local name, patternObject
         try {
             if IsInteger(patternId)
                 name := UIA.Pattern[patternId]
@@ -3663,6 +3682,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Retrieves from the cache the IUnknown interface of the specified control pattern of this UI Automation element.
     GetCachedPattern(patternId) {
+        local name, patternObject
         try {
             if IsInteger(patternId)
                 name := UIA.Pattern[patternId]
@@ -7462,7 +7482,7 @@ class Viewer {
     ; Also removes and adds back the StructureChangedEventHandler
     TryUpdateElementVariables(mwId, mX, mY) {
         if mwId != this.Stored.mwId {
-            if this.ProcessIsElevated(WinGetPID(mwId)) > 0 && !A_IsAdmin {
+            if UIA.ProcessIsElevated(WinGetPID(mwId)) > 0 && !A_IsAdmin {
                 if MsgBox("The inspected window is running with elevated privileges.`nUIAViewer must be running in UIAccess mode or as administrator to inspect it.`n`nRun UIAViewer as administrator to inspect it?",, 0x1000 | 0x30 | 0x4) = "Yes" {
                     try {
                         Run('*RunAs "' (A_IsCompiled ? A_ScriptFullPath '" /restart' : A_AhkPath '" /restart "' A_ScriptFullPath '"'))
@@ -7486,7 +7506,7 @@ class Viewer {
     }
     ; Populates the listview with UIA element properties
     PopulatePropsPatterns(Element) {
-        local v, value, pattern, parent, proto, match, X, Y, W, H
+        local v, value, pattern, parent, proto, match, X, Y, W, H, name
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear")
         this.Stored.HighlightedElement := Element
@@ -7727,22 +7747,6 @@ class Viewer {
         else if !this.PathIgnoreNames && n != "" && (pathsMap[n] < pathsMap[t])
             return n
         return t
-    }
-
-    ProcessIsElevated(vPID) {
-        ;PROCESS_QUERY_LIMITED_INFORMATION := 0x1000
-        if !(hProc := DllCall("OpenProcess", "UInt", 0x1000, "Int",0, "UInt",vPID, "Ptr"))
-            return -1
-        ;TOKEN_QUERY := 0x8
-        if !(DllCall("advapi32\OpenProcessToken", "Ptr", hProc, "UInt",0x8, "Ptr*", &hToken:=0)) {
-            DllCall("CloseHandle", "Ptr", hProc)
-            return -1
-        }
-        ;TokenElevation := 20
-        vRet := (DllCall("advapi32\GetTokenInformation", "Ptr", hToken, "Int", 20, "UInt*", &vIsElevated:=0, "UInt", 4, "UInt*", &vSize:=0))
-        DllCall("CloseHandle", "Ptr",hToken)
-        DllCall("CloseHandle", "Ptr",hProc)
-        return vRet ? vIsElevated : -1
     }
 }
 
