@@ -7068,6 +7068,8 @@ class Viewer {
         OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
         DetectHiddenWindows "On"
+        if !UIA.IsIUIAutomationElement7Available 
+            UIA.Property.DeleteProp("IsSelectionPattern2Available") ; not available in Windows Server 2016
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0}
         this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.MacroSidebarMinWidth := 290, this.GuiMinWidth := 540, this.GuiMinHeight := 400, this.Focused := 1
         this.LoadSettings()
