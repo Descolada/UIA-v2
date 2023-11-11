@@ -10,6 +10,8 @@ class TreeInspector {
         OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
         DetectHiddenWindows True
+        if !UIA.IsIUIAutomationElement7Available 
+            UIA.Property.DeleteProp("IsSelectionPattern2Available") ; not available in Windows Server 2016
         this.Stored := {hWnd:0, WinList:Map(), FilteredTreeView:Map(), TreeView:Map(), Controls:Map(), HighlightedElement:0}
         this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.MacroSidebarMinWidth := 290, this.GuiMinWidth := 840, this.GuiMinHeight := 400, this.Focused := 1
         this.LoadSettings()
@@ -20,7 +22,7 @@ class TreeInspector {
         this.cacheRequest.TreeScope := 5
 
         this.gViewer := Gui((this.AlwaysOnTop ? "AlwaysOnTop " : "") "Resize +MinSize" this.GuiMinWidth "x" this.GuiMinHeight, "UIATreeInspector")
-        this.gViewer.OnEvent("Close", (*) => ExitApp())
+        this.gViewer.OnEvent("Close", this.gViewer_Close.Bind(this))
         this.gViewer.OnEvent("Size", this.gViewer_Size.Bind(this))
 
         this.gViewer.Add("Text", "w140", "Windows and Controls").SetFont("bold")
@@ -86,7 +88,19 @@ class TreeInspector {
         this.ButMacroScriptCopy.OnEvent("Click", (*) => (A_Clipboard := this.EditMacroScript.Text, ToolTip("Macro code copied to Clipboard!"), SetTimer(ToolTip, -3000)))
         this.ButToggleMacroSidebar := this.gViewer.Add("Button", "x490 y500 w120", "Show macro &sidebar =>")
         this.ButToggleMacroSidebar.OnEvent("Click", this.ButToggleMacroSidebar_Click.Bind(this))
-        this.gViewer.Show("w900 h550")
+        xy := ""
+        if this.RememberGuiPosition {
+            xy := StrSplit(this.RememberGuiPosition, ","), monitor := 0
+            Loop MonitorGetCount() {
+                MonitorGetWorkArea(A_Index, &Left, &Top, &Right, &Bottom)
+                if xy[1] > (Left-50) && xy[2] > (Top-50) && xy[1] < (Right-50) && xy[2] < (Bottom-30) {
+                    monitor := A_Index
+                    break
+                }
+            }
+            xy := monitor ? "x" xy[1] " y" xy[2] " " : ""
+        }
+        this.gViewer.Show(xy "w900 h550")
         this.gViewer_Size(this.gViewer,0,900,550)
         this.RefreshTVWins()
         this.FocusHook := DllCall("SetWinEventHook", "UInt", 0x8005, "UInt", 0x8005, "Ptr",0,"Ptr", CallbackCreate(this.HandleFocusChangedEvent.Bind(this), "F", 7),"UInt", 0, "UInt",0, "UInt",0)
@@ -120,6 +134,8 @@ class TreeInspector {
         IniWrite(this.PathIgnoreNames, TreeInspector.SettingsFilePath, "Path", "IgnoreNames")
         IniWrite(this.PathType, TreeInspector.SettingsFilePath, "Path", "Type")
         IniWrite(this.AlwaysOnTop, TreeInspector.SettingsFilePath, "General", "AlwaysOnTop")
+        IniWrite(this.DPIAwareness, UIA.Viewer.SettingsFilePath, "General", "DPIAwareness")
+        IniWrite(this.RememberGuiPosition, UIA.Viewer.SettingsFilePath, "General", "RememberGuiPosition")
         IniWrite(this.WinVisible, TreeInspector.SettingsFilePath, "WinTree", "Visible")
         IniWrite(this.WinTitle, TreeInspector.SettingsFilePath, "WinTree", "Title")
         IniWrite(this.WinActivate, TreeInspector.SettingsFilePath, "WinTree", "Activate")
@@ -128,11 +144,18 @@ class TreeInspector {
         this.PathIgnoreNames := IniRead(TreeInspector.SettingsFilePath, "Path", "IgnoreNames", 1)
         this.PathType := IniRead(TreeInspector.SettingsFilePath, "Path", "Type", "")
         this.AlwaysOnTop := IniRead(TreeInspector.SettingsFilePath, "General", "AlwaysOnTop", 1)
+        this.DPIAwareness := IniRead(UIA.Viewer.SettingsFilePath, "General", "DPIAwareness", 0)
+        this.RememberGuiPosition := IniRead(UIA.Viewer.SettingsFilePath, "General", "RememberGuiPosition", "")
         this.WinVisible := IniRead(TreeInspector.SettingsFilePath, "WinTree", "Visible", 1)
         this.WinTitle := IniRead(TreeInspector.SettingsFilePath, "WinTree", "Title", 1)
         this.WinActivate := IniRead(TreeInspector.SettingsFilePath, "WinTree", "Activate", 1)
     }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
+    gViewer_Close(GuiObj, *) {
+        if this.RememberGuiPosition
+            WinGetPos(&X, &Y,,,GuiObj.Hwnd), this.RememberGuiPosition := X "," Y, this.SaveSettings()
+        ExitApp()
+    }
     ; Resizes window controls when window is resized
     gViewer_Size(GuiObj, MinMax, Width, Height) {
         static RedrawFunc := WinRedraw.Bind(GuiObj.Hwnd)
@@ -315,19 +338,33 @@ class TreeInspector {
         SBMain_Menu.Add("UIATreeInspector always on top", (*) => (this.AlwaysOnTop := !this.AlwaysOnTop, this.gViewer.Opt((this.AlwaysOnTop ? "+" : "-") "AlwaysOnTop")))
         if this.AlwaysOnTop
             SBMain_Menu.Check("UIATreeInspector always on top")
+        SBMain_Menu.Add("Remember UIATreeInspector position", (*) => (this.RememberGuiPosition := !this.RememberGuiPosition, this.SaveSettings()))
+        if this.RememberGuiPosition
+            SBMain_Menu.Check("Remember UIATreeInspector position")
+        SBMain_Menu.Add("Enable DPI awareness", (*) => (this.DPIAwareness := !this.DPIAwareness, this.DPIAwareness ? UIA.SetMaximumDPIAwareness() : UIA.DPIAwareness := -2))
+        if this.DPIAwareness
+            SBMain_Menu.Check("Enable DPI awareness")
+        SBMain_Menu.Add()
         SBMain_Menu.Add("Save settings", (*) => (this.SaveSettings(), ToolTip("Settings saved!"), SetTimer(ToolTip, -2000)))
         SBMain_Menu.Show()
     }
     ; Updates the GUI with the selected item
     TVWins_ItemSelect(GuiCtrlObj, Info) {
-        hWnd := this.Stored.WinList[Info]
+        local hWnd := this.Stored.WinList[Info], parent := DllCall("GetAncestor", "UInt", hWnd, "UInt", 2)
         this.Stored.hWnd := hWnd
+        if UIA.ProcessIsElevated(WinGetPID(parent)) > 0 && !A_IsAdmin {
+            if MsgBox("The inspected window is running with elevated privileges.`nUIATreeInspector must be running in UIAccess mode or as administrator to inspect it.`n`nRun UIATreeInspector as administrator to inspect it?",, 0x1000 | 0x30 | 0x4) = "Yes" {
+                try {
+                    Run('*RunAs "' (A_IsCompiled ? A_ScriptFullPath '" /restart' : A_AhkPath '" /restart "' A_ScriptFullPath '"'))
+                    ExitApp
+                }
+            }
+        }
         this.cacheRequest.TreeScope := 1
         try this.Stored.CapturedElement := UIA.ElementFromHandle(hWnd, this.cacheRequest)
         this.cacheRequest.TreeScope := 5
         propsOrder := ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
         if this.WinActivate {
-            parent := DllCall("GetAncestor", "UInt", hWnd, "UInt", 2)
             WinActivate(parent)
             WinWaitActive(parent, 1)
             WinActivate(this.gViewer.Hwnd)
@@ -472,7 +509,7 @@ class TreeInspector {
     }
     ; Populates the TreeView with the UIA tree when capturing and the mouse is held still
     ConstructTreeView() {
-        local k, v, same
+        local k, v
         this.TVUIA.Delete()
         this.TVUIA.Add("Constructing Tree, please wait...")
         Sleep -1
@@ -503,7 +540,7 @@ class TreeInspector {
     }
     ; Stores the UIA tree with corresponding path values for each element
     RecurseTreeView(Element, parent:=0, path:="", conditionpath := "", numpath:="") {
-        local info, child, type, name, k, v, paths := Map(), childInfo := [], children := Element.CachedChildren
+        local info, child, type, k, paths := Map(), childInfo := [], children := Element.CachedChildren
         Element.DefineProp("Path", {value:"`"" path "`""})
         Element.DefineProp("ConditionPath", {value:conditionpath})
         Element.DefineProp("NumericPath", {value:numpath})
