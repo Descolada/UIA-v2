@@ -231,7 +231,7 @@ class UIA_Chrome extends UIA_Browser {
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				Loop 2 {
 					try {
-						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
+						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement)))
 						this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
 						this.ReloadButtonName := this.ReloadButton.Name
 					}
@@ -288,7 +288,7 @@ class UIA_Edge extends UIA_Browser {
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				Loop 2 {
 					try {
-						this.ReloadButton := UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)))
+						this.ReloadButton := this.ButtonTreeWalker.GetNextSiblingElement(this.ButtonTreeWalker.GetNextSiblingElement(this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement)))
 						this.ReloadButtonFullDescription := this.ReloadButton.FullDescription
 						this.ReloadButtonName := this.ReloadButton.Name
 					}
@@ -396,7 +396,7 @@ class UIA_Mozilla extends UIA_Browser {
 		A_Clipboard := js
 		WinActivate this.BrowserId
 		WinWaitActive this.BrowserId
-		ControlSend "{ctrl down}v{ctrl up}", , this.BrowserId
+		ControlSend "allow pasting{ctrl down}z{ctrl up}{ctrl down}v{ctrl up}", , this.BrowserId
 		Sleep 20
 		ControlSend "{ctrl down}{enter}{ctrl up}", , this.BrowserId
 		sleep 40
@@ -457,6 +457,7 @@ class UIA_Browser {
 		this.ToolbarControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.ToolBar)
 		this.TabControlCondition := UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Tab)
 		this.ToolbarTreeWalker := UIA.CreateTreeWalker(this.ToolbarControlCondition)
+		this.ButtonTreeWalker := UIA.CreateTreeWalker(this.ButtonControlCondition)
 		this.BrowserElement := UIA.ElementFromHandle(this.BrowserId)
 		this.DialogTreeWalker := UIA.CreateTreeWalker(UIA.CreateOrCondition(UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Custom), UIA.CreatePropertyCondition(UIA.Property.Type, UIA.Type.Window)))
 		this.GetCurrentMainPaneElement()
@@ -575,8 +576,7 @@ class UIA_Browser {
 			if this.ReloadButton && this.ReloadButton.Name
 				return this.ReloadButton
 		}
-		ButtonWalker := UIA.CreateTreeWalker(this.ButtonControlCondition)
-		this.ReloadButton := ButtonWalker.GetNextSiblingElement(ButtonWalker.GetNextSiblingElement(ButtonWalker.GetFirstChildElement(this.NavigationBarElement)))
+		this.ReloadButton := this.ButtonTreeWalker.GetNextSiblingElement(this.ButtonTreeWalker.GetNextSiblingElement(this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement)))
 		return this.ReloadButton
 	}
 	
@@ -745,12 +745,12 @@ class UIA_Browser {
 	
 	; Presses the Back button
 	Back() { 
-		UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement).Click()
+		this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement).Click()
 	}
 	
 	; Presses the Forward button
 	Forward() { 
-		UIA.TreeWalkerTrue.GetNextSiblingElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.NavigationBarElement)).Click()
+		this.ButtonTreeWalker.GetNextSiblingElement(this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement)).Click()
 	}
 
 	; Presses the Reload button
@@ -760,7 +760,7 @@ class UIA_Browser {
 
 	; Presses the Home button if it exists.
 	Home() { 
-		if homeBut := UIA.TreeWalkerTrue.GetNextSiblingElement(this.ReloadButton)
+		if homeBut := this.ButtonTreeWalker.GetNextSiblingElement(this.ReloadButton)
 			return homeBut.Click()
 		;NameCondition := UIA.CreatePropertyCondition(UIA.NamePropertyId, this.CustomNames.HomeButtonName ? this.CustomNames.HomeButtonName : butName)
 		;this.NavigationBarElement.FindFirst(UIA.CreateAndCondition(NameCondition, this.ButtonControlCondition)).Click()
