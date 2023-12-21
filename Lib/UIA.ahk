@@ -913,7 +913,7 @@ static ElementFromPoint(x?, y?, cacheRequest?, activateChromiumAccessibility:=50
     else
         pt64 := y << 32 | (x & 0xFFFFFFFF)
     try {
-        if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "int64",  pt64), "UInt", 2))) ; hwnd from point by SKAN
+        if (activateChromiumAccessibility && (hwnd := DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "int64",  pt64, "ptr"), "UInt", 2, "ptr"))) ; hwnd from point by SKAN
             this.ActivateChromiumAccessibility(hwnd,, activateChromiumAccessibility, cacheRequest?)
     }
     if IsSet(cacheRequest)
@@ -1476,7 +1476,7 @@ static AHKArrayToSafeArray(arr, varType:=3) {
 }
 ; X can be pt64 as well, in which case Y should be omitted
 static WindowFromPoint(X, Y?) { ; by SKAN and Linear Spoon
-    return DllCall("GetAncestor", "UInt", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | (X & 0xFFFFFFFF)) : X), "UInt", 2)
+    return DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "Int64", IsSet(Y) ? (Y << 32 | (X & 0xFFFFFFFF)) : X), "UInt", 2, "Ptr")
 }
 
 /**
@@ -2341,7 +2341,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Get the parent window hwnd from the element
     GetWinId() {
         static cacheRequest := UIA.CreateCacheRequest(["NativeWindowHandle"],,1, UIA.AutomationElementMode.None), TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return DllCall("GetAncestor", "UInt", TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle, "UInt", 2) ; hwnd from point by SKAN
+        try return DllCall("GetAncestor", "Ptr", TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle, "UInt", 2) ; hwnd from point by SKAN
     }
     WinId => (this.DefineProp("WinId", {value:this.GetWinId()}), this.WinId)
     ; Get the control hwnd (that the element belongs to) from the element
@@ -2989,7 +2989,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindCachedElements(condition, scope:=4, order:=0, startingElement:=0) {
-        local callback := 0, foundElements := []
+        local callback := 0, foundElements := [], child
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement,,, &callback)
         callback := callback || UIA.IUIAutomationElement.Prototype.ValidateCondition.Bind(unset, condition, true), scope := UIA.TypeValidation.TreeScope(scope), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement)
         if startingElement
@@ -7174,7 +7174,7 @@ class Viewer {
         DllCall("UnhookWinEvent", "Ptr", this.FocusHook)
     }
     HandleFocusChangedEvent(hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
-        winHwnd := DllCall("GetAncestor", "UInt", hWnd, "UInt", 2)
+        winHwnd := DllCall("GetAncestor", "Ptr", hWnd, "UInt", 2)
         if winHwnd = this.gViewer.Hwnd {
             if !this.Focused {
                 this.Focused := 1
@@ -7188,7 +7188,7 @@ class Viewer {
                     this.Stored.HighlightedElement.Highlight("clear")
             }
         }
-        if this.Capturing
+        if this.Capturing && this.Stored.HasOwnProp("CapturedWindowBuildUpdatedCache")
             SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, -2000)
         return 0
     }
@@ -7210,6 +7210,7 @@ class Viewer {
     }
     ErrorHandler(Exception, Mode) => (OutputDebug(Format("{1} ({2}) : ({3}) {4}`n", Exception.File, Exception.Line, Exception.What, Exception.Message) (HasProp(Exception, "Extra") ? "    Specifically: " Exception.Extra "`n" : "") "Stack:`n" Exception.Stack "`n`n"), 1)
     gViewer_Close(GuiObj, *) {
+        local X, Y
         if this.RememberGuiPosition {
             WinGetPos(&X, &Y,,,GuiObj.Hwnd), this.RememberGuiPosition := X "," Y, this.SaveSettings()
         }
@@ -7301,7 +7302,7 @@ class Viewer {
         }
         this.Capturing := True
         HotKey("~F1", this.CaptureHotkeyFunc, "Off")
-        HotKey("~Esc", this.CaptureHotkeyFunc, "On")
+        HotKey("Esc", this.CaptureHotkeyFunc, "On")
         this.TVUIA_Click("","") ; Clear highlighting from before
         this.TVUIA.Delete()
         this.TVUIA.Add("Hold cursor still to construct tree")
@@ -7403,7 +7404,7 @@ class Viewer {
         if this.Capturing {
             this.Capturing := False
             this.ButCapture.Text := "Start capturing (F1)"
-            HotKey("~Esc", this.CaptureHotkeyFunc, "Off")
+            HotKey("Esc", this.CaptureHotkeyFunc, "Off")
             HotKey("~F1", this.CaptureHotkeyFunc, "On")
             SetTimer(this.CaptureCallback, 0)
             if IsObject(this.Stored.HighlightedElement)
