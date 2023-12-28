@@ -10,7 +10,7 @@
     For example, we could only look for elements of certain Type, with certain Name, AutomationId etc.
 */
 
-if VerCompare(A_OSVersion, ">=10.0.22000") {
+if VerCompare(A_OSVersion, "10.0.22000") < 0 {
     MsgBox "This example works only in Windows 10. Press OK to Exit."
     ExitApp
 }
