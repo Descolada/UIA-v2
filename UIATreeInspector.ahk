@@ -53,9 +53,9 @@ class TreeInspector {
             try this.cacheRequest.AddProperty(v) ; Throws if not available, 
             catch
                 this.DisplayedProps.RemoveAt(i) ; Remove property if it is not available
-            else
-                this.LVProps.Add(,v = "BoundingRectangle" ? "Location" : v,"")
         }
+        for v in this.DisplayedProps
+            this.LVProps.Add(,v = "BoundingRectangle" ? "Location" : v,"")
         for pattern in [UIA.Property.OwnProps()*] {
             if pattern ~= "Is([\w]+Pattern.?)Available"
                 try this.cacheRequest.AddProperty(UIA.Property.%pattern%)
