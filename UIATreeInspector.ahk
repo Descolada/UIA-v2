@@ -10,8 +10,6 @@ class TreeInspector {
         OnError this.ErrorHandler.Bind(this)
         CoordMode "Mouse", "Screen"
         DetectHiddenWindows True
-        if !UIA.IsIUIAutomationElement7Available 
-            UIA.Property.DeleteProp("IsSelectionPattern2Available") ; not available in Windows Server 2016
         this.Stored := {hWnd:0, WinList:Map(), FilteredTreeView:Map(), TreeView:Map(), Controls:Map(), HighlightedElement:0}
         this.Capturing := False, this.MacroSidebarVisible := False, this.MacroSidebarWidth := 350, this.MacroSidebarMinWidth := 290, this.GuiMinWidth := 840, this.GuiMinHeight := 400, this.Focused := 1
         this.LoadSettings()
@@ -50,13 +48,19 @@ class TreeInspector {
         this.LVProps.ModifyCol(1,100)
         this.LVProps.ModifyCol(2,140)
         this.DisplayedProps := ["Type", "LocalizedType", "Name", "Value", "AutomationId", "BoundingRectangle", "ClassName", "FullDescription", "HelpText", "AccessKey", "AcceleratorKey", "HasKeyboardFocus", "IsKeyboardFocusable", "ItemType", "ProcessId", "IsEnabled", "IsPassword", "IsOffscreen", "FrameworkId", "IsRequiredForForm", "ItemStatus", "RuntimeId"]
-        for v in this.DisplayedProps {
-            this.LVProps.Add(,v = "BoundingRectangle" ? "Location" : v,"")
-            this.cacheRequest.AddProperty(v)
+        Loop DisplayedPropsLength := this.DisplayedProps.Length {
+            v := this.DisplayedProps[i := DisplayedPropsLength-A_Index+1]
+            try this.cacheRequest.AddProperty(v) ; Throws if not available, 
+            catch
+                this.DisplayedProps.RemoveAt(i) ; Remove property if it is not available
+            else
+                this.LVProps.Add(,v = "BoundingRectangle" ? "Location" : v,"")
         }
-        for pattern, value in UIA.Property.OwnProps() {
+        for pattern in [UIA.Property.OwnProps()*] {
             if pattern ~= "Is([\w]+Pattern.?)Available"
-                this.cacheRequest.AddProperty(value)
+                try this.cacheRequest.AddProperty(UIA.Property.%pattern%)
+                catch
+                    UIA.Property.DeleteProp(pattern) ; Remove pattern if it is not available
         }
 
         (this.TextTVPatterns := this.gViewer.Add("Text", "w100", "Patterns")).SetFont("bold")
