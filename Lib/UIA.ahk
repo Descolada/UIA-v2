@@ -2456,68 +2456,76 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * can be combined by separating with a space.  
      * Eg. Element.Click("left", 1000) will sleep 1000ms after clicking.  
      *     Element.Click("left", 2) will double-click the element  
-     *     Element.Click("left" "2 1000") will double-click the element and then sleep for 1000ms  
+     *     Element.Click("left", "2 1000") will double-click the element and then sleep for 1000ms  
      * @param DownOrUp If AHK Click is used, then this will either press the mouse down, or release it.
      * @param Relative If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position.  
      * Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10 from the center of the element).
      * @param NoActivate If AHK Click is used, then this will determine whether the window is activated
      * before clicking if the clickable point isn't visible on the screen. Default is no activating.
+     * @param MoveBack If set then the cursor will be moved back to its original location after sleeping for
+     * the specified amount of ms. Specify 0 for no sleep.
      */
-    Click(WhichButton:="", ClickCount:=1, DownOrUp:="", Relative:="", NoActivate:=False) {
-        local SleepTime, togglePattern, expandState, selectionPattern, rel, pos, cCount
+    Click(WhichButton:="", ClickCount:=1, DownOrUp:="", Relative:="", NoActivate:=False, MoveBack?) {
+        local SleepTime, togglePattern, expandState, selectionPattern, rel, pos
         if WhichButton = "" or IsInteger(WhichButton) {
-            SleepTime := WhichButton ? WhichButton : -1
             ; Caching the properties doesn't seem to make a speed difference, rather it might be slower with caching
             ; Using DoDefaultAction as default might end up slower (tested in Chrome - clicked much slower)
             if (this.GetPropertyValue(UIA.Property.IsInvokePatternAvailable)) {
                 this.InvokePattern.Invoke()
-                Sleep SleepTime
-                return 1
+                if WhichButton != ""
+                    Sleep WhichButton
+                return "Invoke"
             }
             if (this.GetPropertyValue(UIA.Property.IsTogglePatternAvailable)) {
                 togglePattern := this.TogglePattern, toggleState := togglePattern.CurrentToggleState
                 togglePattern.Toggle()
                 if (togglePattern.CurrentToggleState != toggleState) {
-                    Sleep sleepTime
-                    return 1
+                    if WhichButton != ""
+                        Sleep WhichButton
+                    return "Toggle"
                 }
             }
             if (this.GetPropertyValue(UIA.Property.IsExpandCollapsePatternAvailable)) {
                 if ((expandState := (pattern := this.ExpandCollapsePattern).ExpandCollapseState) == 0) {
                     try pattern.Expand() ; Sometimes throws UIA_E_INVALIDOPERATION 0x80131509
+                    action := "Expand"
                 } else {
                     try pattern.Collapse()
+                    action := "Collapse"
                 }
                 if (pattern.ExpandCollapseState != expandState) {
-                    Sleep sleepTime
-                    return 1
+                    if WhichButton != ""
+                        Sleep WhichButton
+                    return action
                 }
             }
             if (this.GetPropertyValue(UIA.Property.IsSelectionItemPatternAvailable)) {
                 selectionPattern := this.SelectionItemPattern, selectionState := selectionPattern.IsSelected
                 selectionPattern.Select()
                 if (selectionPattern.IsSelected != selectionState) {
-                    Sleep sleepTime
-                    return 1
+                    if WhichButton != ""
+                        Sleep WhichButton
+                    return "Select"
                 }
             }
             if (this.GetPropertyValue(UIA.Property.IsLegacyIAccessiblePatternAvailable)) {
                 this.LegacyIAccessiblePattern.DoDefaultAction()
-                Sleep sleepTime
-                return 1
+                if WhichButton != ""
+                    Sleep WhichButton
+                return "DoDefaultAction"
             }
             return 0
         }
-        rel := [0,0], pos := this.Location, cCount := ClickCount, SleepTime := -1
+        rel := [0,0], pos := this.Location
         if (Relative && !InStr(Relative, "rel"))
             rel := StrSplit(Relative, " "), Relative := ""
         if IsInteger(WhichButton)
             SleepTime := WhichButton, WhichButton := "left"
         if !IsInteger(ClickCount) && InStr(ClickCount, " ") {
             sCount := StrSplit(ClickCount, " ")
-            cCount := sCount[1], SleepTime := sCount[2]
+            ClickCount := sCount[1], SleepTime := sCount[2]
         } else if ClickCount > 9 {
-            SleepTime := cCount, cCount := 1
+            SleepTime := ClickCount, ClickCount := 1
         }
         if (!NoActivate && (UIA.WindowFromPoint(pos.x+pos.w//2+rel[1], pos.y+pos.h//2+rel[2]) != (wId := this.WinId))) {
             WinActivate(wId)
@@ -2525,9 +2533,17 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         saveCoordMode := A_CoordModeMouse
         CoordMode("Mouse", "Screen")
-        Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (cCount ? " " cCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
+        if IsSet(MoveBack)
+            MouseGetPos(&prevX, &prevY)
+        Click(pos.x+pos.w//2+rel[1] " " pos.y+pos.h//2+rel[2] " " WhichButton (ClickCount ? " " ClickCount : "") (DownOrUp ? " " DownOrUp : "") (Relative ? " " Relative : ""))
+        if IsSet(MoveBack) {
+            if MoveBack != 0
+                Sleep MoveBack
+            MouseMove(prevX, prevY)
+        }
         CoordMode("Mouse", saveCoordMode)
-        Sleep(SleepTime)
+        if IsSet(SleepTime)
+            Sleep(SleepTime)
     }
 
     /**
@@ -7267,7 +7283,8 @@ class Viewer {
     __Delete() {
         DllCall("UnhookWinEvent", "Ptr", this.FocusHook)
     }
-    HandleFocusChangedEvent(hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) {
+    HandleFocusChangedEvent(hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) => SetTimer(this._HandleFocusChangedEvent.Bind(this, hWnd), -1)
+    _HandleFocusChangedEvent(hWnd) {
         winHwnd := DllCall("GetAncestor", "Ptr", hWnd, "UInt", 2)
         if winHwnd = this.gViewer.Hwnd {
             if !this.Focused {
@@ -7286,7 +7303,7 @@ class Viewer {
             SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, -2000)
         return 0
     }
-    SaveSettings() {
+    SaveSettings() {    
         if !FileExist(A_AppData "\UIAViewer")
             DirCreate(A_AppData "\UIAViewer")
         IniWrite(this.PathIgnoreNames, UIA.Viewer.SettingsFilePath, "Path", "IgnoreNames")
@@ -7404,7 +7421,7 @@ class Viewer {
         this.TVUIA.Add("Hold cursor still to construct tree")
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear")
-        this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0} 
+        this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0, CapturedWindowBuildUpdatedCache:this.UpdateCapturedWindowCache.Bind(this)} 
         this.ButCapture.Text := "Stop capturing (Esc)"
         this.CaptureCallback := this.CaptureCycle.Bind(this)
         SetTimer(this.CaptureCallback, 200)
@@ -7499,13 +7516,13 @@ class Viewer {
     StopCapture(GuiCtrlObj:=0, Info:=0) {
         if this.Capturing {
             this.Capturing := False
+            SetTimer(this.CaptureCallback, 0)
+            SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
             this.ButCapture.Text := "Start capturing (F1)"
             HotKey("Esc", this.CaptureHotkeyFunc, "Off")
             HotKey("~F1", this.CaptureHotkeyFunc, "On")
-            SetTimer(this.CaptureCallback, 0)
             if IsObject(this.Stored.HighlightedElement)
                 this.Stored.HighlightedElement.Highlight("clear")
-            return
         }
     }
     ; Gets UIA element under mouse, updates the GUI.
@@ -7588,15 +7605,13 @@ class Viewer {
                 }
             }
             this.TextLVWin.Text := "Window Info", this.TextTVUIA.Text := "UIA Tree"
-            if this.Stored.HasOwnProp("CapturedWindowBuildUpdatedCache")
-                SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
-            this.Stored.CapturedWindowBuildUpdatedCache := UIA.Viewer.Prototype.UpdateCapturedWindowCache.Bind(this)
             this.UpdateCapturedWindowCache(mwId)
         }
         try return CapturedElement := UIA.CachedSmallestElementInElementContainingPoint(mX, mY, this.Stored.CapturedWindow)
     }
     UpdateCapturedWindowCache(mwId?) {
-        if !WinExist(mwId ?? this.Stored.mwId) 
+        SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
+        if !WinExist(mwId ?? this.Stored.mwId)
             return
         this.Stored.CapturedWindowLive := UIA.ElementFromHandle(mwId ?? this.Stored.mwId,,false)
         this.Stored.CapturedWindow := this.Stored.CapturedWindowLive.BuildUpdatedCache(this.CacheRequest)
