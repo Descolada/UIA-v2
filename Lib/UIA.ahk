@@ -2091,7 +2091,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     SelectionPattern {
         get {
             try return (this.DefineProp("SelectionPattern", {value:this.GetPattern(UIA.Pattern.Selection2)}), this.SelectionPattern)
-            return (this.DefineProp("SelectionPattern", {value:this.GetPattern(UIA.Pattern.Selection)}), this.SelectionPattern)
+                return (this.DefineProp("SelectionPattern", {value:this.GetPattern(UIA.Pattern.Selection )}), this.SelectionPattern)
         }
     }
     ValuePattern => (this.DefineProp("ValuePattern", {value:this.GetPattern(UIA.Pattern.Value)}), this.ValuePattern)
@@ -2109,14 +2109,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     TextPattern {
         get {
             try return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text2)}), this.TextPattern)
-            return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text)}), this.TextPattern)
+                return (this.DefineProp("TextPattern", {value:this.GetPattern(UIA.Pattern.Text )}), this.TextPattern)
         }
     }
     TogglePattern => (this.DefineProp("TogglePattern", {value:this.GetPattern(UIA.Pattern.Toggle)}), this.TogglePattern)
     TransformPattern {
         get {
             try return (this.DefineProp("TransformPattern", {value:this.GetPattern(UIA.Pattern.Transform2)}), this.TransformPattern)
-            return (this.DefineProp("TransformPattern", {value:this.GetPattern(UIA.Pattern.Transform)}), this.TransformPattern)
+                return (this.DefineProp("TransformPattern", {value:this.GetPattern(UIA.Pattern.Transform )}), this.TransformPattern)
         }
     }
     ScrollItemPattern => (this.DefineProp("ScrollItemPattern", {value:this.GetPattern(UIA.Pattern.ScrollItem)}), this.ScrollItemPattern)
@@ -2139,7 +2139,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedSelectionPattern {
         get {
             try return (this.DefineProp("CachedSelectionPattern", {value:this.GetCachedPattern(UIA.Pattern.Selection2)}), this.CachedSelectionPattern)
-            return (this.DefineProp("CachedSelectionPattern", {value:this.GetCachedPattern(UIA.Pattern.Selection)}), this.CachedSelectionPattern)
+                return (this.DefineProp("CachedSelectionPattern", {value:this.GetCachedPattern(UIA.Pattern.Selection )}), this.CachedSelectionPattern)
         }
     }
     CachedValuePattern => (this.DefineProp("CachedValuePattern", {value:this.GetCachedPattern(UIA.Pattern.Value)}), this.CachedValuePattern)
@@ -2157,14 +2157,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     CachedTextPattern {
         get {
             try return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text2)}), this.CachedTextPattern)
-            return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text)}), this.CachedTextPattern)
+                return (this.DefineProp("CachedTextPattern", {value:this.GetCachedPattern(UIA.Pattern.Text )}), this.CachedTextPattern)
         }
     }
     CachedTogglePattern => (this.DefineProp("CachedTogglePattern", {value:this.GetCachedPattern(UIA.Pattern.Toggle)}), this.CachedTogglePattern)
     CachedTransformPattern {
         get {
             try return (this.DefineProp("CachedTransformPattern", {value:this.GetCachedPattern(UIA.Pattern.Transform2)}), this.CachedTransformPattern)
-            return (this.DefineProp("CachedTransformPattern", {value:this.GetCachedPattern(UIA.Pattern.Transform)}), this.CachedTransformPattern)
+                return (this.DefineProp("CachedTransformPattern", {value:this.GetCachedPattern(UIA.Pattern.Transform )}), this.CachedTransformPattern)
         }
     }
     CachedScrollItemPattern => (this.DefineProp("CachedScrollItemPattern", {value:this.GetCachedPattern(UIA.Pattern.ScrollItem)}), this.CachedScrollItemPattern)
