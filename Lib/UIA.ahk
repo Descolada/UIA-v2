@@ -5156,7 +5156,7 @@ class IUIAutomationEventHandler {
     static __IID := "{146c3c17-f12e-4e22-8c27-f894b9b79c69}"
 
     HandleAutomationEvent(pSelf, sender, eventId) {
-        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), eventId)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), eventId&0xFFFFFFFF)
     }
 }
 class IUIAutomationFocusChangedEventHandler {
@@ -5178,7 +5178,7 @@ class IUIAutomationPropertyChangedEventHandler { ; UNTESTED
     HandlePropertyChangedEvent(pSelf, sender, propertyId, newValue) {
         local val := ComValue(0x400C, newValue)[]
         DllCall("oleaut32\VariantClear", "ptr", newValue)
-        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), propertyId, val)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), propertyId&0xFFFFFFFF, val)
     }
 }
 /*
@@ -5190,7 +5190,7 @@ class IUIAutomationStructureChangedEventHandler {
     static __IID := "{e81d1b4e-11c5-42f8-9754-e7036c79f054}"
 
     HandleStructureChangedEvent(pSelf, sender, changeType, runtimeId) {
-        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, UIA.SafeArrayToAHKArray(runtimeId))
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType&0xFFFFFFFF, UIA.SafeArrayToAHKArray(runtimeId))
         DllCall("oleaut32\VariantClear", "ptr", runtimeId)
     }
 }
@@ -5205,7 +5205,7 @@ class IUIAutomationTextEditTextChangedEventHandler { ; UNTESTED
     HandleTextEditTextChangedEvent(pSelf, sender, changeType, eventStrings) {
         local val := ComValue(0x400C, eventStrings)[]
         DllCall("oleaut32\VariantClear", "ptr", eventStrings)
-        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType, val)
+        ObjAddRef(sender), this.EventHandler.Call(UIA.IUIAutomationElement(sender), changeType&0xFFFFFFFF, val)
     }
 }
 
@@ -7457,7 +7457,10 @@ class Viewer {
         if !InStr(Item, "()")
             return
         Item := SubStr(Item, 1, -2)
-        if !(CurrentEl := UIA.ElementFromHandle(this.Stored.mwId).ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}))
+        if !WinExist(this.Stored.mwId) || !(WinEl := UIA.ElementFromHandle(this.Stored.mwId))
+            return MsgBox("Target window not found!",,"4096")
+        if !(CurrentEl := WinEl.ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId})) 
+            && !(CurrentEl := WinEl.ElementFromPathExist(Trim(this.Stored.CapturedElement.Path, "```"")))
             return MsgBox("Live element not found!",,"4096")
         if Item ~= "Value|Scroll(?!Into)" {
             this.gViewer.Opt("-AlwaysOnTop")
