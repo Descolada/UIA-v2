@@ -310,7 +310,7 @@ class UIA_Edge extends UIA_Browser {
 	GetCurrentDocumentElement() {
 		local endtime := A_TickCount+3000
 		While A_TickCount < endtime
-			try return this.DocumentElement := this.CurrentDocumentElement := UIA.ElementFromChromium(this.BrowserId).FindFirst(UIA.TrueCondition,1)
+			try return this.DocumentElement := this.CurrentDocumentElement := UIA.ElementFromHandle(this.BrowserId).FindFirst(this.DocumentControlCondition,4) ; ElementFromChromium works unreliably
 		throw Error("Unable to get the current Document element", -1)
 	}
 }
