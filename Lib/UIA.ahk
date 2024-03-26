@@ -7278,7 +7278,7 @@ class Viewer {
         }
         this.gViewer.Show(xy "w600 h550")
         this.gViewer_Size(this.gViewer,0,600,550)
-        this.FocusHook := DllCall("SetWinEventHook", "UInt", 0x8005, "UInt", 0x8005, "Ptr",0,"Ptr", CallbackCreate(this.HandleFocusChangedEvent.Bind(this), "F", 7),"UInt", 0, "UInt",0, "UInt",0)
+        this.FocusHook := DllCall("SetWinEventHook", "UInt", 0x8005, "UInt", 0x8005, "Ptr",0,"Ptr", CallbackCreate(this.HandleFocusChangedEvent.Bind(this), "C", 7),"UInt", 0, "UInt",0, "UInt",0)
     }
     __Delete() {
         DllCall("UnhookWinEvent", "Ptr", this.FocusHook)
@@ -7459,7 +7459,7 @@ class Viewer {
         Item := SubStr(Item, 1, -2)
         if !WinExist(this.Stored.mwId) || !(WinEl := UIA.ElementFromHandle(this.Stored.mwId))
             return MsgBox("Target window not found!",,"4096")
-        if !(CurrentEl := WinEl.ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId})) 
+        if !(CurrentEl := WinEl.ElementExist({RuntimeId:this.Stored.CapturedElement.CachedRuntimeId}, 5)) 
             && !(CurrentEl := WinEl.ElementFromPathExist(Trim(this.Stored.CapturedElement.Path, "```"")))
             return MsgBox("Live element not found!",,"4096")
         if Item ~= "Value|Scroll(?!Into)" {
