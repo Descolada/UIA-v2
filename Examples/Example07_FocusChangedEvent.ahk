@@ -16,7 +16,6 @@ ExitFunc(*) {
 browserExe := "chrome.exe"
 Run browserExe " -incognito"
 WinWaitActive "ahk_exe " browserExe
-cEl := UIA.ElementFromHandle("ahk_exe " browserExe)
 
 global h := UIA.CreateFocusChangedEventHandler(EventHandler) ; Create a new FocusChanged event handler that calls the function EventHandler (required arguments: element)
 UIA.AddFocusChangedEventHandler(h) ; Add a new FocusChangedEventHandler
