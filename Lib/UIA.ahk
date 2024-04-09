@@ -46,6 +46,7 @@
 global IUIAutomationMaxVersion := 7, IUIAutomationActivateScreenReader := 1
 
 if !A_IsCompiled && A_LineFile = A_ScriptFullPath
+    #SingleInstance Force
     UIA.Viewer()
 
 class UIA {
@@ -7707,7 +7708,44 @@ class Viewer {
         if IsSet(Element)
             TVUIA_Menu.Add("Copy to Clipboard", (*) => (ToolTip("Copied Dump() output to Clipboard!"), A_Clipboard := Element.CachedDump(), SetTimer((*) => ToolTip(), -3000)))
         TVUIA_Menu.Add("Copy Tree to Clipboard", (*) => (ToolTip("Copied DumpAll() output to Clipboard!"), A_Clipboard := UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest).DumpAll(), SetTimer((*) => ToolTip(), -3000)))
+        if IsSet(Element) {
+            TVUIA_Menu.Add("Expand/Collapse All", this.TVUIA_ExpandCollapseAll.bind(this))
+            TVUIA_Menu.Add("Focus Element", this.TVUIA_FocusElement.bind(this))
+        }
         TVUIA_Menu.Show()
+    }
+    TVUIA_ExpandCollapseAll(GuiCtrlObj,*) {
+        ItemID := 0
+        switch this.TVUIA.isCollapsed {
+                case true:
+                    expandCollapse := "Expand"
+                case false:
+                    expandCollapse := "-Expand"
+                default:
+                    return
+        }
+        while ItemID := this.TVUIA.GetNext(ItemID, "Full") {
+            this.TVUIA.Modify(ItemID, expandCollapse)
+        }
+        this.TVUIA.isCollapsed := !this.TVUIA.isCollapsed
+        this.TVUIA.Modify(this.TVUIA.GetNext(),"Select")
+    }
+    TVUIA_FocusElement(GuiCtrlObj,*) {
+        FocusId := this.TVUIA.GetSelection()
+        if FocusId == this.TVUIA.GetNext() {
+            this.TVUIA.isCollapsed := true
+        }
+        ItemId := 0
+        ParentId := FocusId
+        ;Collapse all elements.
+        while ItemID := this.TVUIA.GetNext(ItemID, "Full") {
+               this.TVUIA.Modify(ItemID, "-Expand")
+        }
+        ;Expand all parent elements of focused element.
+        while ParentId := this.TVUIA.GetParent(ParentId){
+            this.TVUIA.Modify(ParentId, "Expand")
+        }
+        this.TVUIA.Modify(FocusId, "Select")
     }
     ; Handles filtering the UIA elements inside the TreeView when the text hasn't been changed in 500ms.
     ; Sorts the results by UIA properties.
@@ -7754,6 +7792,7 @@ class Viewer {
     ConstructTreeView() {
         this.TVUIA.Delete()
         this.TVUIA.Add("Constructing Tree, please wait...")
+	this.TVUIA.isCollapsed := false
         Sleep -1
         this.TVUIA.Opt("-Redraw")
         this.TVUIA.Delete()
