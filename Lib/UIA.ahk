@@ -7723,9 +7723,9 @@ class Viewer {
         }
         TVUIA_Menu.Show()
     }
-    TVUIA_ExpandCollapseAll(GuiCtrlObj,Item, *) {
+    TVUIA_ExpandCollapseAll(GuiCtrlObj, Item, *) {
         FocusId := this.TVUIA.GetSelection()
-        expandCollapse := this.TVUIA.isCollapsed ? "Expand" : "-Expand"
+        expandCollapse := this.TVUIA.IsCollapsed ? "Expand" : "-Expand"
         this.TVUIA.Opt("-Redraw")
         ItemID := 0
         while ItemID := this.TVUIA.GetNext(ItemID, "Full")
