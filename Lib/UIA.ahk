@@ -7731,17 +7731,19 @@ class Viewer {
         while ItemID := this.TVUIA.GetNext(ItemID, "Full")
             this.TVUIA.Modify(ItemID, expandCollapse)
         FocusId := this.TVUIA.isCollapsed ? FocusId : this.TVUIA.GetNext()
-        this.TVUIA.Modify(FocusId, "Select")
+        this.TVUIA.Modify(FocusId, "Select Vis")
         this.TVUIA.Opt("+Redraw")
         this.TVUIA.IsCollapsed := !this.TVUIA.IsCollapsed
     }
     TVUIA_FocusElement(GuiCtrlObj,*) {
         FocusId := this.TVUIA.GetSelection()
         ItemId := 0
+        this.TVUIA.Opt("-Redraw")
         while ItemID := this.TVUIA.GetNext(ItemID, "Full") ; Collapse all elements.
             this.TVUIA.Modify(ItemID, "-Expand")
+        this.TVUIA.Modify(FocusId, "Select Vis") ; Reselect the item, which also expands the parents
+        this.TVUIA.Opt("+Redraw")
         this.TVUIA.IsCollapsed := true
-        this.TVUIA.Modify(FocusId, "Select") ; Reselect the item, which also expands the parents
     }
     ; Handles filtering the UIA elements inside the TreeView when the text hasn't been changed in 500ms.
     ; Sorts the results by UIA properties.
