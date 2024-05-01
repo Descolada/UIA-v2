@@ -7711,6 +7711,7 @@ class Viewer {
     ; Permits copying the Dump of UIA element(s) to clipboard
     TVUIA_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
         this.TVUIA.Modify(Item, "Select")
+        this.TVUIA_Click(GuiCtrlObj, Item)
         TVUIA_Menu := Menu()
         try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Item] : this.Stored.TreeView[Item]
         if IsSet(Element)
@@ -7735,7 +7736,7 @@ class Viewer {
         this.TVUIA.Opt("+Redraw")
         this.TVUIA.IsCollapsed := !this.TVUIA.IsCollapsed
     }
-    TVUIA_FocusElement(GuiCtrlObj,*) {
+    TVUIA_FocusElement(GuiCtrlObj, *) {
         FocusId := this.TVUIA.GetSelection()
         ItemId := 0
         this.TVUIA.Opt("-Redraw")
