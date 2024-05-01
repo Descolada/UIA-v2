@@ -46,7 +46,6 @@
 global IUIAutomationMaxVersion := 7, IUIAutomationActivateScreenReader := 1
 
 if !A_IsCompiled && A_LineFile = A_ScriptFullPath
-    #SingleInstance Force
     UIA.Viewer()
 
 class UIA {
@@ -802,6 +801,14 @@ static ElementFromChromium(winTitle:="", activateChromiumAccessibility:=500, cac
     return this.ElementFromHandle(cHwnd, cacheRequest?, False)
 }
 /**
+ * Returns whether a window is a Chromium window or not
+ * @param winTitle A window title or other criteria identifying the target window. See AHK WinTitle.
+ */
+static WindowIsChromium(winTitle:="") {
+    try cHwnd := ControlGetHwnd("Chrome_RenderWidgetHostHWND1", winTitle)
+    return cHwnd ?? 0
+}
+/**
  * In some setups Chromium-based renderers don't react to UIA calls by enabling accessibility,
  * so we need to send the WM_GETOBJECT message to the renderer control to enable accessibility.
  * ActivateChromiumAccessibility does that (only once per window) and then returns the content element.
@@ -1143,12 +1150,12 @@ static CreateFalseCondition() {
 }
 
 ; Creates a condition that selects elements that have a property with the specified value.
-static CreatePropertyCondition(propertyId, value) {
+static CreatePropertyCondition(propertyId, value, variant?) {
     local v, newCondition
     if A_PtrSize = 4
-        v := this.ComVar(value, this.PropertyVariantType[propertyId], true), ComCall(23, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "ptr*", &newCondition := 0)
+        v := this.ComVar(value, variant ?? this.PropertyVariantType[propertyId], true), ComCall(23, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "ptr*", &newCondition := 0)
     else
-        ComCall(23, this, "int", propertyId, "ptr", this.ComVar(value, this.PropertyVariantType[propertyId], true), "ptr*", &newCondition := 0)
+        ComCall(23, this, "int", propertyId, "ptr", this.ComVar(value, variant ?? this.PropertyVariantType[propertyId], true), "ptr*", &newCondition := 0)
     if newCondition
         return this.IUIAutomationPropertyCondition(newCondition)
     throw Error("Creating property condition failed", -1)
@@ -1156,12 +1163,12 @@ static CreatePropertyCondition(propertyId, value) {
 
 ; Creates a condition that selects elements that have a property with the specified value, using optional flags.
 ; This is a raw wrapper, instead use CreateCondition and specify flags.
-static CreatePropertyConditionEx(propertyId, value, flags := 0) {
+static CreatePropertyConditionEx(propertyId, value, flags := 0, variant?) {
     local v, newCondition
     if A_PtrSize = 4
-        v := this.ComVar(value, this.PropertyVariantType[propertyId], true), ComCall(24, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "int", flags, "ptr*", &newCondition := 0)
+        v := this.ComVar(value, variant ?? this.PropertyVariantType[propertyId], true), ComCall(24, this, "int", propertyId, "int64", NumGet(v, 'int64'), "int64", NumGet(v, 8, "int64"), "int", flags, "ptr*", &newCondition := 0)
     else
-        ComCall(24, this, "int", propertyId, "ptr", this.ComVar(value, this.PropertyVariantType[propertyId], true), "int", flags, "ptr*", &newCondition := 0)
+        ComCall(24, this, "int", propertyId, "ptr", this.ComVar(value, variant ?? this.PropertyVariantType[propertyId], true), "int", flags, "ptr*", &newCondition := 0)
     if newCondition
         return this.IUIAutomationPropertyCondition(newCondition)
     throw Error("Creating property condition failed", -1)
@@ -6826,7 +6833,7 @@ class IUIAutomationTextRange extends UIA.IUIAutomationBase {
     ; Causes the text control to scroll until the text range is visible in the viewport.
     ; The method respects both hidden and visible text. If the text range is hidden, the text control will scroll only if the hidden text has an anchor in the viewport.
     ; A Microsoft UI Automation client can check text visibility by calling IUIAutomationTextRange,,GetAttributeValue with the attr parameter set to UIA_IsHiddenAttributeId.
-    ScrollIntoView(alignToTop) => ComCall(19, this, "int", alignToTop)
+    ScrollIntoView(alignToTop:=0) => ComCall(19, this, "int", alignToTop)
 
     ; Retrieves a collection of all embedded objects that fall within the text range.
     GetChildren() {
@@ -7703,49 +7710,38 @@ class Viewer {
     }
     ; Permits copying the Dump of UIA element(s) to clipboard
     TVUIA_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
+        this.TVUIA.Modify(Item, "Select")
         TVUIA_Menu := Menu()
         try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Item] : this.Stored.TreeView[Item]
         if IsSet(Element)
             TVUIA_Menu.Add("Copy to Clipboard", (*) => (ToolTip("Copied Dump() output to Clipboard!"), A_Clipboard := Element.CachedDump(), SetTimer((*) => ToolTip(), -3000)))
         TVUIA_Menu.Add("Copy Tree to Clipboard", (*) => (ToolTip("Copied DumpAll() output to Clipboard!"), A_Clipboard := UIA.ElementFromHandle(this.Stored.mwId, this.cacheRequest).DumpAll(), SetTimer((*) => ToolTip(), -3000)))
         if IsSet(Element) {
+            TVUIA_Menu.Add("")
             TVUIA_Menu.Add("Expand/Collapse All", this.TVUIA_ExpandCollapseAll.bind(this))
             TVUIA_Menu.Add("Focus Element", this.TVUIA_FocusElement.bind(this))
         }
         TVUIA_Menu.Show()
     }
-    TVUIA_ExpandCollapseAll(GuiCtrlObj,*) {
+    TVUIA_ExpandCollapseAll(GuiCtrlObj,Item, *) {
+        FocusId := this.TVUIA.GetSelection()
+        expandCollapse := this.TVUIA.isCollapsed ? "Expand" : "-Expand"
+        this.TVUIA.Opt("-Redraw")
         ItemID := 0
-        switch this.TVUIA.isCollapsed {
-                case true:
-                    expandCollapse := "Expand"
-                case false:
-                    expandCollapse := "-Expand"
-                default:
-                    return
-        }
-        while ItemID := this.TVUIA.GetNext(ItemID, "Full") {
+        while ItemID := this.TVUIA.GetNext(ItemID, "Full")
             this.TVUIA.Modify(ItemID, expandCollapse)
-        }
-        this.TVUIA.isCollapsed := !this.TVUIA.isCollapsed
-        this.TVUIA.Modify(this.TVUIA.GetNext(),"Select")
+        FocusId := this.TVUIA.isCollapsed ? FocusId : this.TVUIA.GetNext()
+        this.TVUIA.Modify(FocusId, "Select")
+        this.TVUIA.Opt("+Redraw")
+        this.TVUIA.IsCollapsed := !this.TVUIA.IsCollapsed
     }
     TVUIA_FocusElement(GuiCtrlObj,*) {
         FocusId := this.TVUIA.GetSelection()
-        if FocusId == this.TVUIA.GetNext() {
-            this.TVUIA.isCollapsed := true
-        }
         ItemId := 0
-        ParentId := FocusId
-        ;Collapse all elements.
-        while ItemID := this.TVUIA.GetNext(ItemID, "Full") {
-               this.TVUIA.Modify(ItemID, "-Expand")
-        }
-        ;Expand all parent elements of focused element.
-        while ParentId := this.TVUIA.GetParent(ParentId){
-            this.TVUIA.Modify(ParentId, "Expand")
-        }
-        this.TVUIA.Modify(FocusId, "Select")
+        while ItemID := this.TVUIA.GetNext(ItemID, "Full") ; Collapse all elements.
+            this.TVUIA.Modify(ItemID, "-Expand")
+        this.TVUIA.IsCollapsed := true
+        this.TVUIA.Modify(FocusId, "Select") ; Reselect the item, which also expands the parents
     }
     ; Handles filtering the UIA elements inside the TreeView when the text hasn't been changed in 500ms.
     ; Sorts the results by UIA properties.
@@ -7792,7 +7788,7 @@ class Viewer {
     ConstructTreeView() {
         this.TVUIA.Delete()
         this.TVUIA.Add("Constructing Tree, please wait...")
-	this.TVUIA.isCollapsed := false
+        this.TVUIA.IsCollapsed := false
         Sleep -1
         this.TVUIA.Opt("-Redraw")
         this.TVUIA.Delete()
