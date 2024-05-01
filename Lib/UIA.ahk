@@ -7710,6 +7710,7 @@ class Viewer {
     }
     ; Permits copying the Dump of UIA element(s) to clipboard
     TVUIA_ContextMenu(GuiCtrlObj, Item, IsRightClick, X, Y) {
+        this.TVUIA.Modify(Item, "Select")
         TVUIA_Menu := Menu()
         try Element := this.EditFilterTVUIA.Value ? this.Stored.FilteredTreeView[Item] : this.Stored.TreeView[Item]
         if IsSet(Element)
@@ -7722,23 +7723,27 @@ class Viewer {
         }
         TVUIA_Menu.Show()
     }
-    TVUIA_ExpandCollapseAll(GuiCtrlObj,*) {
+    TVUIA_ExpandCollapseAll(GuiCtrlObj,Item, *) {
+        FocusId := this.TVUIA.GetSelection()
         expandCollapse := this.TVUIA.isCollapsed ? "Expand" : "-Expand"
         this.TVUIA.Opt("-Redraw")
         ItemID := 0
         while ItemID := this.TVUIA.GetNext(ItemID, "Full")
             this.TVUIA.Modify(ItemID, expandCollapse)
-        this.TVUIA.Modify(this.TVUIA.GetNext(), "Select")
+        FocusId := this.TVUIA.isCollapsed ? FocusId : this.TVUIA.GetNext()
+        this.TVUIA.Modify(FocusId, "Select Vis")
         this.TVUIA.Opt("+Redraw")
         this.TVUIA.IsCollapsed := !this.TVUIA.IsCollapsed
     }
     TVUIA_FocusElement(GuiCtrlObj,*) {
         FocusId := this.TVUIA.GetSelection()
         ItemId := 0
+        this.TVUIA.Opt("-Redraw")
         while ItemID := this.TVUIA.GetNext(ItemID, "Full") ; Collapse all elements.
             this.TVUIA.Modify(ItemID, "-Expand")
+        this.TVUIA.Modify(FocusId, "Select Vis") ; Reselect the item, which also expands the parents
+        this.TVUIA.Opt("+Redraw")
         this.TVUIA.IsCollapsed := true
-        this.TVUIA.Modify(FocusId, "Select") ; Reselect the item, which also expands the parents
     }
     ; Handles filtering the UIA elements inside the TreeView when the text hasn't been changed in 500ms.
     ; Sorts the results by UIA properties.
