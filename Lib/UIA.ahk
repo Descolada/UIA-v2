@@ -7379,7 +7379,7 @@ class Viewer {
     }
     ; Handles adding elements with actions to the macro Edit
     ButMacroAddElement_Click(GuiCtrlObj?, Info?) {
-        local match
+        local match, selectedElPath, winElVariable, winElText, processName
         if !this.Stored.HasOwnProp("CapturedElement")
             return
         processName := WinGetProcessName(this.Stored.mwId)
@@ -7389,7 +7389,8 @@ class Viewer {
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText
         else
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ")
-        winElVariable := winElVariable (SubStr(this.SBMain.Text, 9) ? ".ElementFromPath(" SubStr(this.SBMain.Text, 9) ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
+        selectedElPath := SubStr(this.SBMain.Text, 9)
+        winElVariable := winElVariable (selectedElPath && StrLen(selectedElPath) > 2 ? ".ElementFromPath(" selectedElPath ")" : "") (this.DDLMacroAction.Text ? "." this.DDLMacroAction.Text : "")
         if InStr(this.DDLMacroAction.Text, "Dump")
             winElVariable := "MsgBox(" winElVariable ")"
         this.EditMacroScript.Text := this.EditMacroScript.Text "`r`n" RegExReplace(winElVariable, "(?<!``)`"", "`"") "`r`n"
