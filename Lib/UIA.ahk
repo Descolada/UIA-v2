@@ -2084,7 +2084,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         get {
             try {
                 local br
-                if br := this.BoundingRectangle && (br.b - br.t + br.r - br.l) == 0
+                if (br := this.BoundingRectangle) && (!(br.b - br.t) || !(br.r - br.l))
                     return 0
                 if this.IsOffscreen
                     return 0
@@ -2593,8 +2593,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         static Guis := Map()
         if IsSet(showTime) && showTime = "clearall" {
             for key, prop in Guis {
+                SetTimer(prop.TimerObj, 0)
                 try prop.GuiObj.Destroy()
-                SetTimer(Guis[this.ptr].TimerObj, 0)
             }
             Guis := Map()
             return this
@@ -2613,8 +2613,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         try loc := this.BoundingRectangle
         if !IsSet(loc) || !IsObject(loc)
             try loc := this.CachedBoundingRectangle
-            if !IsSet(loc) || !IsObject(loc)
-                return this
+        if !IsSet(loc) || !IsObject(loc)
+            return this
         
         if !Guis.Has(this.ptr) {
             Guis[this.ptr] := {}
@@ -5147,24 +5147,23 @@ static CreateEventHandler(funcObj, handlerType:="") {
     if !HasMethod(funcObj, "Call")
         throw TypeError("Invalid function provided", -2)
 
-    buf := Buffer(A_PtrSize * 5)
+    buf := Buffer(A_PtrSize * 6)
     handler := UIA.IUIAutomation%handlerType%EventHandler()
     handler.Buffer := buf, handler.Ptr := buf.ptr
     handlerFunc := handler.Handle%(handlerType ? handlerType : "Automation")%Event
-    NumPut("ptr", buf.Ptr + A_PtrSize, "ptr", cQI:=CallbackCreate(QueryInterface, "F", 3), "ptr", cAF:=CallbackCreate(AddRef, "F", 1), "ptr", cR:=CallbackCreate(Release, "F", 1), "ptr", cF:=CallbackCreate(handlerFunc.Bind(handler), "F", handlerFunc.MaxParams-1), buf)
-    handler.DefineProp("__Delete", { call: (*) => (CallbackFree(cQI), CallbackFree(cAF), CallbackFree(cR), CallbackFree(cF)) })
+    NumPut("ptr", buf.Ptr + 2*A_PtrSize, "ptr", ObjPtr(handler), "ptr", cQI:=CallbackCreate(QueryInterface,, 3), "ptr", cAF:=CallbackCreate(AddRef,, 1), "ptr", cR:=CallbackCreate(Release,, 1), "ptr", cF:=CallbackCreate(handlerFunc.Bind(handler),, handlerFunc.MaxParams-1), buf)
+    ObjRelease(ObjPtr(handler)) ; CallbackCreate binds "handler" to itself, so decrease ref count by 1 to allow it to be released, then inside __Delete add it back before CallbackFree
+    handler.DefineProp("__Delete", { call: (this, *) => (ObjAddRef(ObjPtr(this)), CallbackFree(cQI), CallbackFree(cAF), CallbackFree(cR), CallbackFree(cF)) })
     handler.EventHandler := funcObj
 
     return handler
 
     QueryInterface(pSelf, pRIID, pObj){ ; Credit: https://github.com/neptercn/UIAutomation/blob/master/UIA.ahk
         DllCall("ole32\StringFromIID","ptr",pRIID,"wstr*",&str)
-        return (str="{00000000-0000-0000-C000-000000000046}")||(str="{146c3c17-f12e-4e22-8c27-f894b9b79c69}")||(str="{40cd37d4-c756-4b0c-8c6f-bddfeeb13b50}")||(str="{e81d1b4e-11c5-42f8-9754-e7036c79f054}")||(str="{c270f6b5-5c69-4290-9745-7a7f97169468}")||(str="{92FAA680-E704-4156-931A-E32D5BB38F3F}")||(str="{58EDCA55-2C3E-4980-B1B9-56C17F27A2A0}")||(str="{C7CB2637-E6C2-4D0C-85DE-4948C02175C7}")?NumPut("ptr",pSelf,pObj)*0:0x80004002 ; E_NOINTERFACE
+        return (str="{00000000-0000-0000-C000-000000000046}")||(str="{146c3c17-f12e-4e22-8c27-f894b9b79c69}")||(str="{40cd37d4-c756-4b0c-8c6f-bddfeeb13b50}")||(str="{e81d1b4e-11c5-42f8-9754-e7036c79f054}")||(str="{c270f6b5-5c69-4290-9745-7a7f97169468}")||(str="{92FAA680-E704-4156-931A-E32D5BB38F3F}")||(str="{58EDCA55-2C3E-4980-B1B9-56C17F27A2A0}")||(str="{C7CB2637-E6C2-4D0C-85DE-4948C02175C7}")?(NumPut("ptr",pSelf,pObj), ObjAddRef(pSelf))*0:0x80004002 ; E_NOINTERFACE
     }
-    AddRef(pSelf) {
-    }
-    Release(pSelf) {
-    }
+    AddRef(pSelf) => ObjAddRef(NumGet(pSelf, A_PtrSize, "ptr"))
+    Release(pSelf) => ObjRelease(NumGet(pSelf, A_PtrSize, "ptr"))
 }
 static CreateAutomationEventHandler(funcObj) => UIA.CreateEventHandler(funcObj)
 static CreateFocusChangedEventHandler(funcObj) => UIA.CreateEventHandler(funcObj, "FocusChanged")
@@ -7398,7 +7397,7 @@ class Viewer {
             return
         processName := WinGetProcessName(this.Stored.mwId)
         winElVariable := RegExMatch(processName, "^[^ .\d]+", &match:="") ? RegExReplace(match[], "[^\p{L}0-9_#@$]") "El" : "winEl" ; Leaves only letters, numbers, and symbols _#@$ (allowed AHK characters)
-        winElText := winElVariable " := UIA.ElementFromHandle(`"" WinGetTitle(this.Stored.mwId) " ahk_exe " processName "`")"
+        winElText := winElVariable " := UIA.ElementFrom" (InStr(this.TextTVUIA.Text, "Chromium") ? "Chromium" : "Handle") "(`"" WinGetTitle(this.Stored.mwId) " ahk_exe " processName "`")"
         if !InStr(this.EditMacroScript.Text, winElText) || RegExMatch(this.EditMacroScript.Text, "\Q" winElText "\E(?=[\w\W]*\QwinEl := UIA.ElementFromHandle(`"ahk_exe\E)")
             this.EditMacroScript.Text := RTrim(this.EditMacroScript.Text, "`r`n`t ") "`r`n`r`n" winElText
         else
