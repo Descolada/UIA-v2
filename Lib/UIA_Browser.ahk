@@ -125,8 +125,8 @@ class UIA_Vivaldi extends UIA_Browser {
 			TabElement := this.BrowserElement.FindElement({AutomationId:"tab-", matchmode:"Substring"})
 			NewTabButton := this.BrowserElement.FindElement({Type:"Button", startingElement:TabElement})
 			try {
-				this.TabBarElement := TabElement.WalkTree("p", [{Type:"Document"}, {LocalizedType: "content info"}])
-				this.NavigationBarElement := this.TabBarElement
+				this.TabBarElement := TabElement.Parent
+				this.NavigationBarElement := this.TabBarElement.Parent
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				this.ReloadButton := this.URLEditElement.WalkTree("-3", {Type:"Button"})
 				this.ReloadButtonDescription := this.ReloadButton.LegacyIAccessiblePattern.Description
@@ -173,6 +173,8 @@ class UIA_Vivaldi extends UIA_Browser {
 			searchPhrase := match[1], matchMode := 3, caseSense := True
 		}
 		els := UIA.Filter(this.GetAllTabs(), (element) => element.ElementExist({Type:"Text", Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))
+		if !els.Length
+			throw Error("Unable to get tab elements", -1, "Please file a bug report")
 		return els[els.Length]
 	}
 
@@ -189,6 +191,7 @@ class UIA_Vivaldi extends UIA_Browser {
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) {
 		this.SelectTab(tabElementOrName)
 		Sleep 40
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend("{ctrl down}w{ctrl up}",,this.BrowserId)
 	}
 
@@ -380,8 +383,10 @@ class UIA_Mozilla extends UIA_Browser {
 		if navigateToNewUrl {
 			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
 				Sleep 40
-			if A_TickCount < endTime
+			if A_TickCount < endTime {
+				SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 				ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
+			}
 		}
 	}
 
@@ -390,14 +395,14 @@ class UIA_Mozilla extends UIA_Browser {
 			this.SetURL("javascript " js, True)
 			return
 		}
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
 		ControlSend "{ctrl down}{shift down}k{ctrl up}{shift up}", , this.BrowserId
 		if !this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"},5000)
 			return
 		ClipSave := ClipboardAll()
 		A_Clipboard := js
-		WinActivate this.BrowserId
-		WinWaitActive this.BrowserId
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend "allow pasting{ctrl down}z{ctrl up}{ctrl down}v{ctrl up}", , this.BrowserId
 		Sleep 20
 		ControlSend "{ctrl down}{enter}{ctrl up}", , this.BrowserId
@@ -442,6 +447,7 @@ class UIA_Mozilla extends UIA_Browser {
 				try this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSense}).Click()
 			}
 		}
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
 		ControlSend "{Ctrl down}w{Ctrl up}", , this.BrowserId
 	}
@@ -534,7 +540,7 @@ class UIA_Browser {
 		; both in Chrome and edge), or by location (it must be the topmost toolbar). I opted for a 
 		; combination of two, so if finding by name fails, all toolbar elements are evaluated.
 		Loop 2 {
-			try this.URLEditElement := (this.BrowserType = "Chrome") ? this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement) : this.BrowserElement.FindFirst(this.EditControlCondition)
+			try this.URLEditElement := (this.BrowserType = "Chrome" && this.BrowserElement[1].Type = UIA.Property.Document) ? this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement) : this.BrowserElement.FindFirst(this.EditControlCondition)
 			try {
 				if (this.BrowserType = "Chrome") && !this.URLEditElement
 					this.URLEditElement := UIA.CreateTreeWalker(this.EditControlCondition).GetLastChildElement(this.BrowserElement)
@@ -747,7 +753,7 @@ class UIA_Browser {
 	
 	; Presses the Back button
 	Back() { 
-		this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement).Click()
+		this.ButtonTreeWalker.GetFirstChildElement(this.NavigationBarElement).Invoke()
 	}
 	
 	; Presses the Forward button
@@ -783,15 +789,14 @@ class UIA_Browser {
 	
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
 	SetURL(newUrl, navigateToNewUrl := False) { 
-		this.URLEditElement.SetFocus()
 		this.URLEditElement.ValuePattern.SetValue(newUrl " ")
 		if !InStr(this.URLEditElement.Value, newUrl) {
 			legacyPattern := this.URLEditElement.LegacyIAccessiblePattern
 			legacyPattern.SetValue(newUrl " ")
-			legacyPattern.Select()
 		}
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
-			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Enter}", , "ahk_id" this.BrowserId ; Or would it be better to use BlockInput instead of releasing modifier keys?
+			SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
+			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Ctrl down}l{Ctrl up}{Enter}", , "ahk_id" this.BrowserId ; Or would it be better to use BlockInput instead of releasing modifier keys?
 		}
 	}
 
@@ -803,6 +808,7 @@ class UIA_Browser {
 	
 	; Opens a new tab by sending Ctrl+T
 	NewTab() {
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}t{LCtrl up}", , this.BrowserId
 	}
 	
@@ -873,6 +879,7 @@ class UIA_Browser {
 	}
 
 	Send(text) {
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend text, , this.BrowserId
 	}
 	
