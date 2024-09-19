@@ -7259,9 +7259,9 @@ class Viewer {
         this.TVPatterns := this.gViewer.Add("TreeView", "h85 w250")
         this.TVPatterns.OnEvent("DoubleClick", this.TVPatterns_DoubleClick.Bind(this))
 
-        this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (F1)")
+        this.ButCapture := this.gViewer.Add("Button", "xp+60 y+10 w130", "Start capturing (Alt+S)")
         this.ButCapture.OnEvent("Click", this.CaptureHotkeyFunc := this.ButCapture_Click.Bind(this))
-        HotKey("~F1", this.CaptureHotkeyFunc)
+        HotKey("!s", this.CaptureHotkeyFunc)
         this.SBMain := this.gViewer.Add("StatusBar",, "  Start capturing, then hold cursor still to construct tree")
         this.SBMain.OnEvent("Click", this.SBMain_Click.Bind(this))
         this.SBMain.OnEvent("ContextMenu", this.SBMain_ContextMenu.Bind(this))
@@ -7436,15 +7436,13 @@ class Viewer {
             return
         }
         this.Capturing := True
-        HotKey("~F1", this.CaptureHotkeyFunc, "Off")
-        HotKey("Esc", this.CaptureHotkeyFunc, "On")
         this.TVUIA_Click("","") ; Clear highlighting from before
         this.TVUIA.Delete()
         this.TVUIA.Add("Hold cursor still to construct tree")
         if IsObject(this.Stored.HighlightedElement)
             this.Stored.HighlightedElement.Highlight("clear")
         this.Stored := {mwId:0, FilteredTreeView:Map(), TreeView:Map(), HighlightedElement:0, CapturedWindowBuildUpdatedCache:this.UpdateCapturedWindowCache.Bind(this)} 
-        this.ButCapture.Text := "Stop capturing (Esc)"
+        this.ButCapture.Text := "Stop capturing (Alt+S)"
         this.CaptureCallback := this.CaptureCycle.Bind(this)
         SetTimer(this.CaptureCallback, 200)
     }
@@ -7545,9 +7543,7 @@ class Viewer {
             this.Capturing := False
             SetTimer(this.CaptureCallback, 0)
             SetTimer(this.Stored.CapturedWindowBuildUpdatedCache, 0)
-            this.ButCapture.Text := "Start capturing (F1)"
-            HotKey("Esc", this.CaptureHotkeyFunc, "Off")
-            HotKey("~F1", this.CaptureHotkeyFunc, "On")
+            this.ButCapture.Text := "Start capturing (Alt+S)"
             if IsObject(this.Stored.HighlightedElement)
                 this.Stored.HighlightedElement.Highlight("clear")
         }
