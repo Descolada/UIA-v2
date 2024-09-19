@@ -191,8 +191,7 @@ class UIA_Vivaldi extends UIA_Browser {
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) {
 		this.SelectTab(tabElementOrName)
 		Sleep 40
-		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-		ControlSend("{ctrl down}w{ctrl up}",,this.BrowserId)
+		this.ControlSend("{ctrl down}w{ctrl up}")
 	}
 
 	Back() { 
@@ -384,8 +383,7 @@ class UIA_Mozilla extends UIA_Browser {
 			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
 				Sleep 40
 			if A_TickCount < endTime {
-				SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-				ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}{Enter}{LCtrl up}", , this.BrowserId
+				this.ControlSend("{LCtrl down}{Enter}{LCtrl up}")
 			}
 		}
 	}
@@ -395,19 +393,16 @@ class UIA_Mozilla extends UIA_Browser {
 			this.SetURL("javascript " js, True)
 			return
 		}
-		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
-		ControlSend "{ctrl down}{shift down}k{ctrl up}{shift up}", , this.BrowserId
+		this.ControlSend("{ctrl down}{shift down}k{ctrl up}{shift up}")
 		if !this.BrowserElement.WaitElement({Name:"Switch to multi-line editor mode (Ctrl + B)", Type:"Button"},5000)
 			return
 		ClipSave := ClipboardAll()
 		A_Clipboard := js
-		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-		ControlSend "allow pasting{ctrl down}z{ctrl up}{ctrl down}v{ctrl up}", , this.BrowserId
+		this.ControlSend("allow pasting{ctrl down}z{ctrl up}{ctrl down}v{ctrl up}")
 		Sleep 20
-		ControlSend "{ctrl down}{enter}{ctrl up}", , this.BrowserId
+		this.ControlSend("{ctrl down}{enter}{ctrl up}")
 		sleep 40
-		ControlSend "{ctrl down}{shift down}i{ctrl up}{shift up}", , this.BrowserId
+		this.ControlSend("{ctrl down}{shift down}i{ctrl up}{shift up}")
 		A_Clipboard := ClipSave
 	}
 
@@ -447,9 +442,7 @@ class UIA_Mozilla extends UIA_Browser {
 				try this.TabBarElement.FindElement({Name:tabElementOrName, Type:"TabItem", mm:matchMode, cs:caseSense}).Click()
 			}
 		}
-		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}", , this.BrowserId
-		ControlSend "{Ctrl down}w{Ctrl up}", , this.BrowserId
+		this.ControlSend("{Ctrl down}w{Ctrl up}")
 	}
 }
 
@@ -795,8 +788,7 @@ class UIA_Browser {
 			legacyPattern.SetValue(newUrl " ")
 		}
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
-			SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-			ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{Ctrl down}l{Ctrl up}{Enter}", , "ahk_id" this.BrowserId ; Or would it be better to use BlockInput instead of releasing modifier keys?
+			this.ControlSend("{Ctrl down}l{Ctrl up}{Enter}")
 		}
 	}
 
@@ -808,8 +800,7 @@ class UIA_Browser {
 	
 	; Opens a new tab by sending Ctrl+T
 	NewTab() {
-		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
-		ControlSend "{LCtrl up}{LAlt up}{LShift up}{RCtrl up}{RAlt up}{RShift up}{LCtrl down}t{LCtrl up}", , this.BrowserId
+		this.ControlSend("{LCtrl down}t{LCtrl up}")
 	}
 	
 	GetAllTabs() { 
@@ -881,6 +872,24 @@ class UIA_Browser {
 	Send(text) {
 		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
 		ControlSend text, , this.BrowserId
+	}
+
+	ControlSend(text, releaseModifiers:=true) {
+		SendMessage(0x0006, 1, this.BrowserId,, this.BrowserId)
+		PrevKeyDelay := A_KeyDelay, PrevKeyDuration := A_KeyDuration
+		SetKeyDelay -1, 1
+		if releaseModifiers {
+			released := []
+			for key in ["LCtrl", "RCtrl", "LAlt", "RAlt", "LShift", "RShift"]
+				if GetKeyState(key)
+					ControlSend "{" key " up}", , this.BrowserId
+		}
+		ControlSend text, , this.BrowserId
+		if releaseModifiers {
+			for key in released
+				ControlSend "{" key " down}", , this.BrowserId
+		}
+		SetKeyDelay PrevKeyDelay, PrevKeyDuration
 	}
 	
 	WindowFromPoint(X, Y) { ; by SKAN and Linear Spoon
