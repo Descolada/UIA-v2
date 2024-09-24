@@ -2444,7 +2444,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Get the parent window hwnd from the element
     GetWinId() {
         static cacheRequest := UIA.CreateCacheRequest(["NativeWindowHandle"],,1, UIA.AutomationElementMode.None), TW := UIA.CreateTreeWalker(UIA.CreateNotCondition(UIA.CreatePropertyCondition(UIA.Property.NativeWindowHandle, 0)))
-        try return DllCall("GetAncestor", "Ptr", TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle, "UInt", 2) ; hwnd from point by SKAN
+        try return DllCall("GetAncestor", "Ptr", TW.NormalizeElementBuildCache(cacheRequest, this).CachedNativeWindowHandle, "UInt", 2, "Ptr") ; hwnd from point by SKAN
     }
     WinId => (this.DefineProp("WinId", {value:this.GetWinId()}), this.WinId)
     ; Get the control hwnd (that the element belongs to) from the element
@@ -3262,14 +3262,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Paths can be:
      * 1. Comma-separated numeric path that defines which path to travel down the tree. In addition
      *     to integer values, or TypeN which selects the nth occurrence of Type.  
-     *     Eg. `Element.ElementFromPath("3,2")` => selects Elements third childs second child  
-     *         `Element.ElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
+     *     Eg. `Element.CachedElementFromPath("3,2")` => selects Elements third childs second child  
+     *         `Element.CachedElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
      *
      * 2. UIA path copied from UIAViewer.  
-     *     Eg. `Element.ElementFromPath("bAx3")`
+     *     Eg. `Element.CachedElementFromPath("bAx3")`
      *
      * 3. A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.  
-     *        Eg. `Element.ElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
+     *        Eg. `Element.CachedElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
      *
      * @returns {UIA.IUIAutomationElement}
      */
@@ -3318,14 +3318,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Paths can be:
      * 1. Comma-separated numeric path that defines which path to travel down the tree. In addition
      *     to integer values, or TypeN which selects the nth occurrence of Type.  
-     *     Eg. `Element.ElementFromPath("3,2")` => selects Elements third childs second child  
-     *         `Element.ElementFromPath("Button3,2")` => selects Elements third child of type Button, then its second child
+     *     Eg. `Element.ElementFromPathExist("3,2")` => checks for Elements third childs second child  
+     *         `Element.ElementFromPathExist("Button3,2")` => checks for Elements third child of type Button, then its second child
      *
      * 2. UIA path copied from UIAViewer.  
-     *     Eg. `Element.ElementFromPath("bAx3")`
+     *     Eg. `Element.ElementFromPathExist("bAx3")`
      *
      * 3. A condition or conditions. In this case the provided conditions define the route of tree-traversal, by default with Scope Children.  
-     *        Eg. `Element.ElementFromPath({Type:"Button"}, {Type:"List"})` => finds the first Button type child of Element, then the first List type child of that element
+     *        Eg. `Element.ElementFromPathExist({Type:"Button"}, {Type:"List"})` => checks for the first Button type child of Element, then the first List type child of that element
      *
      * @returns {UIA.IUIAutomationElement}
      */
@@ -3391,7 +3391,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * * pn: gets the nth parent
      * * "n": normalizes the element (returns the first parent or the element itself matching the filterCondition)
      * @param filterCondition Optional: a condition for tree traversal that selects only elements that match the condition.
-     * @example Element.ElementFromPath("p,+2,1") ; gets the parent of Element, then the second sibling of the parent, then that siblings first child.
+     * @example Element.WalkTree("p,+2,1") ; gets the parent of Element, then the second sibling of the parent, then that siblings first child.
      * @returns {UIA.IUIAutomationElement}
      */
     WalkTree(searchPath, filterCondition?) {
@@ -3436,7 +3436,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * * pn: gets the nth parent
      * * "n": normalizes the element (returns the first parent or the element itself matching the filterCondition)
      * @param filterCondition Optional: a condition for tree traversal that selects only elements that match the condition.
-     * @example Element.ElementFromPath("p,+2,1") ; gets the parent of Element, then the second sibling of the parent, then that siblings first child.
+     * @example Element.WalkCachedTree("p,+2,1") ; gets the parent of Element, then the second sibling of the parent, then that siblings first child.
      * @returns {UIA.IUIAutomationElement}
      */
     WalkCachedTree(searchPath, filterCondition?) {
@@ -7306,7 +7306,7 @@ class Viewer {
     }
     HandleFocusChangedEvent(hWinEventHook, Event, hWnd, idObject, idChild, dwEventThread, dwmsEventTime) => SetTimer(this._HandleFocusChangedEvent.Bind(this, hWnd), -1)
     _HandleFocusChangedEvent(hWnd) {
-        winHwnd := DllCall("GetAncestor", "Ptr", hWnd, "UInt", 2)
+        winHwnd := DllCall("GetAncestor", "Ptr", hWnd, "UInt", 2, "Ptr")
         if winHwnd = this.gViewer.Hwnd {
             if !this.Focused {
                 this.Focused := 1
