@@ -882,7 +882,7 @@ class UIA_Browser {
 			released := []
 			for key in ["LCtrl", "RCtrl", "LAlt", "RAlt", "LShift", "RShift"]
 				if GetKeyState(key)
-					ControlSend "{" key " up}", , this.BrowserId
+					released.Push(key), ControlSend("{" key " up}", , this.BrowserId)
 		}
 		ControlSend text, , this.BrowserId
 		if releaseModifiers {
