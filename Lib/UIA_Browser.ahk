@@ -146,7 +146,7 @@ class UIA_Vivaldi extends UIA_Browser {
 		Loop 2 {
 			try {
 				this.MainPaneElement := this.BrowserElement.FindElement({Type:"Document"})
-				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", startingElement:this.MainPaneElement})
+				return this.DocumentElement := this.BrowserElement.FindElement({Type:"Document", not:{Value:""}, startingElement:this.MainPaneElement})
 			} catch TargetError {
 				WinActivate this.BrowserId
 				WinWaitActive this.BrowserId,,1
