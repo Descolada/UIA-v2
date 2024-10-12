@@ -169,12 +169,13 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True) { 
 		local match, els
 		if !searchPhrase {
-			RegExMatch(WinGetTitle(this.BrowserId), "(.*) - Vivaldi", &match:="")
+			RegExMatch(WinGetTitle(this.BrowserId), "(.*) - Vivaldi$", &match:="")
 			searchPhrase := match[1], matchMode := 3, caseSense := True
 		}
-		els := UIA.Filter(this.GetAllTabs(), (element) => element.ElementExist({Type:"Text", Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))
-		if !els.Length
+		if !(tabs := this.GetAllTabs()).Length
 			throw Error("Unable to get tab elements", -1, "Please file a bug report")
+		if !(els := UIA.Filter(tabs, (element) => element.ElementExist({Type:"Text", Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))).Length
+			throw Error("No search phrase matches found", -1)
 		return els[els.Length]
 	}
 
