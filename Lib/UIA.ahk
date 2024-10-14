@@ -3639,12 +3639,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 return ((casesense && SubStr(str1, 1, StrLen(str2)) == str2) || (!casesense && SubStr(str1, 1, StrLen(str2)) = str2))
             else if matchmode = 2
                 return InStr(str1, str2, casesense)
-            else if matchmode = "RegEx" {
-                if RegExMatch(str2, "^([^(\\\s]+)\)", &opts:="")
-                    return RegExMatch(str1, casesense ? (InStr(opts[], "i") ? StrReplace(str2, "i",,,, 1) : str2) : ((!InStr(opts[], "i") ? "i" : "") str2))
-                else
-                    return RegExMatch(str1, casesense ? str2 : "i)" str2)
-            } else
+            else if matchmode = "RegEx"
+                return RegExMatch(str1, str2)
+            else
                 return (casesense ? str1 == str2 : str1 = str2)
         }
     }
