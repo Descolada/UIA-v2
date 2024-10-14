@@ -2377,9 +2377,9 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
             levelCondition := levelConditions[targetIndex]
             if asString
-                conditionPath .= (levelCondition[1].i = levelMap[levelCondition[2]] ? (levelCondition[1].i = 1 ? levelCondition[2] : (levelCondition[1].i := -1, levelCondition[2] ", i:-1")) : levelCondition[2] ", i:" levelCondition[1].i) "}" (A_Index = numPath.Length ? "" : ", ")
+                conditionPath .= ((levelCondition[1].i = 1) ? levelCondition[2] : (levelCondition[1].i = levelMap[levelCondition[2]] ? (levelCondition[1].i := -1, levelCondition[2] ", i:-1") : (levelCondition[2] ", i:" levelCondition[1].i))) "}" (A_Index = numPath.Length ? "" : ", ")
             else
-                conditionPath.Push(levelCondition[1].i = levelMap[levelCondition[2]] ? (levelCondition[1].i = 1 ? (levelCondition[1].DeleteProp("i"), levelCondition[1]) : (levelCondition[1].i := -1, levelCondition[1])) : levelCondition[1])
+                conditionPath.Push((levelCondition[1].i = 1) ? (levelCondition[1].DeleteProp("i"), levelCondition[1]) : (levelCondition[1].i = levelMap[levelCondition[2]] ? (levelCondition[1].i := -1, levelCondition[1]) : levelCondition[1]))
             cachedThis := children[targetIndex]
         }
         return conditionPath
@@ -3548,14 +3548,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     ; Internal method: checks whether this element matches the condition
     ValidateCondition(cond, cached:=False) {
-        local mm := 3, cs := 1, notCond := 0, k, v, result, i, val
+        local mm, cs, notCond := 0, k, v, result, i, val
         switch Type(cond) {
             case "Object":
-                mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : 3
-                cs := cond.HasOwnProp("casesense") ? cond.casesense : cond.HasOwnProp("cs") ? cond.cs : 1
-                if !IsInteger(mm)
+                mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : unset
+                cs := cond.HasOwnProp("casesense") ? cond.casesense : cond.HasOwnProp("cs") ? cond.cs : unset
+                if !IsInteger(mm ?? 0)
                     mm := UIA.MatchMode.%mm%
-                if !IsInteger(cs)
+                if !IsInteger(cs ?? 0)
                     cs := UIA.CaseSense.%cs%
                 notCond := cond.HasOwnProp("operator") ? cond.operator = "not" : cond.HasOwnProp("op") ? cond.op = "not" : 0
                 cond := cond.OwnProps()
@@ -3587,11 +3587,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     case 8:
                         if v is Array {
                             for val in v {
-                                if (result := CompareStrings(currentValue, val, mm, cs))
+                                if (result := CompareStrings(currentValue, val, mm?, cs?))
                                     break
                             }
                         } else 
-                            result := CompareStrings(currentValue, v, mm, cs)
+                            result := CompareStrings(currentValue, v, mm?, cs?)
                     case 3,5,11:
                         if v is Array {
                             for val in v {
@@ -3630,19 +3630,26 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         return True
 
-        CompareStrings(str1, str2, matchmode, casesense) {
+        CompareStrings(str1, str2, matchmode:=3, casesense:=-1) {
             if not str1 is String
                 str1 := String(str1)
             if not str2 is String
                 str2 := String(str2)
-            if matchmode = 1
-                return ((casesense && SubStr(str1, 1, StrLen(str2)) == str2) || (!casesense && SubStr(str1, 1, StrLen(str2)) = str2))
+            if matchmode = 3
+                return (casesense ? str1 == str2 : str1 = str2)
             else if matchmode = 2
                 return InStr(str1, str2, casesense)
-            else if matchmode = "RegEx"
-                return RegExMatch(str1, str2)
-            else
-                return (casesense ? str1 == str2 : str1 = str2)
+            if matchmode = 1
+                return ((casesense && SubStr(str1, 1, StrLen(str2)) == str2) || (!casesense && SubStr(str1, 1, StrLen(str2)) = str2))
+            else if matchmode = "RegEx" {
+                if casesense = -1
+                    return RegExMatch(str1, str2)
+                if RegExMatch(str2, "^([^(\\\s]+)\)", &opts:="")
+                    return RegExMatch(str1, casesense ? (InStr(opts[], "i") ? StrReplace(str2, "i",,,, 1) : str2) : ((!InStr(opts[], "i") ? "i" : "") str2))
+                else
+                    return RegExMatch(str1, casesense ? str2 : "i)" str2)
+            } else
+                throw Error("Invalid MatchMode", -1, matchmode)
         }
     }
 
