@@ -3638,14 +3638,13 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             if matchmode = 3
                 return (casesense ? str1 == str2 : str1 = str2)
             else if matchmode = 2
-                return InStr(str1, str2, casesense)
+                return InStr(str1, str2, !!casesense)
             if matchmode = 1
                 return ((casesense && SubStr(str1, 1, StrLen(str2)) == str2) || (!casesense && SubStr(str1, 1, StrLen(str2)) = str2))
             else if matchmode = "RegEx" {
                 if casesense = -1
                     return RegExMatch(str1, str2)
-                if RegExMatch(str2, "^([^(\\]+)\)", &opts:="")
-                    return RegExMatch(str1, !casesense && !RegExMatch(str2, "^([^(\\]+)\)", &opts:="") ? "i)" str2 : str2)
+                return RegExMatch(str1, !casesense && !RegExMatch(str2, "^([^(\\]+)\)", &opts:="") ? "i)" str2 : str2)
             } else
                 throw Error("Invalid MatchMode", -1, matchmode)
         }
