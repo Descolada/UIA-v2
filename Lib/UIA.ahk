@@ -684,7 +684,7 @@ static __CreateRawCondition(condition) {
     return condition
 }
 
-static __ConditionBuilder(obj, &nonUIAEncountered?) {
+static __ConditionBuilder(obj, &nonUIAEncountered?, isParentNotCondition:=0) {
     local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, j, val, match, arr
     sanitizeMM := False
     switch Type(obj) {
@@ -750,14 +750,14 @@ static __ConditionBuilder(obj, &nonUIAEncountered?) {
                         v += 50000
             }
             if sanitizeMM && this.PropertyVariantTypeBSTR.Has(k) {
-                t := mm = 1 ? this.CreateCondition(k, v, !cs | 2) : this.CreateNotCondition(this.CreatePropertyCondition(k, ""))
+                t := mm = 1 ? this.CreateCondition(k, v, !cs | 2) : (isParentNotCondition ? this.CreatePropertyCondition(k, "") : this.CreateNotCondition(this.CreatePropertyCondition(k, "")))
                 arr[i++] := t[]
             } else if (k >= 30000) {
                 t := this.CreateCondition(k, v, flags)
                 arr[i++] := t[]
             }
         } else if IsObject(v) && !(SubStr(Type(v), 1, 6) = "ComObj") && !v.HasOwnProp("ptr") {
-            t := this.__ConditionBuilder(v, &nonUIAEncountered)
+            t := this.__ConditionBuilder(v, &nonUIAEncountered, isParentNotCondition ^ (k = "not" || operator = "not"))
             if k = "not" || operator = "not"
                 t := this.CreateNotCondition(t)
             arr[i++] := t[]
@@ -3644,7 +3644,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             else if matchmode = "RegEx" {
                 if casesense = -1
                     return RegExMatch(str1, str2)
-                return RegExMatch(str1, !casesense && !RegExMatch(str2, "^([^(\\]+)\)", &opts:="") ? "i)" str2 : str2)
+                return RegExMatch(str1, (!casesense && !RegExMatch(str2, "^([^(\\]+)\)")) ? "i)" str2 : str2)
             } else
                 throw Error("Invalid MatchMode", -1, matchmode)
         }
