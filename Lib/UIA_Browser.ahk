@@ -168,6 +168,8 @@ class UIA_Vivaldi extends UIA_Browser {
 
 	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True) { 
 		local match, els
+		if searchPhrase is Integer
+			return this.TabBarElement.FindElement({AutomationId:"tab-", matchmode:"Substring", i:searchPhrase}, 2)
 		if !searchPhrase {
 			RegExMatch(WinGetTitle(this.BrowserId), "(.*) - Vivaldi$", &match:="")
 			searchPhrase := match[1], matchMode := 3, caseSense := True
@@ -824,7 +826,7 @@ class UIA_Browser {
 	
 	; Returns a tab element with text of searchPhrase, or if empty then the currently selected tab. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	GetTab(searchPhrase:="", matchMode:=3, caseSense:=True) { 
-		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement({Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSense})
+		return (searchPhrase == "") ? this.TabBarElement.FindElement({Type:"TabItem", SelectionItemIsSelected:1}) : this.TabBarElement.FindElement(searchPhrase is Integer ? {Type:"TabItem", i:searchPhrase} : {Name:searchPhrase, Type:"TabItem", mm:matchMode, cs:caseSense})
 	}
 	; Checks whether a tab element with text of searchPhrase exists: if a matching tab is found then the element is returned, otherwise 0 is returned. matchMode follows SetTitleMatchMode scheme: 1=tab name must must start with tabName; 2=can contain anywhere; 3=exact match; RegEx
 	TabExist(searchPhrase:="", matchMode:=3, caseSense:=True) {
@@ -837,7 +839,10 @@ class UIA_Browser {
 		local selectedTab
 		try {
 			selectedTab := IsObject(tabName) ? tabName : this.GetTab(tabName, matchMode, caseSense)
-			selectedTab.Click()
+			if this.BrowserType = "Vivaldi"
+				selectedTab.ControlClick(,, "NA", this.BrowserId)
+			else
+				selectedTab.Click()
 		} catch TargetError
 			throw TargetError("Tab with name " tabName " was not found (MatchMode: " matchMode ", CaseSense: " caseSense ")")
 		return selectedTab
