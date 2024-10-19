@@ -677,9 +677,9 @@ static __CreateRawCondition(condition) {
         if condition.HasOwnProp(i)
             throw ValueError("This method doesn't support indexes nor named arguments", -2, '"' i '" can be used with FindElement(s) instead')
     condition := this.__ConditionBuilder(condition, &nonUIAEncountered:=0)
-    if nonUIAEncountered = 1
+    if nonUIAEncountered & 2
         throw ValueError("This method doesn't support conditions with Cached properties", -2, "Instead use FindElement(s) or FindCachedElement(s)")
-    else if nonUIAEncountered = 2
+    else if nonUIAEncountered & 1
         throw ValueError("This method doesn't support conditions with MatchMode RegEx nor StartsWith", -2, "Only MatchModes Exact and SubString are allowed. Use FindElement(s) instead, which supports all MatchModes.")
     return condition
 }
@@ -687,36 +687,36 @@ static __CreateRawCondition(condition) {
 static __ConditionBuilder(obj, &nonUIAEncountered?, isParentNotCondition:=0) {
     local sanitizeMM, operator, cs, mm, flags, count, k, v, t, i, j, val, match, arr
     sanitizeMM := False
-    switch Type(obj) {
-        case "Object":
-            obj := obj.Clone() ; Speed-testing showed that not cloning (getting props with HasOwnProp and then ignoring them in the loop) is as fast as cloning.
-            obj.DeleteProp("index"), obj.DeleteProp("i")
-            operator := obj.DeleteProp("operator") || obj.DeleteProp("op") || "and"
-            cs := obj.HasOwnProp("casesense") ? obj.casesense : obj.HasOwnProp("cs") ? obj.cs : 1
-            obj.DeleteProp("casesense"), obj.DeleteProp("cs")
-            mm := obj.DeleteProp("matchmode") || obj.DeleteProp("mm") || 3
-            if !IsInteger(mm)
-                mm := this.MatchMode.%mm%
-            if !IsInteger(cs)
-                cs := this.CaseSense.%cs%
-            if IsSet(nonUIAEncountered) {
-                if (mm = "RegEx" || mm = 1)
-                    nonUIAEncountered := True, sanitizeMM := True
-            } else { ; If creating a "pure" UIA condition, allow only Exact and Substring matchmodes
-                if !((mm = 3) || (mm = 2))
-                    throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions.", -1, "MatchMode 1 and RegEx are allowed with FindElement, FindElements, and ElementFromPath methods.")
-            }
-            flags := ((mm = 3 ? 0 : 2) | (!cs)) || obj.DeleteProp("flags") || 0
-            count := ObjOwnPropCount(obj), obj := obj.OwnProps()
-        case "Array":
-            operator := "or", flags := 0, count := obj.Length
-        default:
-            throw TypeError("Invalid parameter type", -3)
-    }
+    if Type(obj) = "Object" {
+        obj := obj.Clone() ; Speed-testing showed that not cloning (getting props with HasOwnProp and then ignoring them in the loop) is as fast as cloning.
+        obj.DeleteProp("index"), obj.DeleteProp("i")
+        operator := obj.DeleteProp("operator") || obj.DeleteProp("op") || "and"
+        cs := obj.HasOwnProp("casesense") ? obj.casesense : obj.HasOwnProp("cs") ? obj.cs : 1
+        obj.DeleteProp("casesense"), obj.DeleteProp("cs")
+        mm := obj.DeleteProp("matchmode") || obj.DeleteProp("mm") || 3
+        if !IsInteger(mm)
+            mm := this.MatchMode.%mm%
+        if !IsInteger(cs)
+            cs := this.CaseSense.%cs%
+        if IsSet(nonUIAEncountered) {
+            if (mm = "RegEx" || mm = 1)
+                nonUIAEncountered |= 1, sanitizeMM := True
+        } else if !((mm = 3) || (mm = 2)) { ; If creating a "pure" UIA condition, allow only Exact and Substring matchmodes
+            throw TypeError("MatchMode can only be Exact or Substring (3 or 2) when creating UIA conditions.", -1, "MatchMode 1 and RegEx are allowed with FindElement, FindElements, and ElementFromPath methods.")
+        }
+        flags := ((mm = 3 ? 0 : 2) | (!cs)) || obj.DeleteProp("flags") || 0
+        count := ObjOwnPropCount(obj), obj := obj.OwnProps()
+    } else if obj is Array {
+        operator := "or", flags := 0, count := obj.Length
+    } else
+        throw TypeError("Invalid parameter type", -3, Type(obj))
+
     if count = 0
         return this.TrueCondition
     arr := ComObjArray(0xd, count), i := 0
     for k, v in obj {
+        if k ~= "i)^Cached" && IsSet(nonUIAEncountered)
+            nonUIAEncountered |= 2
         try k := IsNumber(k) ? Integer(k) : this.Property.%k%
         if IsInteger(k) && k >= 30000 {
             switch Type(v), 0 {
@@ -1998,17 +1998,16 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         throw MethodError("Method " Name " not found in " this.__Class " Class.",-1,Name)
     }
     ; Returns all direct children of the element
-    Children => this.GetChildren()
+    Children => ((ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : [])
+    ; Returns direct children in reverse order (also the index in the enumerator counts downwards)
+    ReversedChildren => ((ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : [])
     ; Retrieves the cached child elements of this UI Automation element.
     ; The view of the returned collection is determined by the TreeFilter property of the IUIAutomationCacheRequest that was active when this element was obtained.
     ; Children are cached only if the scope of the cache request included TreeScope_Subtree, TreeScope_Children, or TreeScope_Descendants.
     ; If the cache request specified that children were to be cached at this level, but there are no children, the value of this property is 0. However, if no request was made to cache children at this level, an attempt to retrieve the property returns an error.
-    CachedChildren {
-        get {
-            local children
-            return (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
-        }
-    }
+    CachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
+    ReversedCachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToReversedArray():[])
+
     GetCachedChildren(scope:=2) {
         local children
         scope := UIA.TypeValidation.TreeScope(scope)
@@ -2650,7 +2649,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     static __ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, &cacheRequest?, &index?, &callback:=0) {
         if Type(condition) != "Object" {
-            if IsObject(condition) && condition.HasMethod() {
+            if IsObject(condition) && HasMethod(condition) {
                 callback := condition
                 return {}
             }
@@ -2706,18 +2705,26 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * * Object key "not" creates a not condition: `{not:{Type:"Button"}}` => everything except Type Button
      *
      * * MatchMode key (short form: mm) can be one of UIA.MatchMode values: "StartsWith", "SubString", "Exact", "RegEx". Default MatchMode is "Exact".
-     * MatchMode applies to all string-type conditions (except Type), multiple different MatchModes are allowed if used in separate sub-conditions.
-     * Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
+     *   MatchMode applies to all string-type conditions (except Type), multiple different MatchModes are allowed if used in separate sub-conditions.
+     *   Note: MatchMode "StartsWith" and "RegEx" will have the performance of FindElements (slower).
      * * CaseSense key (short form: cs) defines case-sense: "On"/True or "Off"/False. Default is "On".
      *
      * * The condition object additionally supports named parameters: {Type:"Button", index:-1} => last element with Type Button
      * 
-     * * If a callback function is provided instead, then it must accept one parameter, the evaluated
-     *   element, and return true/false depending on if the element matches the condition or not. In the
-     *   case of a callback function the tree is walked using a TreeWalker, which is created with a 
-     *   UIA.TrueCondition. The treewalker can be created with a custom condition if the callback is instead
-     *   provided as a named argument "callback". Eg. Element.FindElement({callback:MyCallback, Type:"Button"})
-     *   in which case only button-type elements are walked and evaluated with MyCallback.
+     * * If a callback function is provided instead, then it must accept three parameters: `callback(element, index, depth)`
+     *   where `element` is the currently evaluated element, `index` is the step index in the current layer (with
+     *   LastToFirst this still starts from 1), and `depth` is the current depth (0 = starting element).
+     *   If the callback returns 1 then the element is matched, if 0 then is not matched and search continues,
+     *   and if -1 then for PreOrder search the branch under the element is skipped and for PostOrder search
+     *   the search jumps to the parent of the element skipping the siblings. 
+     *   In the case of a callback function the tree is walked using a TreeWalker, which is created with a 
+     *   UIA.TrueCondition if no other conditions are set. The treewalker can be created with a custom condition if 
+     *   the callback is instead provided as a named argument "callback". 
+     *   Eg. `Element.FindElement({callback:MyCallback, Type:"Button"})` walks a tree consisting of button-type elements.
+     *   Example: `Element.FindElement((el, i, depth) => depth = 1 && el.Type != UIA.Type.Document ? -1 : el.Name = "Test")`
+     *      This callback function searches only the branch with where at depth 1 the type is Document, and
+     *      then searches for an element named "Test".
+     * 
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder. [requires Windows 10 version 1703+]
@@ -2749,7 +2756,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             ; In the case of a defined callback, walk the tree with a TreeWalker made on the base of
             ; IUIAcondition and validate with callback(element). 
             if callback {
-                local found, child, TW := UIA.CreateTreeWalker(IUIAcondition)
+                local found, TW := UIA.CreateTreeWalker(IUIAcondition), c := 0
                 if startingElement
                     startingElement := startingElement.RuntimeId
                 ; FirstToLast or LastToFirst
@@ -2761,24 +2768,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     nextChildFunc := UIA.IUIAutomationTreeWalker.Prototype.TryGetFirstChildElement.Bind(TW)
                 ; First handle PostOrder
                 if order&1 {
-                    if scope > 1 {
-                        child := nextChildFunc(this)
-                        while (IsObject(child)) {
-                            if scope&4 && found := PostOrderRecursiveFind(child)
-                                return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
-                            else if scope&2 && callback(child) && --index = 0
-                                return cacheRequest ? child.BuildUpdatedCache(cacheRequest) : child
-                            child := nextElementFunc(child)
-                        }
-                    }
-                    if scope&1 && callback(this) && --index = 0
-                        return cacheRequest ? this.BuildUpdatedCache(cacheRequest) : this
+                    if IsObject(found := PostOrderRecursiveFind(this, scope))
+                        return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
                     throw TargetError("An element matching the condition was not found", -1)
                 }
                 ; PreOrder
-                if scope&1 && callback(this) && --index = 0
+                if scope&1 && (c := callback(this, 1, 0)) > 0 && --index = 0
                     return cacheRequest ? this.BuildUpdatedCache(cacheRequest) : this
-                if scope > 1 && found := PreOrderRecursiveFind(nextChildFunc(this))
+                if c >= 0 && scope > 1 && found := PreOrderRecursiveFind(nextChildFunc(this))
                     return cacheRequest ? found.BuildUpdatedCache(cacheRequest) : found
                 throw TargetError("An element matching the condition was not found", -1)
             }
@@ -2844,26 +2841,32 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             return UIA.IUIAutomationElement(found)
         throw TargetError("An element matching the condition was not found", -1)
 
-        PreOrderRecursiveFind(el) {
+        PreOrderRecursiveFind(el, depth:=0) {
             local found
-            while (IsObject(el)) {
-                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el) && --index = 0
+            depth++
+            while (c := 0, IsObject(el)) {
+                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, A_Index, depth)) > 0 && --index = 0
                     return el
-                else if scope&4 && (found := PreOrderRecursiveFind(nextChildFunc(el)))
+                else if c >= 0 && scope&4 && IsObject(found := PreOrderRecursiveFind(nextChildFunc(el), depth))
                     return found
                 el := nextElementFunc(el)
             }
         }
-        PostOrderRecursiveFind(el) { ; this is only called if scope >= 4, and handles scope&2 as well
-            local found, child
-            child := nextChildFunc(el)
-            while (IsObject(child)) {
-                if (found := PostOrderRecursiveFind(child))
-                    return found
-                child := nextElementFunc(child)
+        PostOrderRecursiveFind(el, scope, i:=1, depth:=0) { ; this is only called if scope >= 4, and handles scope&2 as well
+            local found, child, c := 0
+            child := nextChildFunc(el), depth++
+            if scope > 1 {
+                while (IsObject(child)) {
+                    if IsObject(found := PostOrderRecursiveFind(child, (scope & ~2)|1, A_Index, depth))
+                        return found
+                    else if found = -1
+                        break
+                    child := nextElementFunc(child)
+                }
             }
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el) && --index = 0
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
                 return el
+            return c
         }
     }
 
@@ -2898,6 +2901,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * The condition object additionally supports named parameters.  
      * Default MatchMode is "Exact", and CaseSense "On".  
      * See a more detailed explanation under FindElement condition argument.
+     * 
+     * There is a difference only if a callback function is used. With a cached search a treewalker is
+     * not used (instead CachedChildren is accessed), and the `index` argument in the callback function
+     * will receive the actual index of the element relative to the parent, even if order = LastToFirst.
      * @param scope Optional TreeScope value: Element, Children, Family (Element+Children), Descendants, Subtree (=Element+Descendants). Default is Descendants.
      * @param index Looks for the n-th element matching the condition
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder). Default is FirstToLast and PreOrder.
@@ -2907,7 +2914,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     FindCachedElement(condition, scope:=4, index:=1, order:=0, startingElement:=0) {
-        local callback := 0, found, child
+        local callback := 0, found, c := 0
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement, , &index, &callback)
         callback := callback || UIA.IUIAutomationElement.Prototype.ValidateCondition.Bind(unset, condition, true), scope := UIA.TypeValidation.TreeScope(scope), index := UIA.TypeValidation.Integer(index, "Index"), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement)
         if index < 0
@@ -2916,75 +2923,44 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             throw ValueError("Condition index cannot be 0", -1)
         if startingElement
             startingElement := startingElement.RuntimeId
+        ChildOrder := order&2 ? "ReversedCachedChildren" : "CachedChildren"
         ; First handle PostOrder
         if order&1 {
-            if scope > 1 {
-                if order&2 { ; LastToFirst
-                    local children := this.CachedChildren, len := children.Length + 1
-                    Loop len-1 {
-                        child := children[len-A_index]
-                        if scope&4 && found := PostOrderLastToFirstRecursiveFind(child) ; Handles this child and its descendants
-                            return found
-                        else if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child) && --index = 0
-                            return child
-                    }
-                } else { ; FirstToLast
-                    for child in this.CachedChildren {
-                        if scope&4 && found := PostOrderFirstToLastRecursiveFind(child) ; Handles this child and its descendants
-                            return found
-                        else if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child) && --index = 0
-                            return child
-                    }
-                }
-            }
-            if scope&1 && (startingElement ? (startingElement = this.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(this) && --index = 0
-                return this
+            if found := PostOrderRecursiveFind(this, scope)
+                return found
             throw TargetError("An element matching the condition was not found", -1)
         }
         ; PreOrder
-        if scope&1 && callback(this) && --index = 0
+        if scope&1 && (c := callback(this, 1, 0)) > 0 && --index = 0
             return this
-        if scope > 1 {
-            if found := order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this)
+        if scope > 1 && c >= 0 {
+            if found := PreOrderRecursiveFind(this)
                 return found
         }
         throw TargetError("An element matching the condition was not found", -1)
-        PreOrderFirstToLastRecursiveFind(el) {
-            local child, found
-            for child in el.CachedChildren {
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child) && --index = 0
+        PreOrderRecursiveFind(el, depth:=0) {
+            local child, found, c
+            depth++
+            for i, child in el.%ChildOrder% {
+                c := 0
+                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(child, i, depth)) > 0 && --index = 0
                     return child
-                else if scope&4 && (found := PreOrderFirstToLastRecursiveFind(child))
+                else if (c >= 0) && scope&4 && (found := PreOrderRecursiveFind(child, depth))
                     return found
             }
         }
-        PreOrderLastToFirstRecursiveFind(el) {
-            local children := el.CachedChildren, len := children.Length + 1, found, child
-            Loop len-1 {
-                child := children[len-A_index]
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child) && --index = 0
-                    return child
-                else if scope&4 && found := PreOrderLastToFirstRecursiveFind(child)
+        PostOrderRecursiveFind(el, scope, i:=1, depth:=-1) {
+            local child, found, c := 0
+            depth++
+            for j, child in el.%ChildOrder% {
+                if IsObject(found := PostOrderRecursiveFind(child, (scope & ~2)|1, j, depth))
                     return found
+                else if found = -1
+                    break
             }
-        }
-        PostOrderFirstToLastRecursiveFind(el) {
-            local child, found
-            for child in el.CachedChildren {
-                if (found := PostOrderFirstToLastRecursiveFind(child))
-                    return found
-            }
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el) && --index = 0
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
                 return el
-        }
-        PostOrderLastToFirstRecursiveFind(el) {
-            local children := el.CachedChildren, len := children.Length + 1, found
-            Loop len-1 {
-                if found := PostOrderLastToFirstRecursiveFind(children[len-A_index])
-                    return found
-            }
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el) && --index = 0
-                return el
+            return c
         }
     }
 
@@ -3008,10 +2984,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         if withOptions && !UIA.IsIUIAutomationElement7Available && (Type(condition) ~= "i)Condition|ComValue")
             throw ValueError("If using order or startingElement arguments in Windows <10.0.15063, then condition cannot be IUIAutomationCondition", -1)
         if !(Type(condition) ~= "i)Condition|ComValue") {
-            IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=False), unfilteredEls := [], filteredEls := []
+            IUIAcondition := UIA.__ConditionBuilder(condition, &nonUIAEncountered:=0), unfilteredEls := [], filteredEls := []
 
             if callback {
-                local foundElements := [], child, TW := UIA.CreateTreeWalker(IUIAcondition)
+                local foundElements := [], TW := UIA.CreateTreeWalker(IUIAcondition), c := 0
                 if startingElement
                     startingElement := startingElement.RuntimeId
                 ; FirstToLast or LastToFirst
@@ -3022,26 +2998,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     nextElementFunc := UIA.IUIAutomationTreeWalker.Prototype.TryGetNextSiblingElement.Bind(TW), 
                     nextChildFunc := UIA.IUIAutomationTreeWalker.Prototype.TryGetFirstChildElement.Bind(TW)
                 ; First handle PostOrder
-                if order&1 {
-                    if scope&4 {
-                        ; Handle scope&2 separately to avoid needing to check recursion depth later
-                        child := nextChildFunc(this)
-                        while (IsObject(child)) {
-                            if scope&4 ; If scope&4 then PostOrderRecursiveFind handles everything
-                                PostOrderRecursiveFind(child)
-                            else if scope&2 && callback(child)
-                                foundElements.Push(cacheRequest ? child.BuildUpdatedCache(cacheRequest) : child)
-                            child := nextElementFunc(child)
-                        }
-                    }
-                    if scope&1 && callback(this)
-                        foundElements.Push(cacheRequest ? this.BuildUpdatedCache(cacheRequest) : this)
-                    return foundElements
-                }
+                if order&1
+                    return (PostOrderRecursiveFind(this, scope), foundElements)
                 ; PreOrder
-                if scope&1 && callback(this)
+                if scope&1 && (c := callback(this)) > 0
                     foundElements.Push(cacheRequest ? this.BuildUpdatedCache(cacheRequest) : this)
-                if scope > 1
+                if scope > 1 && c >= 0
                     PreOrderRecursiveFind(nextChildFunc(this))
                 return foundElements
             }
@@ -3074,23 +3036,29 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         return found ? UIA.IUIAutomationElementArray(found).ToArray() : []
 
-        PreOrderRecursiveFind(el) {
-            while (IsObject(el)) {
-                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el)
+        PreOrderRecursiveFind(el, depth:=0) {
+            ++depth
+            while (c := 0, IsObject(el)) {
+                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, A_Index, depth)) > 0
                     foundElements.Push(cacheRequest ? el.BuildUpdatedCache(cacheRequest) : el)
-                if scope&4
-                    PreOrderRecursiveFind(nextChildFunc(el))
+                if scope&4 && c >= 0
+                    PreOrderRecursiveFind(nextChildFunc(el), depth)
                 el := nextElementFunc(el)
             }
         }
-        PostOrderRecursiveFind(el) { ; this is only called if scope >= 4, and handles scope&2 as well
-            local child := nextChildFunc(el)
-            while (IsObject(child)) {
-                PostOrderRecursiveFind(child)
-                child := nextElementFunc(child)
+        PostOrderRecursiveFind(el, scope, i:=1, depth:=-1) { ; this is only called if scope >= 4, and handles scope&2 as well
+            local child := nextChildFunc(el), c := 0
+            ++depth
+            if scope > 1 {
+                while (IsObject(child)) {
+                    if PostOrderRecursiveFind(child, (scope & ~2)|1, A_Index, depth) = -1
+                        break
+                    child := nextElementFunc(child)
+                }
             }
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el)
+            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el)) > 0
                 foundElements.Push(cacheRequest ? el.BuildUpdatedCache(cacheRequest) : el)
+            return c
         }
     }
 
@@ -3108,75 +3076,45 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {[UIA.IUIAutomationElement]}
      */
     FindCachedElements(condition, scope:=4, order:=0, startingElement:=0) {
-        local callback := 0, foundElements := [], child
+        local callback := 0, foundElements := [], c := 0
         condition := UIA.IUIAutomationElement.__ExtractConditionNamedParameters(condition, &scope, &order, &startingElement,,, &callback)
         callback := callback || UIA.IUIAutomationElement.Prototype.ValidateCondition.Bind(unset, condition, true), scope := UIA.TypeValidation.TreeScope(scope), order := UIA.TypeValidation.TreeTraversalOptions(order), startingElement := UIA.TypeValidation.Element(startingElement)
         if startingElement
             startingElement := startingElement.RuntimeId
+        ChildOrder := order&2 ? "ReversedCachedChildren" : "CachedChildren"
         ; First handle PostOrder
-        if order&1 {
+        if order&1
+            return (PostOrderRecursiveFind(this, scope), foundElements)
+        ; PreOrder
+        if scope&1 && (c := callback(this, 1, 0)) > 0
+            foundElements.Push(this)
+        if scope > 1 && c >= 0
+            return (PreOrderRecursiveFind(this), foundElements)
+        return foundElements
+
+        PreOrderRecursiveFind(el, depth:=0) {
+            local child, c
+            depth++
+            for i, child in el.%ChildOrder% {
+                c := 0
+                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(child, i, depth)) > 0
+                    foundElements.Push(child)
+                if c >= 0 && scope&4
+                    PreOrderRecursiveFind(child, depth)
+            }
+        }
+        PostOrderRecursiveFind(el, scope, i:=1, depth:=-1) {
+            local child, c := 0
+            depth++
             if scope > 1 {
-                if order&2 { ; LastToFirst
-                    local children := this.CachedChildren, len := children.Length + 1
-                    Loop len-1 {
-                        child := children[len-A_index]
-                        if scope&4
-                            PostOrderLastToFirstRecursiveFind(child) ; Handles this child and its descendants
-                        else if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child)
-                            foundElements.Push(child)
-                    }
-                } else { ; FirstToLast
-                    for child in this.CachedChildren {
-                        if scope&4
-                            PostOrderFirstToLastRecursiveFind(child) ; Handles this child and its descendants
-                        else if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child)
-                            foundElements.Push(child)
-                    }
+                for j, child in el.%ChildOrder% {
+                    if PostOrderRecursiveFind(child, (scope & ~2)|1, j, depth) = -1
+                        break
                 }
             }
-            if scope&1 && (startingElement ? (startingElement = this.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(this)
-                foundElements.Push(this)
-            return foundElements
-        }
-        ; PreOrder
-        if scope&1 && callback(this)
-            foundElements.Push(this)
-        if scope > 1
-            return (order&2 ? PreOrderLastToFirstRecursiveFind(this) : PreOrderFirstToLastRecursiveFind(this), foundElements)
-        return foundElements
-        PreOrderFirstToLastRecursiveFind(el) {
-            local child
-            for child in el.CachedChildren {
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child)
-                    foundElements.Push(child)
-                if scope&4
-                    PreOrderFirstToLastRecursiveFind(child)
-            }
-        }
-        PreOrderLastToFirstRecursiveFind(el) {
-            local children := el.CachedChildren, len := children.Length + 1, child
-            Loop len-1 {
-                child := children[len-A_index]
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(child)
-                    foundElements.Push(child)
-                if scope&4
-                    PreOrderLastToFirstRecursiveFind(child)
-            }
-        }
-        PostOrderFirstToLastRecursiveFind(el) { ; called only if scope>=4
-            local child
-            for child in el.CachedChildren
-                PostOrderFirstToLastRecursiveFind(child)
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el)
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0
                 foundElements.Push(el)
-        }
-        PostOrderLastToFirstRecursiveFind(el) { ; called only if scope>=4
-            local children, len
-            children := el.CachedChildren, len := children.Length + 1
-            Loop len-1
-                PostOrderLastToFirstRecursiveFind(children[len-A_index])
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(el)
-                foundElements.Push(el)
+            return c
         }
     }
 
@@ -3547,32 +3485,35 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
 
     ; Internal method: checks whether this element matches the condition
-    ValidateCondition(cond, cached:=False) {
-        local mm, cs, notCond := 0, k, v, result, i, val
-        switch Type(cond) {
-            case "Object":
-                mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : unset
-                cs := cond.HasOwnProp("casesense") ? cond.casesense : cond.HasOwnProp("cs") ? cond.cs : unset
-                if !IsInteger(mm ?? 0)
-                    mm := UIA.MatchMode.%mm%
-                if !IsInteger(cs ?? 0)
-                    cs := UIA.CaseSense.%cs%
-                notCond := cond.HasOwnProp("operator") ? cond.operator = "not" : cond.HasOwnProp("op") ? cond.op = "not" : 0
-                cond := cond.OwnProps()
-            case "Array":
-                for k, v in cond {
-                    if IsObject(v) && this.ValidateCondition(v, cached)
-                        return true
-                }
-                return false
-            default:
-                throw ValueError("Condition of type " Type(cond) " is an invalid ValidateCondition condition", -1, "The condition can be an Object or Array")
-        }
+    ValidateCondition(cond, cached:=False, i?, depth?) {
+        local mm, cs, notCond := 0, k, v, result, val
+        if !IsObject(cond)
+            throw ValueError("Condition of type " Type(cond) " is an invalid ValidateCondition condition", -1, "The condition can be a plain object, array or a method")
+        if HasMethod(cond)
+            return cond(this, i?, depth?)
+        if Type(cond) = "Object" {
+            mm := cond.HasOwnProp("matchmode") ? cond.matchmode : cond.HasOwnProp("mm") ? cond.mm : unset
+            cs := cond.HasOwnProp("casesense") ? cond.casesense : cond.HasOwnProp("cs") ? cond.cs : unset
+            if !IsInteger(mm ?? 0)
+                mm := UIA.MatchMode.%mm%
+            if !IsInteger(cs ?? 0)
+                cs := UIA.CaseSense.%cs%
+            notCond := cond.HasOwnProp("operator") ? cond.operator = "not" : cond.HasOwnProp("op") ? cond.op = "not" : 0
+            cond := cond.OwnProps()
+        } else if cond is Array {
+            for k, v in cond {
+                if IsObject(v) && this.ValidateCondition(v, cached, i?, depth?)
+                    return true
+            }
+            return false
+        } else
+            throw ValueError("Condition of type " Type(cond) " is an invalid ValidateCondition condition", -1, "The condition can be a plain object, array or a method")
+
         for k, v in cond {
             try k := UIA.TypeValidation.Property(k)
             if !(IsInteger(k) && k >= 10000) {
                 if IsObject(v) {
-                    if (k = "not" ? this.ValidateCondition(v, cached) : !this.ValidateCondition(v, cached))
+                    if (k = "not" ? this.ValidateCondition(v, cached, i?, depth?) : !this.ValidateCondition(v, cached, i?, depth?))
                         return False
                 }
                 continue
@@ -4520,7 +4461,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     }
     ; FindAll with additional parameters
     ; This gets called when FindAll or FindElements is used with traversalOptions or startingElement arguments
-    FindAllWithOptions(condition,  traversalOptions:=0, root:=0, scope:=4) {
+    FindAllWithOptions(condition, traversalOptions:=0, root:=0, scope:=4) {
         local found
         if (ComCall(111, this, "int", UIA.TypeValidation.TreeScope(scope), "ptr", (Type(condition) ~= "i)Condition|ComValue") ? condition : UIA.__CreateRawCondition(condition), "int", UIA.TypeValidation.TreeTraversalOptions(traversalOptions), "ptr", root, "ptr*", &found := 0), found)
             return UIA.IUIAutomationElementArray(found).ToArray()
@@ -4743,6 +4684,12 @@ class IUIAutomationArray extends UIA.IUIAutomationBase {
         local ret := []
         Loop this.Length
             ret.Push(this.GetElement(A_index-1))
+        return ret
+    }
+    ToReversedArray() {
+        local ret := [], len := this.Length
+        Loop len
+            ret.Push(this.GetElement(len-A_Index))
         return ret
     }
 }
