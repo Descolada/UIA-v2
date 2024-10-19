@@ -2006,7 +2006,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; Children are cached only if the scope of the cache request included TreeScope_Subtree, TreeScope_Children, or TreeScope_Descendants.
     ; If the cache request specified that children were to be cached at this level, but there are no children, the value of this property is 0. However, if no request was made to cache children at this level, an attempt to retrieve the property returns an error.
     CachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
-    ReversedCachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToReversedArray():[])
+    ReversedCachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : [])
 
     GetCachedChildren(scope:=2) {
         local children
