@@ -527,18 +527,19 @@ static RuntimeIdFromString(str) {
 }
 
 /**
- * Filters elements from an element array if "function" evaluates to True
+ * Filters elements from an element array if "function" evaluates to True.
+ * The resulting elements will have an Index property added which is the index in the original unfiltered array.
  * @param elementArray Array of elements
  * @param function A function that accepts one parameter (an element) and validates it against some condition.
  * @returns {Array}
  */
 static Filter(elementArray, function) {
-    local el, ret := []
+    local i, el, ret := []
     if !InStr(Type(elementArray), "Array")
         throw TypeError("elementArray must be an Array or IUIAutomationElementArray", -1)
-    for el in elementArray
+    for i, el in elementArray
         if function(el)
-            ret.Push(el)
+            el.DefineProp("Index", {value: i}), ret.Push(el)
     return ret
 }
 
@@ -2637,13 +2638,14 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
 
     /**
      * Waits for this element to not exist
-     * @param timeout Waiting time for element to disappear. Default: indefinite wait
+     * @param timeout Optional: Waiting time for element to disappear. Default: indefinite wait
+     * @param tick Optional: Wait time between each check. Default: 20ms
      * @returns {Integer}
      */
-    WaitNotExist(timeOut:=-1) {
+    WaitNotExist(timeOut := -1, tick := 20) {
         local endtime := A_TickCount + timeout, exists
         while ((exists := this.Exists) && ((timeout == -1) || (A_Tickcount < endtime)))
-            Sleep 20
+            Sleep tick
         return !exists
     }
 
@@ -2666,7 +2668,6 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         startingElement := pureCondition.DeleteProp("startingElement") || startingElement
         if IsSet(cacheRequest)
             cacheRequest := pureCondition.DeleteProp("cacheRequest") || cacheRequest
-        pureCondition.DeleteProp("timeOut")
         callback := pureCondition.DeleteProp("callback") || callback
         return pureCondition
     }
@@ -3129,16 +3130,18 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
      * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
      * @param cacheRequest Optional: cache request object
+     * @param tick Optional: sleep time between checks for the element. Default is 20ms
      * @returns {UIA.IUIAutomationElement} Found element if successful, 0 if timeout happens
      */
-    WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
+    WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0, tick := 20) {
         local endtime
-        timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
-        timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut")
+        condition := condition.Clone()
+        timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut"), tick := UIA.TypeValidation.Integer(tick, "Tick")
         endtime := A_TickCount + timeOut
         While ((timeOut == -1) || (A_Tickcount < endtime)) {
             try return this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
-            Sleep 20
+            Sleep tick
         }
         return 0
     }
@@ -3153,16 +3156,20 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @param order Optional: custom tree navigation order, one of UIA.TreeTraversalOptions values (LastToFirstOrder, PostOrder, LastToFirstPostOrder) [requires Windows 10 version 1703+]
      * @param startingElement Optional: element with which to begin the search [requires Windows 10 version 1703+]
      * @param cacheRequest Optional: cache request object
+     * @param tick Optional: sleep time between checks for the element. Default is 20ms
      * @returns 1 if element disappeared, 0 otherwise
      */
-    WaitElementNotExist(condition, timeout := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0) {
+    WaitElementNotExist(condition, timeout := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0, tick := 20) {
         local endtime
-        timeOut := condition.HasOwnProp("timeOut") ? condition.timeOut : timeOut
+        condition := condition.Clone()
+        timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut"), tick := UIA.TypeValidation.Integer(tick, "Tick")
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
             try this.FindElement(condition, scope, index, order, startingElement, cacheRequest)
             catch
                 return 1
+            Sleep tick
         }
         return 0
     }
@@ -3310,13 +3317,17 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * @returns {UIA.IUIAutomationElement}
      */
     WaitElementFromPath(paths*) {
-        local timeOut := -1, endtime
-        if paths.Length > 1 && paths[paths.Length] is Integer
-            paths := paths.Clone(), timeOut := paths.Pop()
+        local timeOut := -1, endtime, tick := 20
+        if paths.Length > 1 && paths[paths.Length] is Integer {
+            paths := paths.Clone()
+            if paths[-2] is Integer
+                tick := paths.Pop()
+            timeOut := paths.Pop()
+        }
         endtime := A_TickCount + timeOut
         While ((timeOut == -1) || (A_Tickcount < endtime)) {
             try return this[paths*]
-            Sleep 20
+            Sleep tick
         }
     }
 
