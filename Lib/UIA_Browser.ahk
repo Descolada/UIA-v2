@@ -197,6 +197,10 @@ class UIA_Vivaldi extends UIA_Browser {
 		this.ControlSend("{ctrl down}w{ctrl up}")
 	}
 
+	Reload() { 
+		this.GetCurrentReloadButton().ControlClick()
+	}
+
 	Back() { 
 		this.ReloadButton.WalkTree("-2", this.ButtonControlCondition).Click()
 	}
