@@ -3483,6 +3483,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     GetAllPropertyValues() {
         local infos := {}, k, v, arr, t
         for k, v in UIA.Property.OwnProps() {
+            if k = "__CachedValues"
+                continue
             v := this.GetPropertyValue(v)
             if (v is ComObjArray) {
                 arr := []
@@ -3681,11 +3683,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; This gets called when Element.Property is used
     GetPropertyValue(propertyId) {
         local val
-        if IsObject(propertyId)
-            return
         if !IsNumber(propertyId) {
-            try
+            if Type(propertyId) = "String"
                 propertyId := UIA.Property.%propertyId%
+            else
+                throw ValueError("Invalid ``propertyId``; Value must be an integer or string.", -1, "Type(input) == " Type(propertyID))
         }
         ComCall(10, this, "int", propertyId, "ptr", val := UIA.ComVar())
         return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
