@@ -1,4 +1,4 @@
-﻿/*
+ ﻿/*
     Introduction & credits
     This library implements Microsoft's UI Automation framework.
     Microsoft's official documentation:: https://docs.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32
@@ -3681,8 +3681,12 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; This gets called when Element.Property is used
     GetPropertyValue(propertyId) {
         local val
-        if !IsNumber(propertyId)
-            try propertyId := UIA.Property.%propertyId%
+        if IsObject(propertyId)
+            return
+        if !IsNumber(propertyId) {
+            try
+                propertyId := UIA.Property.%propertyId%
+        }
         ComCall(10, this, "int", propertyId, "ptr", val := UIA.ComVar())
         return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
     }
