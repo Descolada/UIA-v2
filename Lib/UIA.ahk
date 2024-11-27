@@ -1,4 +1,4 @@
- ﻿/*
+﻿/*
     Introduction & credits
     This library implements Microsoft's UI Automation framework.
     Microsoft's official documentation:: https://docs.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32
