@@ -838,13 +838,13 @@ static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeO
         elVarRef := timeOutVarRef, timeOut := %timeOutVarRef%
     if (%elVarRef% := this.ElementFromHandle(cHwnd, cacheRequest?, False)) {
         cEl := cEl ?? %elVarRef%
-        try _ := cEl.Name ; it doesn't work without calling CurrentName (at least in Skype)
-        try {
-            if (cEl.Type == 50030) {
-                waitTime := A_TickCount + timeOut
-                while (!cEl.Value && (A_TickCount < waitTime))
-                    Sleep 20
+        waitTime := A_TickCount + timeOut
+        while (A_TickCount < waitTime) {
+            try {
+                if cEl.Children.Length
+                    break
             }
+            Sleep 1
         }
     }
     return %elVarRef%
@@ -7517,7 +7517,7 @@ class Viewer {
         , mwX, mwY, mwW, mwH
         SetTimer(this.CaptureCallback, -3000) ; In case of an error try again in 3 seconds
         CoordMode "Mouse", "Screen" 
-        MouseGetPos(&mX, &mY, &mwId, &mwCtrl, 2)
+        MouseGetPos(&mX, &mY, &mwId := 0, &mwCtrl := 0, 2)
         ; If is a Chromium window then also get the control, because some Chromium windows don't show content from main window
         ; Also activate accessibility, afterwards don't activate anymore
         try {
@@ -7525,18 +7525,18 @@ class Viewer {
             UIA.ActivateChromiumAccessibility(mwId)
         }
         ; If the control was considered the window, assume that this is still needed
-        if mwCtrl = this.Stored.mwId
+        if mwCtrl && mwCtrl = this.Stored.mwId
             mwId := mwCtrl
         CapturedElement := this.TryUpdateElementVariables(mwId, mX, mY)
         ; If ctrl and main window aren't the same, then compare their sizes. If sizes are the same
         ; then instead try to get the element from the control under the mouse (eg Chromium content)
-        if mwId != mwCtrl && this.Stored.mwId != mwCtrl && mwCtrl && CapturedElement {
+        if mwCtrl && mwId != mwCtrl && this.Stored.mwId != mwCtrl && CapturedElement {
             try WinGetClientPos(&clientX, &clientY, &clientW, &clientH, mwId)
             elBr := CapturedElement.CachedBoundingRectangle, winBr := this.Stored.CapturedWindow.CachedBoundingRectangle
             ; If element size is equal to window/client size, then probably it's not accessible through the window
             ; Instead try to get the content through the control under the cursor
-            if (elBr.l = winBr.l && elbr.t = winBr.t && elBr.r = winBr.r && elBr.b = winBr.b)
-                || (elBr.l = clientX && elBr.t = clientY && elBr.r = (clientX+clientW) && elBr.b = (clientY+clientH)) {
+            if Abs(elBr.l - winBr.l + elbr.t - winBr.t + elBr.r - winBr.r + elBr.b - winBr.b) < 4
+                || Abs(elBr.l - clientX + elBr.t - clientY + elBr.r - (clientX+clientW) + elBr.b - (clientY+clientH)) < 4 {
                 CapturedElementCtrl := this.TryUpdateElementVariables(mwCtrl, mX, mY)
                 if CapturedElementCtrl {
                     clsNN := ControlGetClassNN(mwCtrl, mwId), CapturedElement := CapturedElementCtrl, mwId := mwCtrl
