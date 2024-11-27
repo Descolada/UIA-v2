@@ -3684,10 +3684,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     GetPropertyValue(propertyId) {
         local val
         if !IsNumber(propertyId) {
-            if Type(propertyId) = "String"
+            if UIA.Property.HasOwnProp(propertyId)
                 propertyId := UIA.Property.%propertyId%
             else
-                throw ValueError("Invalid ``propertyId``; Value must be an integer or string.", -1, "Type(input) == " Type(propertyID))
+                throw ValueError("Invalid propertyId.", -1, IsObject(propertyId) ? "PropertyId must be a string or an integer, but " Type(propertyId) " was provided" : propertyId)
         }
         ComCall(10, this, "int", propertyId, "ptr", val := UIA.ComVar())
         return val[] is ComObjArray ? UIA.SafeArrayToAHKArray(val[]) : val[]
