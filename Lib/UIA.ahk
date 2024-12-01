@@ -3135,8 +3135,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     WaitElement(condition, timeOut := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0, tick := 20) {
         local endtime
-        condition := condition.Clone()
-        timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        if Type(condition) = "Object" {
+            condition := condition.Clone()
+            timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        }
         timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut"), tick := UIA.TypeValidation.Integer(tick, "Tick")
         endtime := A_TickCount + timeOut
         While ((timeOut == -1) || (A_Tickcount < endtime)) {
@@ -3161,8 +3163,10 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      */
     WaitElementNotExist(condition, timeout := -1, scope := 4, index := 1, order := 0, startingElement := 0, cacheRequest := 0, tick := 20) {
         local endtime
-        condition := condition.Clone()
-        timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        if Type(condition) = "Object" {
+            condition := condition.Clone()
+            timeOut := (condition.DeleteProp("timeOut") || timeOut), tick := (condition.DeleteProp("tick") || tick)
+        }
         timeOut := UIA.TypeValidation.Integer(timeOut, "TimeOut"), tick := UIA.TypeValidation.Integer(tick, "Tick")
         endtime := A_TickCount + timeout
         While (timeout == -1) || (A_Tickcount < endtime) {
