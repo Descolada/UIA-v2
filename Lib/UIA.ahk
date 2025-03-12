@@ -607,14 +607,14 @@ static FindElementFromArray(elementArray, condition, index:=1, startingElement:=
         startingElement := startingElement.RuntimeId
     if index > 0 {
         for element in elementArray {
-            if (startingElement ? (startingElement = element.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(element) && --index = 0
+            if (startingElement ? (startingElement = element.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && callback(element) && --index = 0
                 return cacheRequest ? element.BuildUpdatedCache(cacheRequest) : element
         }
     } else {
         index := -index, len := elementArray.Length + 1
         Loop len-1 {
             element := elementArray[len-A_index]
-            if (startingElement ? (startingElement = element.RuntimeId ? !(startingElement := "") : 0) : 1) && callback(element) && --index = 0
+            if (startingElement ? (startingElement = element.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && callback(element) && --index = 0
                 return cacheRequest ? element.BuildUpdatedCache(cacheRequest) : element
         }
     }
@@ -2846,7 +2846,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             local found
             depth++
             while (c := 0, IsObject(el)) {
-                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, A_Index, depth)) > 0 && --index = 0
+                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el, A_Index, depth)) > 0 && --index = 0
                     return el
                 else if c >= 0 && scope&4 && IsObject(found := PreOrderRecursiveFind(nextChildFunc(el), depth))
                     return found
@@ -2865,7 +2865,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     child := nextElementFunc(child)
                 }
             }
-            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
                 return el
             return c
         }
@@ -2944,7 +2944,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             depth++
             for i, child in el.%ChildOrder% {
                 c := 0
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(child, i, depth)) > 0 && --index = 0
+                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(child, i, depth)) > 0 && --index = 0
                     return child
                 else if (c >= 0) && scope&4 && (found := PreOrderRecursiveFind(child, depth))
                     return found
@@ -2959,7 +2959,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                 else if found = -1
                     break
             }
-            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el, i, depth)) > 0 && --index = 0
                 return el
             return c
         }
@@ -3040,7 +3040,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         PreOrderRecursiveFind(el, depth:=0) {
             ++depth
             while (c := 0, IsObject(el)) {
-                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, A_Index, depth)) > 0
+                if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el, A_Index, depth)) > 0
                     foundElements.Push(cacheRequest ? el.BuildUpdatedCache(cacheRequest) : el)
                 if scope&4 && c >= 0
                     PreOrderRecursiveFind(nextChildFunc(el), depth)
@@ -3057,7 +3057,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                     child := nextElementFunc(child)
                 }
             }
-            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el)) > 0
+            if (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el)) > 0
                 foundElements.Push(cacheRequest ? el.BuildUpdatedCache(cacheRequest) : el)
             return c
         }
@@ -3098,7 +3098,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             depth++
             for i, child in el.%ChildOrder% {
                 c := 0
-                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(child, i, depth)) > 0
+                if (startingElement ? (startingElement = child.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(child, i, depth)) > 0
                     foundElements.Push(child)
                 if c >= 0 && scope&4
                     PreOrderRecursiveFind(child, depth)
@@ -3113,7 +3113,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
                         break
                 }
             }
-            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") : 0) : 1) && (c := callback(el, i, depth)) > 0
+            if scope&1 && (startingElement ? (startingElement = el.RuntimeId ? !(startingElement := "") && (scope & 1) : 0) : 1) && (c := callback(el, i, depth)) > 0
                 foundElements.Push(el)
             return c
         }
