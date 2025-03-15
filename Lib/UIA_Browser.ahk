@@ -720,11 +720,14 @@ class UIA_Browser {
 			Sleep 200
 			newTitle := WinGetTitle("A")
 		}
+		if (((A_TickCount - startTime) < timeOut) || (timeOut = -1))
+			return newTitle
+		return false
 	}
 	
 	; Waits the browser page to load to targetTitle, default timeOut is indefinite waiting, sleepAfter additionally sleeps for 200ms after the page has loaded. 
 	WaitPageLoad(targetTitle:="", timeOut:=-1, sleepAfter:=500, titleMatchMode:="", titleCaseSensitive:=False) {
-		local legacyPattern := "", startTime := A_TickCount, wTitle, ReloadButtonName := "", ReloadButtonDescription := "", ReloadButtonFullDescription := "" 
+		local legacyPattern := "", startTime := A_TickCount, wTitle := "", ReloadButtonName := "", ReloadButtonDescription := "", ReloadButtonFullDescription := "" 
 		Sleep 200 ; Give some time for the Reload button to change after navigating
 		if this.ReloadButtonDescription
 			try legacyPattern := this.ReloadButton.LegacyIAccessiblePattern
@@ -738,7 +741,7 @@ class UIA_Browser {
 			   && (this.ReloadButtonDescription && legacyPattern ? InStr(ReloadButtonDescription, this.ReloadButtonDescription) : 1)
 			   && (this.ReloadButtonFullDescription ? InStr(ReloadButtonFullDescription, this.ReloadButtonFullDescription) : 1)))
 			   || !this.ReloadButton.IsEnabled {
-				if targetTitle {
+				if targetTitle != "" {
 					wTitle := WinGetTitle(this.BrowserId)
 					if UIA_Browser.CompareTitles(targetTitle, wTitle, titleMatchMode, titleCaseSensitive)
 						break
@@ -749,6 +752,9 @@ class UIA_Browser {
 		}
 		if ((A_TickCount - startTime) < timeOut) || (timeOut = -1)
 			Sleep sleepAfter
+		else
+			return false
+		return targetTitle = "" ? true : wTitle
 	}
 	
 	; Presses the Back button
