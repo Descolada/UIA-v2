@@ -43,7 +43,9 @@
     To-do:
     - Better error handling
 */
-global IUIAutomationMaxVersion := 7, IUIAutomationActivateScreenReader := 1
+global IUIAutomationMaxVersion := IUIAutomationMaxVersion ?? 7
+    , IUIAutomationActivateScreenReader := IUIAutomationActivateScreenReader ?? 1
+    , IUIAutomationDllPath := IUIAutomationDllPath ?? ""
 
 if !A_IsCompiled && A_LineFile = A_ScriptFullPath
     UIA.Viewer()
@@ -70,20 +72,64 @@ static __New() {
         IUIAutomation4:"{1189c02a-05f8-4319-8e21-e817e3db2860}",
         IUIAutomation5:"{25f700c8-d816-4057-a9dc-3cbdee77e256}",
         IUIAutomation6:"{aae072da-29e3-413d-87a7-192dbf81ed10}",
-        IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}"
+        IUIAutomation7:"{29de312e-83c6-4309-8808-e8dfcb46c3c2}",
+        IClassFactory:"{00000001-0000-0000-c000-000000000046}"
+    }, 
+    __CLSID := {
+        CUIAutomation:"{ff48dba4-60ef-4201-aa87-54103eef594e}",
+        CUIAutomation8:"{e22ad333-b25f-460c-83d0-0581107395c9}"
     }, __Cleanup := this.Cleanup()
 
-    while (--this.IUIAutomationVersion > 1) {
-        if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
-            continue
-        try {
-            this.ptr := ComObjValue(this.__ := ComObject("{e22ad333-b25f-460c-83d0-0581107395c9}", __IID.IUIAutomation%(this.IUIAutomationVersion)%))
-            break
+    if (IUIAutomationDllPath != "") {
+        hModule := DllCall("LoadLibrary", "Str", IUIAutomationDllPath, "Ptr")
+        if !hModule
+            throw Error("Failed to load custom UIA DLL",, IUIAutomationDllPath)
+        pDllGetClassObject := DllCall("GetProcAddress", "Ptr", hModule, "AStr", "DllGetClassObject", "Ptr")
+        if !pDllGetClassObject
+            throw Error("Failed to get custom UIA DllGetClassObject")
+        DllCall("ole32\CLSIDFromString", "Str", __CLSID.CUIAutomation8, "Ptr", CLSID_CUIAutomation8 := Buffer(16))
+        DllCall("ole32\IIDFromString", "Str", __IID.IClassFactory, "Ptr", IID_IClassFactory := Buffer(16))
+
+        if DllCall(pDllGetClassObject, "Ptr", CLSID_CUIAutomation8, "Ptr", IID_IClassFactory, "Ptr*", ppFactory := ComValue(13, 0))
+            goto RegularCUI
+
+        while (--this.IUIAutomationVersion > 1) {
+            if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
+                continue
+            try {
+                DllCall("ole32\IIDFromString", "Str", __IID.IUIAutomation%(this.IUIAutomationVersion)%, "Ptr", IID := Buffer(16))
+                ComCall(3, ppFactory, "Ptr", 0, "Ptr", IID, "Ptr*", &ppAutomation:=0)
+                if !ppAutomation
+                    continue
+                this.ptr := ppAutomation
+                break
+            }
         }
+        
+        RegularCUI:
+        if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr) {
+            DllCall("ole32\CLSIDFromString", "Str", __CLSID.CUIAutomation, "Ptr", CLSID_CUIAutomation := Buffer(16))
+            if DllCall(pDllGetClassObject, "Ptr", CLSID_CUIAutomation, "Ptr", IID_IClassFactory, "Ptr*", ppFactory := ComValue(13, 0))
+                throw Error("Failed to get CUIAutomation class factory")
+            DllCall("ole32\IIDFromString", "Str", __IID.IUIAutomation, "Ptr", IID := Buffer(16))
+            ComCall(3, ppFactory, "Ptr", 0, "Ptr", IID, "Ptr*", &ppAutomation:=0)
+            if !ppAutomation
+                throw Error("Failed to initialize UIA from custom DLL")
+            this.ptr := ppAutomation
+        }
+    } else {
+        while (--this.IUIAutomationVersion > 1) {
+            if !__IID.HasOwnProp("IUIAutomation" this.IUIAutomationVersion)
+                continue
+            try {
+                this.ptr := ComObjValue(this.__ := ComObject(__CLSID.CUIAutomation8, __IID.IUIAutomation%(this.IUIAutomationVersion)%))
+                break
+            }
+        }
+        ; If all else fails, try the first IUIAutomation version
+        if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr)
+            this.ptr := ComObjValue(this.__ := ComObject(__CLSID.CUIAutomation, __IID.IUIAutomation))
     }
-    ; If all else fails, try the first IUIAutomation version
-    if !this.HasOwnProp("ptr") || (this.HasOwnProp("ptr") && !this.ptr)
-        this.ptr := ComObjValue(this.__ := ComObject("{ff48dba4-60ef-4201-aa87-54103eef594e}", "{30cbe57d-d9d0-452a-ab13-7ac5ac4825ee}"))
     this.TrueCondition := this.CreateTrueCondition(), this.TreeWalkerTrue := this.CreateTreeWalker(this.TrueCondition)
     ; Define some properties that shouldn't be included in the value->name Map
     this.Property[30000], this.Property.T := 30003, this.Property.ControlType := 30003, this.Property.N := 30005, this.Property.CN := 30012, this.Property.A := 30011
