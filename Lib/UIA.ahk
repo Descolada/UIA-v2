@@ -7627,9 +7627,9 @@ class Viewer {
             return
         this.Stored.mwId := mwId, this.Stored.CapturedElement := CapturedElement, this.Stored.mX := mX, this.Stored.mY := mY, this.FoundTime := A_TickCount
         propsOrder := ["Title", "Text", "Id", "Location", "Class(NN)", "Process", "PID"]
-        props := Map("Title", WinGetTitle(mwId), "Text", WinGetText(mwId), "Id", mwId, "Location", "x: " mwX " y: " mwY " w: " mwW " h: " mwH, "Class(NN)", WinGetClass(mwId), "Process", WinGetProcessName(mwId), "PID", WinGetPID(mwId))
+        prop := Map("Title", WinGetTitle(mwId), "Text", WinGetText(mwId), "Id", mwId, "Location", "x: " mwX " y: " mwY " w: " mwW " h: " mwH, "Class(NN)", WinGetClass(mwId), "Process", WinGetProcessName(mwId), "PID", WinGetPID(mwId))
         for propName in propsOrder
-            this.LVWin.Add(,propName,props[propName])
+            this.LVWin.Add(,propName,prop[propName])
         this.PopulatePropsPatterns(CapturedElement)
     }
 
