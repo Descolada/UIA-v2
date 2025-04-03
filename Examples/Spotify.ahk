@@ -110,14 +110,27 @@ class Spotify {
     static PreviousSong() => Spotify.GetCurrentSongElement()[{Name:"Previous"}].Click()
 
     static FullscreenState {
-        get => Spotify.GetSpotifyElement()[-1].Type == UIA.Type.Button
+        get {
+            try {
+                fse := Spotify.GetSpotifyElement()[{Type: "Button", i: -1}]
+                return InStr(fse.Name, "Exit full screen")
+            } catch {
+                return true
+            }
+        }
         set {
             WinActivate(Spotify.winExe)
             WinWaitActive(Spotify.winExe,,1)
-            if Spotify.FullscreenState
-                Spotify.GetSpotifyElement()[-1].Click()
-            else
+            if Spotify.FullscreenState {
+                try {
+                    Spotify.GetSpotifyElement()[{Type: "Button", i: -1}].Click()
+                } catch {
+                    ; No buttons available, and {Esc} doesn't work here.
+                    ; Sometimes works after a few seconds.
+                }
+            } else {
                 Spotify.GetCurrentSongElement()[-1].Click()
+            }
         }
     }
     static ToggleFullscreen() => Spotify.FullscreenState := !Spotify.FullscreenState
