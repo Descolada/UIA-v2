@@ -13,8 +13,11 @@ F11::Spotify.ToggleFullscreen()
 ^l::
 {
     song := Spotify.CurrentSong
-    Spotify.Toast("You " (!Spotify.LikeState ? "liked " : "removed a like from ") song.Name " by " song.Artist)
-    Spotify.ToggleLike()
+    if Spotify.Like() {
+        Spotify.Toast("You liked " song.Name " by " song.Artist)
+    } else {
+        Spotify.Toast("Already liked? No like button found.")
+    }
 }
 ^Left::Spotify.NextSong()
 ^Right::Spotify.PreviousSong()
@@ -37,16 +40,23 @@ class Spotify {
     }
     ; Internal methods to get some commonly used Spotify UIA elements
     static GetSpotifyElement() => UIA.ElementFromHandle(Spotify.winExe)[1]
-    static GetLikeElement() => Spotify.GetSpotifyElement().ElementFromPath({T:26, i:3}, {T:26,N:"Now playing: ",mm:2}, {T:0,N:"Library", mm:2})
+    static GetLikeElement() {
+        try {
+            return Spotify.GetSpotifyElement().ElementFromPath({T:26, i:3}, {T:26, N:"Now playing: ", mm:2}, {T:0, N:"Add to Liked Songs", mm:3})
+        } catch {
+            return
+        }
+    }
     static GetCurrentSongElement() => Spotify.FullscreenState ? Spotify.GetSpotifyElement() : Spotify.GetSpotifyElement()[{T:26, i:3}]
 
-    static LikeState {
-        get => Spotify.GetLikeElement().ToggleState
-        set => Spotify.GetLikeElement().ToggleState := value
+    static Like() {
+        el := Spotify.GetLikeElement()
+        if el {
+            el.Click()
+            return true
+        }
+        return false
     }
-    static Like() => Spotify.LikeState := 1
-    static RemoveLike() => Spotify.LikeState := 0
-    static ToggleLike() => Spotify.LikeState := !Spotify.LikeState
 
     static CurrentSong {
         get {
