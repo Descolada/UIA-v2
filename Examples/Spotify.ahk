@@ -61,11 +61,33 @@ class Spotify {
     static CurrentSong {
         get {
             contentEl := Spotify.GetCurrentSongElement()
+            if Spotify.FullscreenState {
+                name := contentEl[{Type: "Text", i: 3}].Name
+                ; Only one artist is displayed when fullscreen
+                artists := contentEl[{Type: "Text", i: 4}].Name
+                time := contentEl[{Type: "Text", i: 5}].Name
+                length := contentEl[{Type: "Text", i: 7}].Name
+            } else {
+                name := contentEl[{Type: "Group"}, {Type: "Link", i: 1}].Name
+                artists := 0
+                for (link in contentEl.FindElements([{Type: "Group"}, {Type: "Link"}])) {
+                    if A_Index < 3 {
+                        continue
+                    }
+                    if artists == 0 {
+                        artists := link.Name
+                        continue
+                    }
+                    artists := artists ", " link.Name
+                }
+                time := contentEl[{Type: "Text", i: 1}].Name
+                length := contentEl[{Type: "Text", i: 3}].Name
+            }
             return {
-                Name:contentEl[{Type:"Group"},{Type:"Link",i:2}].Name, 
-                Artist:contentEl[{Type:"Group"},{Type:"Link",i:3}].Name, 
-                Time:contentEl[{Type:"Text", i:1}].Name,
-                Length:contentEl[{Type:"Text", i:3}].Name
+                Name:name,
+                Artist:artists,
+                Time:time,
+                Length:length,
             }
         }
     }
