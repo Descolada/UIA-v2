@@ -18,8 +18,8 @@ F11::Spotify.ToggleFullscreen()
 }
 ^Left::Spotify.NextSong()
 ^Right::Spotify.PreviousSong()
-^+::Spotify.Volume += 10
-^-::Spotify.Volume -= 10
+^+::Spotify.Volume += 0.1
+^-::Spotify.Volume -= 0.1
 ^m::Spotify.ToggleMute()
 
 class Spotify {
