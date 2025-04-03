@@ -9,14 +9,14 @@ UIA.AutoSetFocus := False
 
 F1::Spotify.TogglePlay()
 F11::Spotify.ToggleFullscreen()
-^d::Spotify.Toast("Playing song: " (song := Spotify.CurrentSong).Name "`nArtist: " song.Artist "`nPlay time: " song.Time " / " song.Length)
+^d::Spotify.Toast("Now Playing", (song := Spotify.CurrentSong).Name "`nArtist: " song.Artist "`nPlay time: " song.Time " / " song.Length)
 ^l::
 {
     song := Spotify.CurrentSong
     if Spotify.Like() {
-        Spotify.Toast("You liked " song.Name " by " song.Artist)
+        Spotify.Toast("Like", "You liked " song.Name " by " song.Artist)
     } else {
-        Spotify.Toast("Already liked? No like button found.")
+        Spotify.Toast("Like", "Already liked? No like button found.")
     }
 }
 ^Left::Spotify.NextSong()
@@ -31,12 +31,12 @@ class Spotify {
     static exePath := A_AppData "\Spotify\Spotify.exe"
 
     ; Internal method to show a Toast message, but before that remove the previous one
-    static Toast(message) {
+    static Toast(title, message) {
         TrayTip
         A_IconHidden := true
         Sleep 200
         A_IconHidden := false
-        TrayTip(message, "Spotify info")
+        TrayTip(message, title)
     }
     ; Internal methods to get some commonly used Spotify UIA elements
     static GetSpotifyElement() => UIA.ElementFromHandle(Spotify.winExe)[1]
