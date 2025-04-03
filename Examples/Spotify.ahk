@@ -91,14 +91,22 @@ class Spotify {
     static ToggleFullscreen() => Spotify.FullscreenState := !Spotify.FullscreenState
 
     static MuteState {
-        get => Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}] == "Mute"
+        get {
+            return (
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Name == "Mute" or
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:-3}].Name == "Mute"
+            )
+        }
         set {
             currentState := Spotify.MuteState
+            if InStr(Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Name, "ute")
+                index := -2
+            else
+                index := -3
             if Value && !currentState
-                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Click()
-            if !Value && currentState
-                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Click()
-
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:index}].Click() ; Unmuting
+            else if !Value && currentState
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:index}].Click() ; Muting
         }
     }
     static ToggleMute() => Spotify.MuteState := !Spotify.MuteState
