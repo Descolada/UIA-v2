@@ -9,17 +9,20 @@ UIA.AutoSetFocus := False
 
 F1::Spotify.TogglePlay()
 F11::Spotify.ToggleFullscreen()
-^d::Spotify.Toast("Playing song: " (song := Spotify.CurrentSong).Name "`nArtist: " song.Artist "`nPlay time: " song.Time " / " song.Length)
+^d::Spotify.Toast("Now Playing", (song := Spotify.CurrentSong).Name "`nArtist: " song.Artist "`nPlay time: " song.Time " / " song.Length)
 ^l::
 {
     song := Spotify.CurrentSong
-    Spotify.Toast("You " (!Spotify.LikeState ? "liked " : "removed a like from ") song.Name " by " song.Artist)
-    Spotify.ToggleLike()
+    if Spotify.Like() {
+        Spotify.Toast("Like", "You liked " song.Name " by " song.Artist)
+    } else {
+        Spotify.Toast("Like", "Already liked? No like button found.")
+    }
 }
 ^Left::Spotify.NextSong()
 ^Right::Spotify.PreviousSong()
-^+::Spotify.Volume += 10
-^-::Spotify.Volume -= 10
+^+::Spotify.Volume += 0.1
+^-::Spotify.Volume -= 0.1
 ^m::Spotify.ToggleMute()
 
 class Spotify {
@@ -28,34 +31,63 @@ class Spotify {
     static exePath := A_AppData "\Spotify\Spotify.exe"
 
     ; Internal method to show a Toast message, but before that remove the previous one
-    static Toast(message) {
+    static Toast(title, message) {
         TrayTip
         A_IconHidden := true
         Sleep 200
         A_IconHidden := false
-        TrayTip(message, "Spotify info")
+        TrayTip(message, title)
     }
     ; Internal methods to get some commonly used Spotify UIA elements
     static GetSpotifyElement() => UIA.ElementFromHandle(Spotify.winExe)[1]
-    static GetLikeElement() => Spotify.GetSpotifyElement().ElementFromPath({T:26, i:3}, {T:26,N:"Now playing: ",mm:2}, {T:0,N:"Library", mm:2})
+    static GetLikeElement() {
+        try {
+            return Spotify.GetSpotifyElement().ElementFromPath({T:26, i:3}, {T:26, N:"Now playing: ", mm:2}, {T:0, N:"Add to Liked Songs", mm:3})
+        } catch {
+            return
+        }
+    }
     static GetCurrentSongElement() => Spotify.FullscreenState ? Spotify.GetSpotifyElement() : Spotify.GetSpotifyElement()[{T:26, i:3}]
 
-    static LikeState {
-        get => Spotify.GetLikeElement().ToggleState
-        set => Spotify.GetLikeElement().ToggleState := value
+    static Like() {
+        el := Spotify.GetLikeElement()
+        if el {
+            el.Click()
+            return true
+        }
+        return false
     }
-    static Like() => Spotify.LikeState := 1
-    static RemoveLike() => Spotify.LikeState := 0
-    static ToggleLike() => Spotify.LikeState := !Spotify.LikeState
 
     static CurrentSong {
         get {
             contentEl := Spotify.GetCurrentSongElement()
+            if Spotify.FullscreenState {
+                name := contentEl[{Type: "Text", i: 3}].Name
+                ; Only one artist is displayed when fullscreen
+                artists := contentEl[{Type: "Text", i: 4}].Name
+                time := contentEl[{Type: "Text", i: 5}].Name
+                length := contentEl[{Type: "Text", i: 7}].Name
+            } else {
+                name := contentEl[{Type: "Group"}, {Type: "Link", i: 1}].Name
+                artists := 0
+                for (link in contentEl.FindElements([{Type: "Group"}, {Type: "Link"}])) {
+                    if A_Index < 3 {
+                        continue
+                    }
+                    if artists == 0 {
+                        artists := link.Name
+                        continue
+                    }
+                    artists := artists ", " link.Name
+                }
+                time := contentEl[{Type: "Text", i: 1}].Name
+                length := contentEl[{Type: "Text", i: 3}].Name
+            }
             return {
-                Name:contentEl[{Type:"Group"},{Type:"Link",i:2}].Name, 
-                Artist:contentEl[{Type:"Group"},{Type:"Link",i:3}].Name, 
-                Time:contentEl[{Type:"Text", i:1}].Name,
-                Length:contentEl[{Type:"Text", i:3}].Name
+                Name:name,
+                Artist:artists,
+                Time:time,
+                Length:length,
             }
         }
     }
@@ -78,27 +110,48 @@ class Spotify {
     static PreviousSong() => Spotify.GetCurrentSongElement()[{Name:"Previous"}].Click()
 
     static FullscreenState {
-        get => Spotify.GetSpotifyElement()[-1].Type == UIA.Type.Button
+        get {
+            try {
+                fse := Spotify.GetSpotifyElement()[{Type: "Button", i: -1}]
+                return InStr(fse.Name, "Exit full screen")
+            } catch {
+                return true
+            }
+        }
         set {
             WinActivate(Spotify.winExe)
             WinWaitActive(Spotify.winExe,,1)
-            if Spotify.FullscreenState
-                Spotify.GetSpotifyElement()[-1].Click()
-            else
+            if Spotify.FullscreenState {
+                try {
+                    Spotify.GetSpotifyElement()[{Type: "Button", i: -1}].Click()
+                } catch {
+                    ; No buttons available, and {Esc} doesn't work here.
+                    ; Sometimes works after a few seconds.
+                }
+            } else {
                 Spotify.GetCurrentSongElement()[-1].Click()
+            }
         }
     }
     static ToggleFullscreen() => Spotify.FullscreenState := !Spotify.FullscreenState
 
     static MuteState {
-        get => Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}] == "Mute"
+        get {
+            return (
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Name == "Mute" or
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:-3}].Name == "Mute"
+            )
+        }
         set {
             currentState := Spotify.MuteState
+            if InStr(Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Name, "ute")
+                index := -2
+            else
+                index := -3
             if Value && !currentState
-                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Click()
-            if !Value && currentState
-                Spotify.GetCurrentSongElement()[{Type:"Button", i:-2}].Click()
-
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:index}].Click() ; Unmuting
+            else if !Value && currentState
+                Spotify.GetCurrentSongElement()[{Type:"Button", i:index}].Click() ; Muting
         }
     }
     static ToggleMute() => Spotify.MuteState := !Spotify.MuteState
