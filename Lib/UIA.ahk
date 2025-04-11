@@ -43,9 +43,7 @@
     To-do:
     - Better error handling
 */
-global IUIAutomationMaxVersion := IUIAutomationMaxVersion ?? 7
-    , IUIAutomationActivateScreenReader := IUIAutomationActivateScreenReader ?? 1
-    , IUIAutomationDllPath := IUIAutomationDllPath ?? ""
+
 
 if !A_IsCompiled && A_LineFile = A_ScriptFullPath
     UIA.Viewer()
@@ -58,7 +56,9 @@ class UIA {
  * variable, which by default is set to the latest available UIA version.
  */
 static __New() {
-    global IUIAutomationMaxVersion
+    global IUIAutomationMaxVersion := IUIAutomationMaxVersion ?? 7
+    , IUIAutomationActivateScreenReader := IUIAutomationActivateScreenReader ?? 1
+    , IUIAutomationDllPath := IUIAutomationDllPath ?? ""
     this.IUIAutomationVersion := IUIAutomationMaxVersion+1, this.ptr := 0
     ; The following is a partial head-way into making the UIA class name-agnostic (that is, making it possible to rename and reference UIA more easily, eg when wrapped inside inside another class).
     ; UIA static methods have been converted this way, but IUIAutomationElement runs into a problem: namely the syntax highlighter is unable to detect that IUIAutomationElement has been made to
