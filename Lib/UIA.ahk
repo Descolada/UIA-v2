@@ -872,7 +872,7 @@ static WindowIsChromium(winTitle:="") {
  */
 static ActivateChromiumAccessibility(winTitle:="", forceActivation:=False, timeOutVarRef:=500, cacheRequest?) {
     static activatedHwnds := Map(), WM_GETOBJECT := 0x003D
-    local _, cEl, cHwnd, elVarRef := &cEl, timeOut := timeOutVarRef, hWnd := IsInteger(winTitle) ? winTitle : WinExist(winTitle)
+    local _:='', cEl:='', cHwnd:='', elVarRef:=&cEl, timeOut:=timeOutVarRef, hWnd:=IsInteger(winTitle) ? winTitle : WinExist(winTitle)
     if activatedHwnds.Has(hwnd) && !ForceActivation
         return 1
     activatedHwnds[hWnd] := 1, cHwnd := 0
