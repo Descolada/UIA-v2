@@ -225,7 +225,7 @@ class UIA_Chrome extends UIA_Browser {
 		if !this.HasOwnProp("DocumentElement")
 			throw TargetError("UIA_Browser was unable to find the Document element for browser. Make sure the browser is at least partially visible or active before calling UIA_Browser()", -2)
 		Loop 2 {
-			try this.URLEditElement := this.BrowserElement[4,1,2,1].FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
+			try this.URLEditElement := this.BrowserElement.ElementFromPath("Y/YYY/YLY/R4")
 			catch
 				this.URLEditElement := this.BrowserElement.FindFirstWithOptions(this.EditControlCondition, 2, this.BrowserElement)
 			try {
