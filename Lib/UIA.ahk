@@ -1687,7 +1687,7 @@ class ComVar {
             }
         }
     }
-    __Delete() => (this.owner ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
+    __Delete() => (this.owner && this.var ? DllCall("oleaut32\VariantClear", "ptr", this.var) : 0)
     __Item {
         get => this.ref[]
         set => this.ref[] := value
@@ -2045,15 +2045,35 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         throw MethodError("Method " Name " not found in " this.__Class " Class.",-1,Name)
     }
     ; Returns all direct children of the element
-    Children => ((ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : [])
+    Children {
+        get { 
+            local found
+            return (ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray() : []
+        }
+    }
     ; Returns direct children in reverse order (also the index in the enumerator counts downwards)
-    ReversedChildren => ((ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : [])
+    ReversedChildren {
+        get { 
+            local found
+            return (ComCall(6, this, "int", 2, "ptr", UIA.TrueCondition, "ptr*", &found := 0), found) ? UIA.IUIAutomationElementArray(found).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : []
+        }
+    }
     ; Retrieves the cached child elements of this UI Automation element.
     ; The view of the returned collection is determined by the TreeFilter property of the IUIAutomationCacheRequest that was active when this element was obtained.
     ; Children are cached only if the scope of the cache request included TreeScope_Subtree, TreeScope_Children, or TreeScope_Descendants.
     ; If the cache request specified that children were to be cached at this level, but there are no children, the value of this property is 0. However, if no request was made to cache children at this level, an attempt to retrieve the property returns an error.
-    CachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray():[])
-    ReversedCachedChildren => (ComCall(19, this, "ptr*", &children := 0), children?UIA.IUIAutomationElementArray(children).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : [])
+    CachedChildren {
+        get { 
+            local children
+            return (ComCall(19, this, "ptr*", &children := 0), children) ? UIA.IUIAutomationElementArray(children).ToArray() : []
+        }
+    } 
+    ReversedCachedChildren {
+        get {
+            local children
+            return (ComCall(19, this, "ptr*", &children := 0), children) ? UIA.IUIAutomationElementArray(children).ToArray().DefineProp("__Enum", {call: (s, i) => (i = 1 ? (i := s.Length, (&v) => i > 0 ? (v := s[i], i--) : false) : (i := s.Length, (&k, &v) => (i > 0 ? (k := i, v := s[i], i--) : false)))}) : []
+        }
+    }
 
     GetCachedChildren(scope:=2) {
         local children
@@ -2986,7 +3006,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         }
         throw TargetError("An element matching the condition was not found", -1)
         PreOrderRecursiveFind(el, depth:=0) {
-            local child, found, c
+            local child, found, c, i
             depth++
             for i, child in el.%ChildOrder% {
                 c := 0
@@ -2997,7 +3017,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PostOrderRecursiveFind(el, scope, i:=1, depth:=-1) {
-            local child, found, c := 0
+            local child, found, c := 0, j
             depth++
             for j, child in el.%ChildOrder% {
                 if IsObject(found := PostOrderRecursiveFind(child, (scope & ~2)|1, j, depth))
@@ -3140,7 +3160,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
         return foundElements
 
         PreOrderRecursiveFind(el, depth:=0) {
-            local child, c
+            local child, c, i
             depth++
             for i, child in el.%ChildOrder% {
                 c := 0
@@ -3151,7 +3171,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
             }
         }
         PostOrderRecursiveFind(el, scope, i:=1, depth:=-1) {
-            local child, c := 0
+            local child, c := 0, j
             depth++
             if scope > 1 {
                 for j, child in el.%ChildOrder% {
