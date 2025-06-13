@@ -144,7 +144,7 @@ class Cleanup {
     __Delete() {
         global IUIAutomationActivateScreenReader
         try this.__UIA.RemoveAllEventHandlers()
-        if IUIAutomationActivateScreenReader
+        if IUIAutomationActivateScreenReader && !this.ScreenReaderStartingState
             DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", this.ScreenReaderStartingState, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
     }
 }
