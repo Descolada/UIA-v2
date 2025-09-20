@@ -2530,7 +2530,7 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * will be used (Invoke(), Toggle(), Select() etc.  
      * * If WhichButton is a number, then Sleep will be called afterwards with that number of milliseconds.  
      *     Eg. Element.Click(200) will sleep 200ms after "clicking".  
-     * * If WhichButton is "left" or "right", then the native Click() will be used to move the cursor to
+     * * If WhichButton is "left" or "right", then the AHK Click() will be used to move the cursor to
      * the center of the element and perform a click.  
      * @param ClickCount Is used if WhichButton isn't a number or left empty, that is if AHK Click()
      * will be used. In this case if ClickCount is a number <10, then that number of clicks will be performed.  
@@ -2539,11 +2539,11 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
      * Eg. Element.Click("left", 1000) will sleep 1000ms after clicking.  
      *     Element.Click("left", 2) will double-click the element  
      *     Element.Click("left", "2 1000") will double-click the element and then sleep for 1000ms  
-     * @param DownOrUp If AHK Click is used, then this will either press the mouse down, or release it.
+     * @param DownOrUp If AHK Click is used, then this is the same as AHK Click DownOrUp parameter.
      * @param Relative If Relative is "Rel" or "Relative" then X and Y coordinates are treated as offsets from the current mouse position.  
      * Otherwise it expects offset values for both X and Y (eg "-5 10" would offset X by -5 and Y by +10 from the center of the element).
      * @param NoActivate If AHK Click is used, then this will determine whether the window is activated
-     * before clicking if the clickable point isn't visible on the screen. Default is no activating.
+     * before clicking if the clickable point isn't visible on the screen. Default is activating.
      * @param MoveBack If set then the cursor will be moved back to its original location after sleeping for
      * the specified amount of ms. Specify 0 for no sleep.
      */
