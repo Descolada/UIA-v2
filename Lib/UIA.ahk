@@ -49,6 +49,8 @@ if !A_IsCompiled && A_LineFile = A_ScriptFullPath
     UIA.Viewer()
 
 class UIA {
+; Semantic version of the UIA library
+static Version => "1.1.0"
 /**
  * First use of UIA variable initiates UIA, UIA.IUIAutomationVersion, UIA.TrueCondition and
  * UIA.TreeWalkerTrue. Also enables screen reader with SPI_SETSCREENREADER.
@@ -1528,7 +1530,7 @@ static SetScreenReader(state, fWinIni:=2) {
     DllCall("user32.dll\SystemParametersInfo", "uint", 0x0047, "uint", state, "uint", 0, "int", fWinIni) ; SPI_SETSCREENREADER
 }
 static GetScreenReader() {
-    A_PtrSize = 4 ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0, "uint", 0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
+    (A_PtrSize = 4) ? DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0, "uint", 0) : DllCall("user32.dll\SystemParametersInfo", "uint", 0x0046, "uint", 0, "ptr*", &screenreader:=0) ; SPI_GETSCREENREADER
     return screenreader
 }
 
@@ -1798,8 +1800,8 @@ class TypeValidation {
             try return UIA.Type.%arg%
             try {
                 local match
-                RegExMatch(arg, "\d{5}", &match:="") && Integer(match[]) >= 50000
-                return Integer(match[])
+                if RegExMatch(arg, "\d{5}", &match:="") && Integer(match[]) >= 50000
+                    return Integer(match[])
             }
             throw ValueError("UIA.Type does not contain value for `"" arg "`"", -2)
         }
