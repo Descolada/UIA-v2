@@ -189,7 +189,7 @@ class UIA_Vivaldi extends UIA_Browser {
 		return names
 	}
 	
-	SetURL(newUrl, navigateToNewUrl := False) => UIA_Mozilla.Prototype.GetMethod("SetURL")(this, newUrl, navigateToNewUrl)
+	SetURL(newUrl, navigateToNewUrl := False) => UIA_Mozilla.Prototype.GetMethod("SetURL")(this, newUrl, navigateToNewUrl, "{Enter}")
 
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) {
 		this.SelectTab(tabElementOrName)
@@ -381,7 +381,7 @@ class UIA_Mozilla extends UIA_Browser {
 	}
 
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
-	SetURL(newUrl, navigateToNewUrl := False) { 
+	SetURL(newUrl, navigateToNewUrl := False, triggerNavigateKeys := "{LCtrl down}{Enter}{LCtrl up}") { 
 		local endTime
 		this.URLEditElement.SetFocus()
 		this.URLEditElement.Value := newUrl " "
@@ -390,7 +390,7 @@ class UIA_Mozilla extends UIA_Browser {
 			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
 				Sleep 40
 			if A_TickCount < endTime {
-				this.ControlSend("{LCtrl down}{Enter}{LCtrl up}")
+				this.ControlSend(triggerNavigateKeys)
 			}
 		}
 	}
@@ -861,15 +861,16 @@ class UIA_Browser {
 	; Close tab by either providing the tab element or the name of the tab. If tabElementOrName is left empty, the current tab will be closed.
 	CloseTab(tabElementOrName:="", matchMode:=3, caseSense:=True) { 
 		if IsObject(tabElementOrName) {
-			if (tabElementOrName.Type == UIA.Type.TabItem)
-				try UIA.TreeWalkerTrue.GetLastChildElement(tabElementOrName).Click()
+			if (tabElementOrName.Type == UIA.Type.TabItem) {
+				try tabElementOrName.FindElement({i:-1}, 2).Click()
+			}
 		} else {
 			if (tabElementOrName == "") {
-				try UIA.TreeWalkerTrue.GetLastChildElement(this.GetTab()).Click()
+				try this.GetTab().FindElement({i:-1}, 2).Click()
 			} else {
 				try {
 					targetTab := this.GetTab(tabElementOrName, matchMode, caseSense)
-					UIA.TreeWalkerTrue.GetLastChildElement().Click(targetTab)
+					targetTab.FindElement({i:-1}, 2).Click()
 				} catch
 					throw TargetError("Tab with name " tabElementOrName " was not found (MatchMode: " matchMode ", CaseSense: " caseSense ")")
 			}
