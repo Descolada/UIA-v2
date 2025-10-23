@@ -4379,8 +4379,8 @@ class IUIAutomationElement extends UIA.IUIAutomationBase {
     ; • Call the GetClickablePoint method to find a clickable point on the control.
     ; • Call the SendInput function to send a right-mouse-down, right-mouse-up sequence.
     GetClickablePoint() {
-        if (ComCall(84, this, "int64*", &clickable := 0, "int*", &gotClickable := 0), gotClickable)
-            return { x: clickable & 0xffff, y: clickable >> 32 }
+        if (ComCall(84, this, "ptr", clickable := Buffer(8), "int*", &gotClickable := 0), gotClickable)
+            return { x: NumGet(clickable, 0, 'int'), y: NumGet(clickable, 4, 'int') }
         throw TargetError('The element has no clickable point')
     }
 
