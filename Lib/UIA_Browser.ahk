@@ -176,7 +176,7 @@ class UIA_Vivaldi extends UIA_Browser {
 		}
 		if !(tabs := this.GetAllTabs()).Length
 			throw Error("Unable to get tab elements", -1, "Please file a bug report")
-		if !(els := UIA.Filter(tabs, (element) => element.ElementExist({Type:"Text", Name:searchPhrase, matchMode:matchMode, caseSense:caseSense}))).Length
+		if !(els := UIA.Filter(tabs, (element) => element.ElementExist({Type:["Text", "TabItem"], Name:searchPhrase, matchMode:matchMode, caseSense:caseSense, scope:3}))).Length
 			throw Error("No search phrase matches found", -1)
 		return els[els.Length]
 	}
@@ -184,7 +184,7 @@ class UIA_Vivaldi extends UIA_Browser {
 	GetAllTabNames() { 
 		local names := [], k, v
 		for k, v in this.GetTabs() {
-			names.Push(v.FindElement({Type:"Text"}).Name)
+			names.Push(v.FindElement({Type:["Text", "TabItem"], scope:3}).Name)
 		}
 		return names
 	}
@@ -237,7 +237,7 @@ class UIA_Chrome extends UIA_Browser {
 					this.NavigationBarElement := this.BrowserElement
 				if !this.MainPaneElement
 					this.MainPaneElement := this.BrowserElement
-				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
+				if !(this.TabBarElement := this is UIA_Brave ? UIA.CreateTreeWalker(this.TabControlCondition).GetNextSiblingElement(this.NavigationBarElement) : UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
 					this.TabBarElement := this.MainPaneElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				Loop 2 {
@@ -371,7 +371,9 @@ class UIA_Mozilla extends UIA_Browser {
 	GetCurrentDocumentElement() {
 		Loop 2 {
 			try {
-				this.DocumentPanelElement := this.BrowserElement.FindElement({Type:"Custom", IsOffscreen:0},2)
+				try this.DocumentPanelElement := this.BrowserElement.FindElement({Type:"Custom", IsOffscreen:0},2)
+				catch
+					this.DocumentPanelElement := this.BrowserElement.FindElement({AutomationId:"tabbrowser-tabpanels"},2).FindElement({Type:"Pane", IsOffscreen:0},2)
 				return UIA.TreeWalkerTrue.GetFirstChildElement(UIA.TreeWalkerTrue.GetFirstChildElement(this.DocumentPanelElement))
 			} catch TargetError {
 				WinActivate this.BrowserId
@@ -702,7 +704,7 @@ class UIA_Browser {
 		TextArray := this.BrowserElement.FindAll(this.TextControlCondition)
 		Text := ""
 		for k, v in TextArray
-			Text .= v.Name "`n"
+			try Text .= v.Name "`n"
 		return Text
 	}
 	; Gets all link elements from the browser
