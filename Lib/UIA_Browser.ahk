@@ -294,7 +294,7 @@ class UIA_Edge extends UIA_Browser {
 					this.NavigationBarElement := this.BrowserElement
 				if !this.MainPaneElement
 					this.MainPaneElement := this.BrowserElement
-				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetPreviousSiblingElement(this.NavigationBarElement))
+				if !(this.TabBarElement := UIA.CreateTreeWalker(this.TabControlCondition).GetNextSiblingElement(this.NavigationBarElement))
 					this.TabBarElement := this.MainPaneElement
 				this.ReloadButton := "", this.ReloadButtonDescription := "", this.ReloadButtonFullDescription := "", this.ReloadButtonName := ""
 				Loop 2 {
