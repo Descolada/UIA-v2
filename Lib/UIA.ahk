@@ -50,7 +50,7 @@ if !A_IsCompiled && A_LineFile = A_ScriptFullPath
 
 class UIA {
 ; Semantic version of the UIA library
-static Version => "1.1.1"
+static Version => "1.1.2"
 /**
  * First use of UIA variable initiates UIA, UIA.IUIAutomationVersion, UIA.TrueCondition and
  * UIA.TreeWalkerTrue. Also enables screen reader with SPI_SETSCREENREADER.
