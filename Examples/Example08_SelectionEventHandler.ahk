@@ -15,7 +15,7 @@ TextSelectionChangedEventHandler(el, eventId) {
 
 ExitFunc(*) {
 	global handler, NotepadEl
-	try UIA.RemoveAutomationEventHandler(UIA.Event.Text_TextSelectionChanged, NotepadEl, handler) ; Remove the event handler. Alternatively use UIA.RemoveAllEventHandlers() to remove all handlers. If the Notepad window doesn't exist any more, this throws an error.
+	UIA.RemoveAutomationEventHandler(handler, NotepadEl, UIA.Event.Text_TextSelectionChanged) ; Remove the event handler. Alternatively use UIA.RemoveAllEventHandlers() to remove all handlers.
 }
 
 ; Some sample text to play around with
