@@ -818,10 +818,10 @@ class UIA_Browser {
 	
 	; Sets the URL bar to newUrl, optionally also navigates to it if navigateToNewUrl=True
 	SetURL(newUrl, navigateToNewUrl := False) { 
-		this.URLEditElement.ValuePattern.SetValue(newUrl " ")
+		this.URLEditElement.ValuePattern.SetValue(newUrl)
 		if !InStr(this.URLEditElement.Value, newUrl) {
 			legacyPattern := this.URLEditElement.LegacyIAccessiblePattern
-			legacyPattern.SetValue(newUrl " ")
+			legacyPattern.SetValue(newUrl)
 		}
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
 			this.ControlSend("{Ctrl down}l{Ctrl up}{Enter}")
