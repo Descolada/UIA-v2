@@ -388,7 +388,11 @@ class UIA_Mozilla extends UIA_Browser {
 	SetURL(newUrl, navigateToNewUrl := False, triggerNavigateKeys := "{LCtrl down}{Enter}{LCtrl up}") { 
 		local endTime
 		this.URLEditElement.SetFocus()
-		this.URLEditElement.Value := newUrl " "
+		this.URLEditElement.Value := newUrl
+		if !RegExMatch(this.URLEditElement.Value, newUrl "$")
+		{
+			this.ControlSend("{Delete}")
+		}
 		endTime := A_TickCount+200
 		if navigateToNewUrl {
 			while !InStr(this.URLEditElement.Value, newUrl) && (A_TickCount < endTime)
@@ -822,6 +826,10 @@ class UIA_Browser {
 		if !InStr(this.URLEditElement.Value, newUrl) {
 			legacyPattern := this.URLEditElement.LegacyIAccessiblePattern
 			legacyPattern.SetValue(newUrl)
+		}
+		if !RegExMatch(this.URLEditElement.Value, newUrl "$")
+		{
+			this.ControlSend("{Delete}")
 		}
 		if (navigateToNewUrl&&InStr(this.URLEditElement.Value, newUrl)) {
 			this.ControlSend("{Ctrl down}l{Ctrl up}{Enter}")
